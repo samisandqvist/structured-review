@@ -15,7 +15,7 @@ export function createNodesRoute(ctx: AppContext) {
 
   router.get("/:id/nodes/:nodeId", (c) => {
     const node = getNode(ctx.db, c.req.param("nodeId"));
-    if (!node) return c.json({ error: "not found" }, 404);
+    if (!node || node.sessionId !== c.req.param("id")) return c.json({ error: "not found" }, 404);
     const { callers, callees } = getNodeNeighbors(ctx.db, node.id);
     return c.json({ node, callers, callees });
   });
@@ -23,6 +23,8 @@ export function createNodesRoute(ctx: AppContext) {
   router.patch("/:id/nodes/:nodeId", async (c) => {
     const body = await c.req.json<{ reviewStatus: ReviewStatus; reviewedInUnit?: number }>();
     const nodeId = c.req.param("nodeId");
+    const existing = getNode(ctx.db, nodeId);
+    if (!existing || existing.sessionId !== c.req.param("id")) return c.json({ error: "not found" }, 404);
     updateNodeReviewStatus(ctx.db, nodeId, body.reviewStatus, body.reviewedInUnit);
     const node = getNode(ctx.db, nodeId);
     if (!node) return c.json({ error: "not found" }, 404);

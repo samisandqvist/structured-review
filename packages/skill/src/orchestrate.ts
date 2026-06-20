@@ -29,8 +29,8 @@ export async function exportComments(sessionId: string): Promise<Record<string, 
   return fetchJson(`${SERVER_URL}/api/sessions/${sessionId}/export`);
 }
 
-export function launchUI(port = 3456): void {
-  const url = `http://localhost:${port}`;
+export function launchUI(sessionId: string): void {
+  const url = `${SERVER_URL}?session=${sessionId}`;
   const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
   spawn(cmd, [url], { detached: true, stdio: "ignore" }).unref();
 }
@@ -42,7 +42,7 @@ export async function orchestrate(
   const { session, subgraph } = await createSession(branch, baseRef);
   const units = partitionFn(subgraph);
   await writePlan(session.id, units);
-  launchUI();
+  launchUI(session.id);
   return exportComments(session.id);
 }
 
@@ -64,7 +64,7 @@ async function main() {
 
   await writePlan(session.id, units);
   console.log("Plan written with", units.length, "units");
-  launchUI();
+  launchUI(session.id);
   console.log("UI launched. To export comments later:");
   console.log(`  curl ${SERVER_URL}/api/sessions/${session.id}/export`);
 }

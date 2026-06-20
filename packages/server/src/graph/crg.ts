@@ -19,8 +19,14 @@ export class CrgGraphProvider implements GraphProvider {
     if (this.client) return this.client;
     this.transport = new StdioClientTransport({ command: this.command[0], args: this.command.slice(1) });
     this.client = new Client({ name: "crw-server", version: "1.0.0" }, { capabilities: {} });
-    await this.client.connect(this.transport);
-    return this.client;
+    try {
+      await this.client.connect(this.transport);
+      return this.client;
+    } catch (err) {
+      this.client = null;
+      this.transport = null;
+      throw err;
+    }
   }
 
   async getChangeSubgraph(branch: string, baseRef: string): Promise<ChangeSubgraph> {

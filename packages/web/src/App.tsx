@@ -16,6 +16,7 @@ export function App() {
 
 function ReviewShell() {
   const currentNodeId = useUIStore((s) => s.currentNodeId);
+  const sessionId = new URLSearchParams(window.location.search).get("session") ?? "placeholder";
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
       <header style={{ padding: "8px 16px", borderBottom: "1px solid #333" }}>
