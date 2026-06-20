@@ -1,6 +1,10 @@
 import { useRef, useCallback } from "react";
 import { useUIStore } from "../store/ui.js";
+import { useNodes, useNode, useUpdateNodeStatus } from "../api/hooks.js";
 import { GraphView } from "./GraphView.js";
+import { DiffView } from "./DiffView.js";
+import { FrontierStrip } from "./FrontierStrip.js";
+import { CommentBox } from "./CommentBox.js";
 
 export function SplitLayout({ sessionId, currentNodeId }: {
   sessionId: string;
@@ -10,6 +14,9 @@ export function SplitLayout({ sessionId, currentNodeId }: {
   const setSplitRatio = useUIStore((s) => s.setSplitRatio);
   const setCurrentNode = useUIStore((s) => s.setCurrentNode);
   const containerRef = useRef<HTMLDivElement>(null);
+  const { data: nodesData } = useNodes(sessionId);
+  const { data: nodeData } = useNode(sessionId, currentNodeId);
+  const updateStatus = useUpdateNodeStatus(sessionId);
 
   const handleMouseDown = useCallback(() => {
     const onMove = (e: MouseEvent) => {
@@ -25,13 +32,36 @@ export function SplitLayout({ sessionId, currentNodeId }: {
     document.addEventListener("mouseup", onUp);
   }, [setSplitRatio]);
 
+  const allNodes = nodesData?.nodes ?? [];
+  const currentNode = nodeData?.node;
+
   return (
-    <div ref={containerRef} style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-      <div style={{ flex: splitRatio, overflow: "hidden" }}>
-        <GraphView sessionId={sessionId} currentNodeId={currentNodeId} onSelectNode={setCurrentNode} />
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div ref={containerRef} style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+        <div style={{ flex: splitRatio, overflow: "hidden" }}>
+          <GraphView sessionId={sessionId} currentNodeId={currentNodeId} onSelectNode={setCurrentNode} />
+        </div>
+        <div onMouseDown={handleMouseDown} style={{ width: "4px", cursor: "col-resize", background: "#333", flexShrink: 0 }} />
+        <div style={{ flex: 1 - splitRatio, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          {currentNode ? (
+            <>
+              <div style={{ flex: 1, overflow: "auto", padding: "8px" }}><DiffView node={currentNode} /></div>
+              <div style={{ display: "flex", gap: "4px", padding: "4px 8px", borderTop: "1px solid #333" }}>
+                <button onClick={() => updateStatus.mutate({ nodeId: currentNode.id, reviewStatus: "reviewed-clean" })}>✓ Mark reviewed</button>
+                <button onClick={() => updateStatus.mutate({ nodeId: currentNode.id, reviewStatus: "reviewed-commented" })}>✎ Mark commented</button>
+              </div>
+              <CommentBox sessionId={sessionId} nodeId={currentNode.id} />
+            </>
+          ) : (
+            <div style={{ padding: "16px" }}>Select a node to begin</div>
+          )}
+        </div>
       </div>
-      <div onMouseDown={handleMouseDown} style={{ width: "4px", cursor: "col-resize", background: "#333", flexShrink: 0 }} />
-      <div style={{ flex: 1 - splitRatio, padding: "8px", overflow: "auto" }}>Diff view</div>
+      <FrontierStrip
+        nodes={allNodes.map((n) => ({ id: n.id, label: n.label, reviewStatus: n.reviewStatus, changeStatus: n.changeStatus }))}
+        currentNodeId={currentNodeId}
+        onSelectNode={setCurrentNode}
+      />
     </div>
   );
 }
