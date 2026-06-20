@@ -1,8 +1,5 @@
 import { createRoot } from "react-dom/client";
-
-function App() {
-  return <div>Code Review Walkthrough</div>;
-}
+import { App } from "./App.js";
 
 const root = document.getElementById("root");
 if (root) createRoot(root).render(<App />);
