@@ -9,7 +9,7 @@ describe("App", () => {
   });
   it("renders graph and diff placeholders", () => {
     render(<App />);
-    expect(screen.getByText("Graph view")).toBeInTheDocument();
+    expect(screen.getByText("Select a node to begin")).toBeInTheDocument();
     expect(screen.getByText("Diff view")).toBeInTheDocument();
   });
 });
