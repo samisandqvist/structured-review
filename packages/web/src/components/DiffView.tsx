@@ -2,22 +2,96 @@ import ReactDiffViewer from "react-diff-viewer-continued";
 import type { Node } from "../api/client.js";
 import { NodeBadge } from "./NodeBadge.js";
 
+/** Dark, instrument-matched theme for the side-by-side diff. */
+const diffStyles = {
+  variables: {
+    dark: {
+      diffViewerBackground: "#11151f",
+      diffViewerColor: "#e8ecf4",
+      addedBackground: "rgba(70, 211, 138, 0.13)",
+      addedColor: "#cfeede",
+      removedBackground: "rgba(248, 90, 90, 0.13)",
+      removedColor: "#f4cfcb",
+      wordAddedBackground: "rgba(70, 211, 138, 0.32)",
+      wordRemovedBackground: "rgba(248, 90, 90, 0.32)",
+      addedGutterBackground: "rgba(70, 211, 138, 0.10)",
+      removedGutterBackground: "rgba(248, 90, 90, 0.10)",
+      gutterBackground: "#0f141e",
+      gutterBackgroundDark: "#0c111a",
+      highlightBackground: "rgba(79, 214, 255, 0.10)",
+      highlightGutterBackground: "rgba(79, 214, 255, 0.14)",
+      codeFoldGutterBackground: "#161c28",
+      codeFoldBackground: "#11151f",
+      emptyLineBackground: "#0f141e",
+      gutterColor: "#5c6678",
+      addedGutterColor: "#7ee2a8",
+      removedGutterColor: "#ff9a93",
+      codeFoldContentColor: "#98a2b6",
+      diffViewerTitleBackground: "#0f141e",
+      diffViewerTitleColor: "#98a2b6",
+      diffViewerTitleBorderColor: "#283143",
+    },
+  },
+  line: { fontFamily: "var(--mono)", fontSize: "15px" },
+  contentText: { fontFamily: "var(--mono)" },
+  gutter: { fontFamily: "var(--mono)", fontSize: "13px" },
+  diffContainer: {
+    borderRadius: "8px",
+    overflow: "hidden",
+    border: "1px solid #283143",
+  },
+};
+
 export function DiffView({ node }: { node: Node }) {
   const oldCode = `// ${node.label} — before (line ${node.startLine})\n// ... original code ...`;
-  const newCode = node.changeStatus === "changed"
-    ? `// ${node.label} — after (line ${node.startLine})\n// ... new code ...`
-    : oldCode;
+  const newCode =
+    node.changeStatus === "changed"
+      ? `// ${node.label} — after (line ${node.startLine})\n// ... new code ...`
+      : oldCode;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <div style={{ padding: "4px 0", display: "flex", alignItems: "center", gap: "8px" }}>
-        <strong>{node.label}</strong>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          paddingBottom: 11,
+          flexWrap: "wrap",
+        }}
+      >
+        <h2 style={{ fontSize: 17, fontFamily: "var(--mono)", fontWeight: 700 }}>
+          {node.label}
+        </h2>
         <NodeBadge status={node.reviewStatus} />
-        {node.changeStatus === "unchanged" && <span style={{ fontSize: "0.7rem", color: "#888" }}>unchanged</span>}
-        <span style={{ fontSize: "0.8rem", color: "#888" }}>{node.file}:{node.startLine}-{node.endLine}</span>
+        {node.changeStatus === "unchanged" && (
+          <span
+            style={{
+              fontSize: 13,
+              color: "var(--dim)",
+              border: "1px dashed var(--line-bright)",
+              borderRadius: 4,
+              padding: "1px 6px",
+              letterSpacing: "0.04em",
+            }}
+          >
+            context · unchanged
+          </span>
+        )}
+        <span style={{ fontSize: 13, color: "var(--dim)", marginLeft: "auto" }}>
+          {node.file}:{node.startLine}–{node.endLine}
+        </span>
       </div>
       <div style={{ flex: 1, overflow: "auto" }}>
-        <ReactDiffViewer oldValue={oldCode} newValue={newCode} splitView hideLineNumbers={false} />
+        <ReactDiffViewer
+          oldValue={oldCode}
+          newValue={newCode}
+          splitView
+          useDarkTheme
+          showDiffOnly={false}
+          hideLineNumbers={false}
+          styles={diffStyles}
+        />
       </div>
     </div>
   );
