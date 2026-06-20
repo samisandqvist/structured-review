@@ -1,6 +1,6 @@
 # Code Review Walkthrough — Design
 
-**Status:** Concept spec (design, not yet planned for implementation)
+**Status:** Design with stack selected — ready for implementation planning
 **Date:** 2026-06-19
 **Source idea:** `code-review-workflow-idea.md`
 
@@ -242,6 +242,57 @@ commits to:
 - **marking already-reviewed code within a pass** and badging reuse across units;
 - the **typed-edge model** that makes message-passing / queue review a future provider
   on the same engine.
+
+## Stack
+
+**Deployment model:** strictly local single-user. localhost only, no auth, SQLite on
+disk. One reviewer at a time, launched alongside Claude Code. Hosting / team use is a
+future concern, not designed for in v1.
+
+**Runtime & package manager:** Node.js, pnpm workspaces monorepo.
+
+**Monorepo layout:**
+
+```
+packages/
+  skill/     # Claude Code skill + superpowers glue (LLM half)
+  server/    # Local review hub — Hono + better-sqlite3
+  web/       # Vite + React UI
+```
+
+**Server (`packages/server`):**
+
+- Hono — HTTP API + SSE for live review-state updates to the UI.
+- `better-sqlite3` — sync SQLite for review-session state (plan, node status,
+  comments). One `.db` file per project, stored alongside the repo.
+- Serves the built `packages/web` output as static files in prod; Vite dev server
+  proxies the API in dev.
+- Graph provider boundary: a `GraphProvider` interface; CRG is implementation #1
+  (over MCP stdio or HTTP, whichever CRG exposes).
+
+**Web (`packages/web`):**
+
+- Vite + React 19 + TypeScript.
+- TanStack Query — server state (plan, nodes, comments, review status), cache
+  invalidation on mutations.
+- Zustand — UI-only state (draggable split ratio, current node, walk path, overview
+  open/closed).
+- React Flow — graph neighborhood rendering + mini-map overview. Pan/zoom, node
+  states (current / reviewed / frontier / unchanged), edge rendering come built-in.
+- `react-diff-viewer-continued` — side-by-side diff rendering; no need to build.
+
+**Skill (`packages/skill`):**
+
+- Claude Code skill markdown + orchestration scripts (TypeScript, run via Node).
+- Talks to the server over HTTP (localhost); orchestrates: ask server for the change
+  subgraph → run hybrid partitioner (LLM) → write plan → launch UI → read comments
+  back out.
+
+**Testing:** Vitest across all packages. Playwright for web UI E2E when the navigation
+surface needs it.
+
+**Dev / build:** `pnpm dev` starts server + Vite concurrently. `pnpm build` produces
+the static UI served by the hub.
 
 ## Future extensions (named, not built in v1)
 
