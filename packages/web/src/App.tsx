@@ -22,7 +22,7 @@ function ReviewShell() {
       <header style={{ padding: "8px 16px", borderBottom: "1px solid #333" }}>
         <h1 style={{ margin: 0, fontSize: "1rem" }}>Code Review Walkthrough</h1>
       </header>
-      <SplitLayout sessionId="placeholder" currentNodeId={currentNodeId} />
+      <SplitLayout sessionId={sessionId} currentNodeId={currentNodeId} />
     </div>
   );
 }
