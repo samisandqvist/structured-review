@@ -96,3 +96,61 @@ describe("PATCH /api/sessions/:id/nodes/:nodeId", () => {
     expect((await res.json()).node.reviewStatus).toBe("reviewed-clean");
   });
 });
+
+describe("POST /api/sessions/:id/comments", () => {
+  it("creates a comment on a node", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const nr = await app.request(`/api/sessions/${session.id}/nodes`);
+    const { nodes } = await nr.json();
+    const res = await app.request(`/api/sessions/${session.id}/comments`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nodeId: nodes[0].id, hunkSnippet: "const x = 1", text: "this looks wrong", structuralContext: "callers: routeHandler" }),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).comment.text).toBe("this looks wrong");
+  });
+});
+
+describe("GET /api/sessions/:id/comments", () => {
+  it("lists comments in a session", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const nr = await app.request(`/api/sessions/${session.id}/nodes`);
+    const { nodes } = await nr.json();
+    await app.request(`/api/sessions/${session.id}/comments`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nodeId: nodes[0].id, hunkSnippet: "s", text: "comment 1", structuralContext: "callers: A" }),
+    });
+    const res = await app.request(`/api/sessions/${session.id}/comments`);
+    expect(res.status).toBe(200);
+    expect((await res.json()).comments).toHaveLength(1);
+  });
+});
+
+describe("GET /api/sessions/:id/export", () => {
+  it("exports comments keyed by node id with structural context", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const nr = await app.request(`/api/sessions/${session.id}/nodes`);
+    const { nodes } = await nr.json();
+    await app.request(`/api/sessions/${session.id}/comments`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nodeId: nodes[0].id, hunkSnippet: "s", text: "fix this", structuralContext: "callers: A, B" }),
+    });
+    const res = await app.request(`/api/sessions/${session.id}/export`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(Object.keys(body).length).toBe(1);
+    expect(body[nodes[0].id].text).toBe("fix this");
+  });
+});
