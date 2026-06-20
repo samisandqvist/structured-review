@@ -299,3 +299,27 @@ the static UI served by the hub.
 - Nested units (drill a large unit into entrypoint-rooted sub-units; reviewed-state
   rolls up).
 - Message-flow edge provider (#2) for queue / message-passing systems.
+- Line-level comment authoring: clicking a specific line/hunk in the diff to
+  attach a comment to it. Currently comments are node-anchored only; the
+  `hunkSnippet` field exists in the API but the diff viewer has no line-selection
+  UI to populate it.
+
+## v1 UI adjustments (post-implementation)
+
+The following changes were made during initial testing/dogfooding and differ
+from the original plan's UI spec:
+
+- **All nodes always visible.** The graph shows the full session graph at all
+  times, not just the ±1-hop neighborhood of the selected node. Edges are
+  always drawn. The selected node is highlighted (blue); all others are white
+  with black text.
+- **Topological layout.** Nodes are positioned by call level (topological
+  sort): callers above, callees below. This replaces the arbitrary grid layout.
+- **Frontier strip removed.** The bottom agenda strip was removed — all nodes
+  are visible in the graph, making the strip redundant.
+- **Session ID via URL.** The web UI reads `?session=<id>` from the URL to
+  determine which review session to display. The skill's `launchUI` passes the
+  session ID as a query parameter.
+- **Server returns edges with nodes.** `GET /api/sessions/:id/nodes` now
+  returns `{ nodes, edges }` so the UI can render the full graph in one
+  request without per-node neighbor queries.

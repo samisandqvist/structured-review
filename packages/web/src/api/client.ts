@@ -46,7 +46,9 @@ export const api = {
       method: "PUT", body: JSON.stringify({ units }),
     }),
   getNodes: (id: string, unitId?: string) =>
-    fetchJson<{ nodes: Node[] }>(`/sessions/${id}/nodes${unitId ? `?unitId=${unitId}` : ""}`),
+    fetchJson<{ nodes: Node[]; edges: { sourceNodeId: string; targetNodeId: string }[] }>(
+      `/sessions/${id}/nodes${unitId ? `?unitId=${unitId}` : ""}`
+    ),
   getNode: (sessionId: string, nodeId: string) =>
     fetchJson<{ node: Node; callers: Node[]; callees: Node[] }>(`/sessions/${sessionId}/nodes/${nodeId}`),
   updateNodeStatus: (sessionId: string, nodeId: string, reviewStatus: Node["reviewStatus"], reviewedInUnit?: number) =>

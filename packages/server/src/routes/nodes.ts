@@ -10,7 +10,13 @@ export function createNodesRoute(ctx: AppContext) {
     const sessionId = c.req.param("id");
     const unitId = c.req.query("unitId");
     const nodes = unitId ? getNodesByUnit(ctx.db, unitId) : getNodesBySession(ctx.db, sessionId);
-    return c.json({ nodes });
+    const edges = ctx.db
+      .prepare("SELECT source_node_id, target_node_id FROM edges WHERE session_id = ?")
+      .all(sessionId) as { source_node_id: string; target_node_id: string }[];
+    return c.json({
+      nodes,
+      edges: edges.map((e) => ({ sourceNodeId: e.source_node_id, targetNodeId: e.target_node_id })),
+    });
   });
 
   router.get("/:id/nodes/:nodeId", (c) => {
