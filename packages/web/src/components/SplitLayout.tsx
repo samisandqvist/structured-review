@@ -5,7 +5,10 @@ import { GraphView } from "./GraphView.js";
 import { DiffView } from "./DiffView.js";
 import { CommentBox } from "./CommentBox.js";
 
-export function SplitLayout({ sessionId, currentNodeId }: {
+export function SplitLayout({
+  sessionId,
+  currentNodeId,
+}: {
   sessionId: string;
   currentNodeId: string | null;
 }) {
@@ -17,12 +20,16 @@ export function SplitLayout({ sessionId, currentNodeId }: {
   const updateStatus = useUpdateNodeStatus(sessionId);
 
   const handleMouseDown = useCallback(() => {
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
     const onMove = (e: MouseEvent) => {
       if (!containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
       setSplitRatio((e.clientX - rect.left) / rect.width);
     };
     const onUp = () => {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
     };
@@ -33,28 +40,112 @@ export function SplitLayout({ sessionId, currentNodeId }: {
   const currentNode = nodeData?.node;
 
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <div
+      style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}
+    >
       <div ref={containerRef} style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         <div style={{ flex: splitRatio, overflow: "hidden", height: "100%" }}>
-          <GraphView sessionId={sessionId} currentNodeId={currentNodeId} onSelectNode={setCurrentNode} />
+          <GraphView
+            sessionId={sessionId}
+            currentNodeId={currentNodeId}
+            onSelectNode={setCurrentNode}
+          />
         </div>
-        <div onMouseDown={handleMouseDown} style={{ width: "4px", cursor: "col-resize", background: "#333", flexShrink: 0 }} />
-        <div style={{ flex: 1 - splitRatio, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+
+        <Divider onMouseDown={handleMouseDown} />
+
+        <div
+          style={{
+            flex: 1 - splitRatio,
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+            background: "var(--ink)",
+            borderLeft: "1px solid var(--line)",
+          }}
+        >
           {currentNode ? (
             <>
-              <div style={{ flex: 1, overflow: "auto", padding: "8px" }}>
+              <div style={{ flex: 1, overflow: "auto", padding: "12px 14px" }}>
                 <DiffView node={currentNode} />
               </div>
-              <div style={{ display: "flex", gap: "4px", padding: "4px 8px", borderTop: "1px solid #333" }}>
-                <button onClick={() => updateStatus.mutate({ nodeId: currentNode.id, reviewStatus: "reviewed-clean" })}>✓ Mark reviewed</button>
-                <button onClick={() => updateStatus.mutate({ nodeId: currentNode.id, reviewStatus: "reviewed-commented" })}>✎ Mark commented</button>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  padding: "12px 16px",
+                  borderTop: "1px solid var(--line)",
+                  background: "var(--panel)",
+                }}
+              >
+                <button
+                  className="btn btn--clean btn--lg"
+                  onClick={() =>
+                    updateStatus.mutate({
+                      nodeId: currentNode.id,
+                      reviewStatus: "reviewed-clean",
+                    })
+                  }
+                >
+                  ✓ Mark reviewed
+                </button>
               </div>
               <CommentBox sessionId={sessionId} nodeId={currentNode.id} />
             </>
           ) : (
-            <div style={{ padding: "16px" }}>Select a node to begin</div>
+            <EmptyState />
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function Divider({ onMouseDown }: { onMouseDown: () => void }) {
+  return (
+    <div
+      onMouseDown={onMouseDown}
+      role="separator"
+      aria-orientation="vertical"
+      style={{
+        width: 9,
+        flexShrink: 0,
+        cursor: "col-resize",
+        display: "grid",
+        placeItems: "center",
+        background: "var(--ink)",
+      }}
+    >
+      <div
+        style={{
+          width: 2,
+          height: 34,
+          borderRadius: 2,
+          background: "var(--line-bright)",
+        }}
+      />
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div
+      style={{
+        flex: 1,
+        display: "grid",
+        placeItems: "center",
+        padding: 24,
+        textAlign: "center",
+      }}
+    >
+      <div style={{ maxWidth: 280 }}>
+        <div style={{ fontSize: 28, marginBottom: 12, opacity: 0.5 }}>⌖</div>
+        <h2 style={{ fontSize: 17, marginBottom: 6 }}>Pick a node to start the walk</h2>
+        <p style={{ color: "var(--dim)", fontSize: 15, lineHeight: 1.6, margin: 0 }}>
+          The graph is the change, laid out by call depth — callers on top,
+          callees below. Select any node to read its diff and leave a comment.
+        </p>
       </div>
     </div>
   );

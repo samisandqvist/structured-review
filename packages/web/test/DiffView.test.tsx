@@ -15,6 +15,6 @@ describe("DiffView", () => {
   });
   it("shows unchanged badge for context nodes", () => {
     render(<DiffView node={{ ...baseNode, changeStatus: "unchanged" }} />);
-    expect(screen.getByText("unchanged")).toBeInTheDocument();
+    expect(screen.getByText(/unchanged/)).toBeInTheDocument();
   });
 });

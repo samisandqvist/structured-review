@@ -11,6 +11,7 @@ vi.mock("../src/api/hooks.js", () => ({
   useCreateComment: () => ({
     mutate: vi.fn((_args: { text: string }, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.()),
   }),
+  useUpdateNodeStatus: () => ({ mutate: vi.fn() }),
 }));
 
 function renderWithProviders(ui: React.ReactNode) {
@@ -24,13 +25,13 @@ describe("CommentBox", () => {
   });
   it("shows a textarea for new comments", () => {
     renderWithProviders(<CommentBox sessionId="s1" nodeId="n1" />);
-    expect(screen.getByPlaceholderText("Leave a review comment...")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Leave a review comment/)).toBeInTheDocument();
   });
   it("submits and clears on success", async () => {
     renderWithProviders(<CommentBox sessionId="s1" nodeId="n1" />);
-    const ta = screen.getByPlaceholderText("Leave a review comment...");
+    const ta = screen.getByPlaceholderText(/Leave a review comment/);
     fireEvent.change(ta, { target: { value: "new text" } });
-    fireEvent.click(screen.getByText("Submit"));
+    fireEvent.click(screen.getByText("Send"));
     await waitFor(() => expect(ta).toHaveValue(""));
   });
 });

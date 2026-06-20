@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { App } from "../src/App.js";
 
 vi.mock("../src/api/hooks.js", () => ({
+  useSession: () => ({ data: { session: undefined, units: [] }, isLoading: false }),
   useNodes: () => ({ data: { nodes: [] }, isLoading: false }),
   useNode: () => ({ data: undefined, isLoading: false }),
   useUpdateNodeStatus: () => ({ mutate: vi.fn() }),
@@ -13,11 +14,11 @@ vi.mock("../src/api/hooks.js", () => ({
 describe("App", () => {
   it("renders the header", () => {
     render(<App />);
-    expect(screen.getByText("Code Review Walkthrough")).toBeInTheDocument();
+    expect(screen.getByText("Trace")).toBeInTheDocument();
   });
   it("renders graph and diff placeholders", () => {
     render(<App />);
-    expect(screen.getAllByText("Select a node to begin").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Pick a node to start the walk").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText("Diff view")).not.toBeInTheDocument();
   });
 });

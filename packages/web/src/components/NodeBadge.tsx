@@ -1,16 +1,41 @@
 import type { Node } from "../api/client.js";
 
-const STATUS_STYLES: Record<Node["reviewStatus"], { bg: string; label: string }> = {
-  unreviewed: { bg: "#444", label: "unreviewed" },
-  "reviewed-clean": { bg: "#2a7a2a", label: "✓" },
-  "reviewed-commented": { bg: "#a73a2a", label: "✎" },
-  "reviewed-elsewhere": { bg: "#4a6a9a", label: "✓ (other)" },
+const STATUS_STYLES: Record<
+  Node["reviewStatus"],
+  { color: string; label: string }
+> = {
+  unreviewed: { color: "var(--led-unreviewed)", label: "unreviewed" },
+  "reviewed-clean": { color: "var(--led-clean)", label: "reviewed" },
+  "reviewed-commented": { color: "var(--led-commented)", label: "commented" },
+  "reviewed-elsewhere": { color: "var(--led-elsewhere)", label: "seen elsewhere" },
 };
 
 export function NodeBadge({ status }: { status: Node["reviewStatus"] }) {
   const style = STATUS_STYLES[status];
   return (
-    <span style={{ backgroundColor: style.bg, color: "white", fontSize: "0.7rem", padding: "1px 4px", borderRadius: "3px" }}>
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        fontSize: 13,
+        letterSpacing: "0.03em",
+        color: "var(--dim)",
+        background: "var(--surface)",
+        border: "1px solid var(--line)",
+        borderRadius: 999,
+        padding: "2px 9px 2px 7px",
+      }}
+    >
+      <span
+        style={{
+          width: 7,
+          height: 7,
+          borderRadius: "50%",
+          background: style.color,
+          boxShadow: `0 0 5px ${style.color}`,
+        }}
+      />
       {style.label}
     </span>
   );
