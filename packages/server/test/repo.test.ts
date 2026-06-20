@@ -1,0 +1,110 @@
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import type { DB } from "../src/db/connection.js";
+import { createMemoryDatabase } from "../src/db/connection.js";
+import { createSession, getSession, updateSessionStatus } from "../src/repo/sessions.js";
+import { createUnit, getUnitsBySession, updateUnit, deleteUnit } from "../src/repo/units.js";
+import { createNode, getNodesBySession, getNodesByUnit, getNode, getNodeNeighbors, updateNodeReviewStatus } from "../src/repo/nodes.js";
+import { createComment, getCommentsBySession, exportComments } from "../src/repo/comments.js";
+
+let db: DB;
+beforeEach(() => { db = createMemoryDatabase(); });
+afterEach(() => { db.close(); });
+
+describe("sessions repo", () => {
+  it("creates and retrieves a session", () => {
+    const session = createSession(db, "feature-branch", "main");
+    expect(session.branch).toBe("feature-branch");
+    expect(session.status).toBe("planning");
+    expect(getSession(db, session.id)!.branch).toBe("feature-branch");
+  });
+  it("updates session status", () => {
+    const session = createSession(db, "feat", "main");
+    updateSessionStatus(db, session.id, "walking");
+    expect(getSession(db, session.id)!.status).toBe("walking");
+  });
+});
+
+describe("units repo", () => {
+  it("creates and lists units ordered by position", () => {
+    const session = createSession(db, "feat", "main");
+    createUnit(db, session.id, 1, "Second", "r2", []);
+    createUnit(db, session.id, 0, "First", "r1", ["n1"]);
+    const units = getUnitsBySession(db, session.id);
+    expect(units).toHaveLength(2);
+    expect(units[0].label).toBe("First");
+    expect(units[0].entryPointNodeIds).toEqual(["n1"]);
+  });
+  it("updates and deletes units", () => {
+    const session = createSession(db, "feat", "main");
+    const unit = createUnit(db, session.id, 0, "Label", "Reason", []);
+    updateUnit(db, unit.id, "New", "NewReason", ["n2"]);
+    expect(getUnitsBySession(db, session.id)[0].label).toBe("New");
+    deleteUnit(db, unit.id);
+    expect(getUnitsBySession(db, session.id)).toHaveLength(0);
+  });
+});
+
+describe("nodes repo", () => {
+  it("creates and retrieves nodes", () => {
+    const session = createSession(db, "feat", "main");
+    const unit = createUnit(db, session.id, 0, "Unit", "Reason", []);
+    const node = createNode(db, {
+      sessionId: session.id, stableId: "fn:handleOrder", unitId: unit.id,
+      label: "handleOrder", file: "src/orders.ts", startLine: 10, endLine: 30,
+      changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null,
+    });
+    expect(getNode(db, node.id)).toBeDefined();
+    expect(getNodesByUnit(db, unit.id)).toHaveLength(1);
+    expect(getNodesBySession(db, session.id)).toHaveLength(1);
+  });
+  it("gets node neighbors via edges", () => {
+    const session = createSession(db, "feat", "main");
+    const caller = createNode(db, {
+      sessionId: session.id, stableId: "fn:caller", unitId: null, label: "caller",
+      file: "a.ts", startLine: 1, endLine: 5, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null,
+    });
+    const callee = createNode(db, {
+      sessionId: session.id, stableId: "fn:callee", unitId: null, label: "callee",
+      file: "b.ts", startLine: 1, endLine: 5, changeStatus: "unchanged", reviewStatus: "unreviewed", reviewedInUnit: null,
+    });
+    db.prepare(
+      "INSERT INTO edges (id, session_id, source_node_id, target_node_id, edge_type) VALUES (?, ?, ?, ?, 'call')"
+    ).run("e1", session.id, caller.id, callee.id);
+    expect(getNodeNeighbors(db, caller.id).callees).toHaveLength(1);
+    expect(getNodeNeighbors(db, callee.id).callers).toHaveLength(1);
+  });
+  it("updates review status", () => {
+    const session = createSession(db, "feat", "main");
+    const node = createNode(db, {
+      sessionId: session.id, stableId: "fn:x", unitId: null, label: "x",
+      file: "x.ts", startLine: 1, endLine: 2, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null,
+    });
+    updateNodeReviewStatus(db, node.id, "reviewed-clean", 0);
+    expect(getNode(db, node.id)!.reviewStatus).toBe("reviewed-clean");
+    expect(getNode(db, node.id)!.reviewedInUnit).toBe(0);
+  });
+});
+
+describe("comments repo", () => {
+  it("creates and lists comments", () => {
+    const session = createSession(db, "feat", "main");
+    const node = createNode(db, {
+      sessionId: session.id, stableId: "fn:x", unitId: null, label: "x",
+      file: "x.ts", startLine: 1, endLine: 2, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null,
+    });
+    createComment(db, session.id, node.id, "snippet", "needs fix", "callers: A");
+    expect(getCommentsBySession(db, session.id)).toHaveLength(1);
+  });
+  it("exports comments keyed by node id", () => {
+    const session = createSession(db, "feat", "main");
+    const node = createNode(db, {
+      sessionId: session.id, stableId: "fn:handleOrder", unitId: null, label: "handleOrder",
+      file: "src/orders.ts", startLine: 10, endLine: 30, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null,
+    });
+    createComment(db, session.id, node.id, "old", "bug here", "callers: routeHandler");
+    const exported = exportComments(db, session.id);
+    expect(Object.keys(exported)).toHaveLength(1);
+    expect(exported[node.id].stableId).toBe("fn:handleOrder");
+    expect(exported[node.id].structuralContext).toBe("callers: routeHandler");
+  });
+});
