@@ -25,6 +25,7 @@ export interface FlowStep {
   startLine: number;
   endLine: number;
   isTest: boolean;
+  depth: number;
   nodeId: string | null;
   changeStatus: "changed" | "unchanged" | null;
   reviewStatus: Node["reviewStatus"] | null;

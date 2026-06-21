@@ -71,12 +71,16 @@ function FlowTrack({
         </span>
         <span className="flow__len">{flow.steps.length} steps</span>
       </div>
-      <div className="flow__track">
+      <div className="flow__tree">
         {flow.steps.map((s, i) => (
-          <span key={i} style={{ display: "contents" }}>
-            {i > 0 && <span className="flow__arrow">→</span>}
+          <div
+            key={i}
+            className="flow__row"
+            style={{ paddingLeft: s.depth * 22 }}
+          >
+            {s.depth > 0 && <span className="flow__branch">└</span>}
             <StepChip step={s} current={!!s.nodeId && s.nodeId === currentNodeId} onSelect={onSelectNode} />
-          </span>
+          </div>
         ))}
       </div>
     </div>
