@@ -24,6 +24,11 @@ import type { ChangeStatus, EdgeType } from "../types.js";
 // for a call-graph view; everything else (CSS/HTML files, etc.) isn't in it.
 const UNIT_KINDS = new Set(["Function", "Method", "Class", "Test"]);
 
+// CRG sometimes extracts a "function" for an inline lambda parameter (`.catch(e
+// => …)`, `(n) => …`). These surface as 1–2 char nodes that are pure noise in a
+// review graph. Real functions are ~never that short.
+const isNoiseName = (name: string) => name.trim().length <= 2;
+
 interface CrgNode {
   id: number;
   kind: string;
@@ -116,7 +121,7 @@ export class CrgGraphProvider implements GraphProvider {
     // qualified_name -> node. Changed wins over context if a node appears twice.
     const byId = new Map<string, GraphNode>();
     const add = (n: CrgNode, changed: boolean) => {
-      if (!UNIT_KINDS.has(n.kind)) return;
+      if (!UNIT_KINDS.has(n.kind) || isNoiseName(n.name)) return;
       const existing = byId.get(n.qualified_name);
       if (existing) {
         if (changed) existing.changeStatus = "changed";
@@ -183,7 +188,7 @@ export class CrgGraphProvider implements GraphProvider {
   /** Map query_graph results to context nodes, skipping unresolved built-ins. */
   private mapQueryNodes(res: QueryResult): GraphNode[] {
     return (res.results ?? [])
-      .filter((n) => UNIT_KINDS.has(n.kind) && n.qualified_name && n.file_path)
+      .filter((n) => UNIT_KINDS.has(n.kind) && n.qualified_name && n.file_path && !isNoiseName(n.name))
       .map((n) => ({
         stableId: n.qualified_name,
         label: n.name,

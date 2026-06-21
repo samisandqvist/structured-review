@@ -107,6 +107,7 @@ export function GraphView({
 
   const [showTests, setShowTests] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [focusId, setFocusId] = useState<string | null>(null);
   const seededRef = useRef(false);
 
   const onToggle = useCallback((id: string) => {
@@ -117,14 +118,22 @@ export function GraphView({
     });
   }, []);
 
+  const focusOn = useCallback(
+    (id: string) => {
+      setFocusId(id);
+      onSelectNode(id);
+    },
+    [onSelectNode]
+  );
+
   const allNodes = useMemo(() => data?.nodes ?? [], [data]);
   const allEdges = useMemo(() => data?.edges ?? [], [data]);
 
   // Structural graph (call edges, plus test edges only when tests are shown),
-  // visibility via progressive disclosure, and a dagre layout over what's visible.
+  // visibility via progressive disclosure or focus, and a dagre layout.
   const layout = useMemo(
-    () => computeLayout(allNodes, allEdges, { showTests, expanded, currentNodeId, onToggle }),
-    [allNodes, allEdges, showTests, expanded, currentNodeId, onToggle]
+    () => computeLayout(allNodes, allEdges, { showTests, expanded, currentNodeId, onToggle, focusId }),
+    [allNodes, allEdges, showTests, expanded, currentNodeId, onToggle, focusId]
   );
 
   // Seed the initial disclosure: roots expanded one level.
@@ -173,6 +182,7 @@ export function GraphView({
           rfRef.current = inst;
         }}
         onNodeClick={(_, n) => onSelectNode(n.id)}
+        onNodeDoubleClick={(_, n) => focusOn(n.id)}
         fitView
         fitViewOptions={FIT_OPTS}
         proOptions={{ hideAttribution: true }}
@@ -189,6 +199,11 @@ export function GraphView({
         onCollapse={() => setExpanded(new Set())}
         shown={layout.flowNodes.length}
         total={layout.candidateTotal}
+        entryPoints={layout.entryPoints}
+        focusId={focusId}
+        focusLabel={layout.focusLabel}
+        onFocus={focusOn}
+        onClearFocus={() => setFocusId(null)}
       />
       <Legend />
     </div>
@@ -200,6 +215,7 @@ interface LayoutArgs {
   expanded: Set<string>;
   currentNodeId: string | null;
   onToggle: (id: string) => void;
+  focusId: string | null;
 }
 
 function computeLayout(nodes: Node[], edges: GraphEdgeDTO[], args: LayoutArgs) {
@@ -215,11 +231,26 @@ function computeLayout(nodes: Node[], edges: GraphEdgeDTO[], args: LayoutArgs) {
   const isCandidate = (n: Node) => showTests || !n.isTest;
   const candidates = nodes.filter(isCandidate);
   const candidateIds = new Set(candidates.map((n) => n.id));
+  const focusId = args.focusId && candidateIds.has(args.focusId) ? args.focusId : null;
 
   const structural = [...callEdges, ...(showTests ? testEdges : [])].filter(
     (e) => candidateIds.has(e.sourceNodeId) && candidateIds.has(e.targetNodeId)
   );
 
+  // Call-graph adjacency (callees) and reverse (callers), independent of tests.
+  const callees = new Map<string, string[]>();
+  const callIncoming = new Map<string, number>();
+  for (const id of candidateIds) {
+    callees.set(id, []);
+    callIncoming.set(id, 0);
+  }
+  for (const e of callEdges) {
+    if (!candidateIds.has(e.sourceNodeId) || !candidateIds.has(e.targetNodeId)) continue;
+    callees.get(e.sourceNodeId)!.push(e.targetNodeId);
+    callIncoming.set(e.targetNodeId, (callIncoming.get(e.targetNodeId) ?? 0) + 1);
+  }
+
+  // children over the full structural graph (drives the expand affordance).
   const children = new Map<string, string[]>();
   const incoming = new Map<string, number>();
   for (const id of candidateIds) {
@@ -234,16 +265,39 @@ function computeLayout(nodes: Node[], edges: GraphEdgeDTO[], args: LayoutArgs) {
   const rootIds = candidates.filter((n) => (incoming.get(n.id) ?? 0) === 0).map((n) => n.id);
   const expandableIds = candidates.filter((n) => (children.get(n.id)?.length ?? 0) > 0).map((n) => n.id);
 
-  // Disclosure BFS: roots are visible; a node reveals its children only if expanded.
-  const visible = new Set<string>(rootIds);
-  const queue = [...rootIds];
-  while (queue.length) {
-    const id = queue.shift()!;
-    if (!expanded.has(id)) continue;
-    for (const c of children.get(id) ?? []) {
-      if (!visible.has(c)) {
-        visible.add(c);
-        queue.push(c);
+  // Entry points = changed, non-test nodes nothing in the call graph calls.
+  const entryPoints = candidates
+    .filter((n) => !n.isTest && n.changeStatus === "changed" && (callIncoming.get(n.id) ?? 0) === 0)
+    .map((n) => ({ id: n.id, label: n.label, file: n.file }));
+
+  let visible: Set<string>;
+  if (focusId) {
+    // Focus: the node, its transitive callees (its dependencies), its direct
+    // callers (context), and — when tests are shown — the tests of all those.
+    visible = new Set<string>([focusId]);
+    const q = [focusId];
+    while (q.length) {
+      const id = q.shift()!;
+      for (const c of callees.get(id) ?? []) if (!visible.has(c)) (visible.add(c), q.push(c));
+    }
+    for (const e of callEdges) if (e.targetNodeId === focusId) visible.add(e.sourceNodeId);
+    if (showTests) {
+      const tested = new Set(visible);
+      for (const e of testEdges) if (tested.has(e.sourceNodeId)) visible.add(e.targetNodeId);
+    }
+    visible = new Set([...visible].filter((id) => candidateIds.has(id)));
+  } else {
+    // Disclosure BFS: roots are visible; a node reveals its children if expanded.
+    visible = new Set<string>(rootIds);
+    const queue = [...rootIds];
+    while (queue.length) {
+      const id = queue.shift()!;
+      if (!expanded.has(id)) continue;
+      for (const c of children.get(id) ?? []) {
+        if (!visible.has(c)) {
+          visible.add(c);
+          queue.push(c);
+        }
       }
     }
   }
@@ -277,7 +331,7 @@ function computeLayout(nodes: Node[], edges: GraphEdgeDTO[], args: LayoutArgs) {
         testCount: testCount.get(n.id) ?? 0,
         hiddenCallees,
         expanded: expanded.has(n.id),
-        expandable: childIds.length > 0,
+        expandable: !focusId && childIds.length > 0,
         onToggle,
         nodeId: n.id,
       } satisfies TraceData,
@@ -303,9 +357,17 @@ function computeLayout(nodes: Node[], edges: GraphEdgeDTO[], args: LayoutArgs) {
     flowEdges,
     rootIds,
     expandableIds,
+    entryPoints,
+    focusLabel: focusId ? byId.get(focusId)?.label ?? null : null,
     testTotal: nodes.filter((n) => n.isTest).length,
     candidateTotal: candidates.length,
   };
+}
+
+interface EntryPoint {
+  id: string;
+  label: string;
+  file: string;
 }
 
 function ControlPanel({
@@ -316,6 +378,11 @@ function ControlPanel({
   onCollapse,
   shown,
   total,
+  entryPoints,
+  focusId,
+  focusLabel,
+  onFocus,
+  onClearFocus,
 }: {
   showTests: boolean;
   onToggleTests: () => void;
@@ -324,6 +391,11 @@ function ControlPanel({
   onCollapse: () => void;
   shown: number;
   total: number;
+  entryPoints: EntryPoint[];
+  focusId: string | null;
+  focusLabel: string | null;
+  onFocus: (id: string) => void;
+  onClearFocus: () => void;
 }) {
   return (
     <div className="graph-controls">
@@ -333,14 +405,46 @@ function ControlPanel({
           <span style={{ color: "var(--faint)" }}>/{total}</span> shown
         </span>
       </div>
-      <div className="graph-controls__row">
-        <button className="chip" onClick={onExpandAll}>Expand all</button>
-        <button className="chip" onClick={onCollapse}>Collapse</button>
-      </div>
+
+      {focusId ? (
+        <div className="graph-focus">
+          <span className="graph-focus__label" title={focusLabel ?? ""}>
+            ⊙ {focusLabel}
+          </span>
+          <button className="chip chip--clear" onClick={onClearFocus} title="Clear focus">
+            ✕ clear
+          </button>
+        </div>
+      ) : (
+        <div className="graph-controls__row">
+          <button className="chip" onClick={onExpandAll}>Expand all</button>
+          <button className="chip" onClick={onCollapse}>Collapse</button>
+        </div>
+      )}
+
+      {entryPoints.length > 0 && (
+        <details className="graph-entries" open={!focusId}>
+          <summary>Entry points ({entryPoints.length})</summary>
+          <div className="graph-entries__list">
+            {entryPoints.map((ep) => (
+              <button
+                key={ep.id}
+                className={`graph-entries__item${ep.id === focusId ? " is-active" : ""}`}
+                onClick={() => onFocus(ep.id)}
+                title={ep.file}
+              >
+                {ep.label}
+              </button>
+            ))}
+          </div>
+        </details>
+      )}
+
       <label className="graph-controls__toggle">
         <input type="checkbox" checked={showTests} onChange={onToggleTests} />
         <span>Show tests{testTotal > 0 ? ` (${testTotal})` : ""}</span>
       </label>
+      <span className="graph-controls__hint">double-click a node to focus</span>
     </div>
   );
 }
