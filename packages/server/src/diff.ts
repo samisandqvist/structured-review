@@ -104,30 +104,47 @@ export function getNodeDiff(
 }
 
 /**
- * Reconstruct before/after text from a file's unified diff, limited to the
- * hunks overlapping [startLine, endLine] (new-file line numbers). Returns null
- * if no hunk touches the span. Pure — exported for testing.
+ * Reconstruct before/after text from a file's unified diff, clipped to the
+ * node's new-file line span [startLine, endLine]. Walking each hunk and tracking
+ * the running new-file line number lets us keep only the lines belonging to this
+ * node — so two functions inside one big hunk get distinct diffs instead of the
+ * whole hunk. Returns null if nothing falls in the span. Pure — exported for tests.
  */
 export function extractHunkDiff(rawDiff: string, startLine: number, endLine: number): NodeDiff | null {
-  const hunks = parseHunks(rawDiff).filter((h) =>
-    overlaps(h.newStart, h.newStart + Math.max(h.newCount, 1) - 1, startLine, endLine)
-  );
-  if (hunks.length === 0) return null;
-
   const oldLines: string[] = [];
   const newLines: string[] = [];
-  for (const h of hunks) {
+  let any = false;
+
+  for (const h of parseHunks(rawDiff)) {
+    let newLine = h.newStart;
     for (const line of h.lines) {
       const marker = line[0];
       const text = line.slice(1);
-      if (marker === "-") oldLines.push(text);
-      else if (marker === "+") newLines.push(text);
-      else {
-        oldLines.push(text);
-        newLines.push(text);
+      const inSpan = newLine >= startLine && newLine <= endLine;
+      if (marker === " ") {
+        if (inSpan) {
+          oldLines.push(text);
+          newLines.push(text);
+          any = true;
+        }
+        newLine++;
+      } else if (marker === "+") {
+        if (inSpan) {
+          newLines.push(text);
+          any = true;
+        }
+        newLine++;
+      } else {
+        // Removed line: no new-file line of its own; attribute it to the new
+        // position it sits at (the upcoming new line).
+        if (inSpan) {
+          oldLines.push(text);
+          any = true;
+        }
       }
     }
   }
+  if (!any) return null;
   return { oldText: oldLines.join("\n"), newText: newLines.join("\n") };
 }
 

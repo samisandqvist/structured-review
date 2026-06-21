@@ -27,4 +27,11 @@ describe("extractHunkDiff", () => {
   it("returns null when no hunk touches the node span", () => {
     expect(extractHunkDiff(RAW, 200, 250)).toBeNull();
   });
+
+  it("clips the diff to the node's line span (distinct slices within one hunk)", () => {
+    // Only new line 13 (the added `const d = 4;`) is in span.
+    const diff = extractHunkDiff(RAW, 13, 13)!;
+    expect(diff.newText).toBe("const d = 4;");
+    expect(diff.oldText).toBe("");
+  });
 });
