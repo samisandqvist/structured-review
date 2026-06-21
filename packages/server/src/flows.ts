@@ -19,6 +19,7 @@ export interface FlowStep {
   startLine: number;
   endLine: number;
   isTest: boolean;
+  depth: number;
 }
 export interface Flow {
   id: number;
@@ -59,7 +60,17 @@ export function readFlows(root: string = repoRoot()): Flow[] {
     const nodeStmt = db.prepare(
       "SELECT name, qualified_name, file_path, line_start, line_end, is_test FROM nodes WHERE id = ?"
     );
+    // Call adjacency by qualified name, to recover each step's depth in the tree.
+    const callAdj = new Map<string, string[]>();
+    for (const e of db
+      .prepare("SELECT source_qualified, target_qualified FROM edges WHERE kind = 'CALLS'")
+      .all() as { source_qualified: string; target_qualified: string }[]) {
+      (callAdj.get(e.source_qualified) ?? callAdj.set(e.source_qualified, []).get(e.source_qualified)!).push(
+        e.target_qualified
+      );
+    }
     const rootSlash = root.endsWith("/") ? root : `${root}/`;
+
     return flows.map((f) => {
       const path = safeParsePath(f.path_json);
       const steps: FlowStep[] = [];
@@ -73,13 +84,39 @@ export function readFlows(root: string = repoRoot()): Flow[] {
           startLine: n.line_start,
           endLine: n.line_end,
           isTest: n.is_test === 1,
+          depth: 0,
         });
       }
+      assignDepths(steps, callAdj);
       return { id: f.id, name: f.name, criticality: f.criticality, depth: f.depth, steps };
     });
   } finally {
     db.close();
   }
+}
+
+/**
+ * Recover each step's tree depth by BFS from the flow's entry (steps[0]) over
+ * call edges restricted to the flow's nodes — mirroring how CRG traced it.
+ * CRG stores only the flattened BFS path, so siblings (a caller's several
+ * callees) sit at the same depth; this is what lets the UI render the tree.
+ */
+function assignDepths(steps: FlowStep[], callAdj: Map<string, string[]>): void {
+  if (steps.length === 0) return;
+  const inFlow = new Set(steps.map((s) => s.stableId));
+  const depthByQn = new Map<string, number>([[steps[0].stableId, 0]]);
+  const queue = [steps[0].stableId];
+  while (queue.length) {
+    const cur = queue.shift()!;
+    const d = depthByQn.get(cur)!;
+    for (const next of callAdj.get(cur) ?? []) {
+      if (inFlow.has(next) && !depthByQn.has(next)) {
+        depthByQn.set(next, d + 1);
+        queue.push(next);
+      }
+    }
+  }
+  for (const s of steps) s.depth = depthByQn.get(s.stableId) ?? 0;
 }
 
 function safeParsePath(json: string): number[] {

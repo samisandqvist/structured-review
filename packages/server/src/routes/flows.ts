@@ -26,6 +26,7 @@ export function createFlowsRoute(ctx: AppContext) {
           startLine: s.startLine,
           endLine: s.endLine,
           isTest: s.isTest,
+          depth: s.depth,
           nodeId: node?.id ?? null,
           changeStatus: node?.changeStatus ?? null,
           reviewStatus: node?.reviewStatus ?? null,

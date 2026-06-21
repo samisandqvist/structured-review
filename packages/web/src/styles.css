@@ -651,16 +651,20 @@ textarea:focus {
 .flow__len {
   margin-left: auto;
 }
-.flow__track {
+.flow__tree {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.flow__row {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 3px 2px;
+  gap: 4px;
 }
-.flow__arrow {
+.flow__branch {
   color: var(--faint);
   font-size: 13px;
-  padding: 0 1px;
+  margin-right: 1px;
 }
 .step {
   font-family: var(--mono);
