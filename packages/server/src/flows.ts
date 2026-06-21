@@ -33,10 +33,10 @@ interface FlowRow {
   id: number;
   name: string;
   criticality: number;
-  depth: number;
-  path_json: string;
+  entry_point_id: number;
 }
 interface NodeRow {
+  id: number;
   name: string;
   qualified_name: string;
   file_path: string;
@@ -44,6 +44,9 @@ interface NodeRow {
   line_end: number;
   is_test: number;
 }
+
+const MAX_TREE_DEPTH = 10;
+const MAX_TREE_STEPS = 120;
 
 export function readFlows(root: string = repoRoot()): Flow[] {
   const dbPath = process.env.CRG_GRAPH_DB || join(root, ".code-review-graph", "graph.db");
@@ -54,76 +57,89 @@ export function readFlows(root: string = repoRoot()): Flow[] {
     return []; // no CRG graph built — flows unavailable
   }
   try {
+    // CRG tells us the entry points worth tracing (+ its criticality ranking);
+    // we ignore its flattened/deduped stored path and rebuild the real call tree
+    // ourselves from the edges, so shared nodes show at each call site.
     const flows = db
-      .prepare("SELECT id, name, criticality, depth, path_json FROM flows ORDER BY criticality DESC")
+      .prepare("SELECT id, name, criticality, entry_point_id FROM flows ORDER BY criticality DESC")
       .all() as FlowRow[];
-    const nodeStmt = db.prepare(
-      "SELECT name, qualified_name, file_path, line_start, line_end, is_test FROM nodes WHERE id = ?"
-    );
-    // Call adjacency by qualified name, to recover each step's depth in the tree.
-    const callAdj = new Map<string, string[]>();
+
+    const nodeById = new Map<number, NodeRow>();
+    const nodeByQn = new Map<string, NodeRow>();
+    for (const n of db
+      .prepare("SELECT id, name, qualified_name, file_path, line_start, line_end, is_test FROM nodes")
+      .all() as NodeRow[]) {
+      nodeById.set(n.id, n);
+      nodeByQn.set(n.qualified_name, n);
+    }
+
+    // Dedupe per (caller, callee): CRG records an edge per call site, but a
+    // function called 3× shouldn't appear as 3 identical subtrees. A callee can
+    // still appear under several *different* callers.
+    const callSets = new Map<string, Set<string>>();
     for (const e of db
       .prepare("SELECT source_qualified, target_qualified FROM edges WHERE kind = 'CALLS'")
       .all() as { source_qualified: string; target_qualified: string }[]) {
-      (callAdj.get(e.source_qualified) ?? callAdj.set(e.source_qualified, []).get(e.source_qualified)!).push(
+      (callSets.get(e.source_qualified) ?? callSets.set(e.source_qualified, new Set()).get(e.source_qualified)!).add(
         e.target_qualified
       );
     }
-    const rootSlash = root.endsWith("/") ? root : `${root}/`;
+    const callAdj = new Map<string, string[]>();
+    for (const [src, tgts] of callSets) callAdj.set(src, [...tgts]);
 
-    return flows.map((f) => {
-      const path = safeParsePath(f.path_json);
-      const steps: FlowStep[] = [];
-      for (const nid of path) {
-        const n = nodeStmt.get(nid) as NodeRow | undefined;
-        if (!n) continue;
-        steps.push({
-          stableId: n.qualified_name,
-          label: n.name,
-          file: n.file_path.startsWith(rootSlash) ? n.file_path.slice(rootSlash.length) : n.file_path,
-          startLine: n.line_start,
-          endLine: n.line_end,
-          isTest: n.is_test === 1,
-          depth: 0,
-        });
-      }
-      assignDepths(steps, callAdj);
-      return { id: f.id, name: f.name, criticality: f.criticality, depth: f.depth, steps };
+    const rootSlash = root.endsWith("/") ? root : `${root}/`;
+    const rel = (p: string) => (p.startsWith(rootSlash) ? p.slice(rootSlash.length) : p);
+    const stepOf = (n: NodeRow, depth: number): FlowStep => ({
+      stableId: n.qualified_name,
+      label: n.name,
+      file: rel(n.file_path),
+      startLine: n.line_start,
+      endLine: n.line_end,
+      isTest: n.is_test === 1,
+      depth,
     });
+
+    return flows
+      .map((f) => {
+        const entry = nodeById.get(f.entry_point_id);
+        if (!entry) return null;
+        const steps = buildTree(entry.qualified_name, callAdj, nodeByQn, stepOf);
+        const depth = steps.reduce((m, s) => Math.max(m, s.depth), 0);
+        return { id: f.id, name: f.name, criticality: f.criticality, depth, steps };
+      })
+      .filter((f): f is Flow => f !== null && f.steps.length > 1);
   } finally {
     db.close();
   }
 }
 
 /**
- * Recover each step's tree depth by BFS from the flow's entry (steps[0]) over
- * call edges restricted to the flow's nodes — mirroring how CRG traced it.
- * CRG stores only the flattened BFS path, so siblings (a caller's several
- * callees) sit at the same depth; this is what lets the UI render the tree.
+ * Depth-first call tree from an entry: preorder so each node is immediately
+ * followed by its own children (indent = real nesting). No global dedup, so a
+ * shared callee appears under every caller; an ancestor set guards cycles, and
+ * depth/step caps bound pathological fan-out.
  */
-function assignDepths(steps: FlowStep[], callAdj: Map<string, string[]>): void {
-  if (steps.length === 0) return;
-  const inFlow = new Set(steps.map((s) => s.stableId));
-  const depthByQn = new Map<string, number>([[steps[0].stableId, 0]]);
-  const queue = [steps[0].stableId];
-  while (queue.length) {
-    const cur = queue.shift()!;
-    const d = depthByQn.get(cur)!;
-    for (const next of callAdj.get(cur) ?? []) {
-      if (inFlow.has(next) && !depthByQn.has(next)) {
-        depthByQn.set(next, d + 1);
-        queue.push(next);
-      }
+function buildTree(
+  entryQn: string,
+  callAdj: Map<string, string[]>,
+  nodeByQn: Map<string, NodeRow>,
+  stepOf: (n: NodeRow, depth: number) => FlowStep
+): FlowStep[] {
+  const steps: FlowStep[] = [];
+  const ancestors = new Set<string>();
+  const walk = (qn: string, depth: number) => {
+    if (steps.length >= MAX_TREE_STEPS) return;
+    const n = nodeByQn.get(qn);
+    if (!n) return;
+    steps.push(stepOf(n, depth));
+    if (depth >= MAX_TREE_DEPTH) return;
+    ancestors.add(qn);
+    for (const callee of callAdj.get(qn) ?? []) {
+      if (ancestors.has(callee)) continue; // cycle / recursion guard
+      walk(callee, depth + 1);
     }
-  }
-  for (const s of steps) s.depth = depthByQn.get(s.stableId) ?? 0;
-}
-
-function safeParsePath(json: string): number[] {
-  try {
-    const arr = JSON.parse(json);
-    return Array.isArray(arr) ? arr : [];
-  } catch {
-    return [];
-  }
+    ancestors.delete(qn);
+  };
+  walk(entryQn, 0);
+  return steps;
 }
