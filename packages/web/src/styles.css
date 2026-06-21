@@ -374,6 +374,116 @@ textarea:focus {
   animation: trace-pulse 2.6s ease-in-out infinite;
 }
 
+/* Test nodes (shown only when "Show tests" is on) read as faint, dashed leaves. */
+.tnode--test {
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--line);
+  opacity: 0.7;
+}
+.tnode--test .tnode__label {
+  color: var(--led-clean);
+  font-weight: 500;
+}
+.tnode__flask {
+  margin-right: 5px;
+  filter: grayscale(0.2);
+}
+.tnode__tests {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--led-clean);
+  background: rgba(70, 211, 138, 0.12);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+.tnode__expand {
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--trace);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 9px;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.tnode__expand:hover {
+  background: var(--surface-3);
+  border-color: var(--trace);
+}
+
+/* Test edges: dim and dashed, never animated. */
+.react-flow__edge.is-test .react-flow__edge-path {
+  stroke: var(--led-clean);
+  stroke-dasharray: 4 4;
+  stroke-width: 1.2;
+  opacity: 0.5;
+}
+
+/* Graph overlays: control panel (top-left) + status legend (top-right). */
+.graph-controls,
+.graph-legend {
+  position: absolute;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 11px 13px;
+  background: rgba(15, 20, 30, 0.82);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-card);
+  z-index: 5;
+}
+.graph-controls {
+  left: 12px;
+}
+.graph-legend {
+  right: 12px;
+}
+.graph-controls__row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.graph-controls__count {
+  font-size: 13px;
+  color: var(--text);
+}
+.chip {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--dim);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 11px;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.chip:hover {
+  background: var(--surface-3);
+  color: var(--trace);
+  border-color: var(--trace);
+}
+.graph-controls__toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--dim);
+  cursor: pointer;
+  user-select: none;
+}
+.graph-controls__toggle input {
+  accent-color: var(--trace);
+  cursor: pointer;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tnode--current {
     animation: none;

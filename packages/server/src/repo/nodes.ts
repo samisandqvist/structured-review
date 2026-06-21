@@ -6,6 +6,7 @@ interface NodeRow {
   id: string; session_id: string; stable_id: string; unit_id: string | null;
   label: string; file: string; start_line: number; end_line: number;
   change_status: ChangeStatus; review_status: ReviewStatus; reviewed_in_unit: number | null;
+  is_test: number;
 }
 
 function rowToNode(row: NodeRow): Node {
@@ -13,16 +14,17 @@ function rowToNode(row: NodeRow): Node {
     id: row.id, sessionId: row.session_id, stableId: row.stable_id, unitId: row.unit_id,
     label: row.label, file: row.file, startLine: row.start_line, endLine: row.end_line,
     changeStatus: row.change_status, reviewStatus: row.review_status, reviewedInUnit: row.reviewed_in_unit,
+    isTest: row.is_test === 1,
   };
 }
 
 export function createNode(db: DB, node: Omit<Node, "id">): Node {
   const id = randomId("node");
   db.prepare(
-    `INSERT INTO nodes (id, session_id, stable_id, unit_id, label, file, start_line, end_line, change_status, review_status, reviewed_in_unit)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO nodes (id, session_id, stable_id, unit_id, label, file, start_line, end_line, change_status, review_status, reviewed_in_unit, is_test)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(id, node.sessionId, node.stableId, node.unitId, node.label, node.file,
-    node.startLine, node.endLine, node.changeStatus, node.reviewStatus, node.reviewedInUnit);
+    node.startLine, node.endLine, node.changeStatus, node.reviewStatus, node.reviewedInUnit, node.isTest ? 1 : 0);
   return { ...node, id };
 }
 

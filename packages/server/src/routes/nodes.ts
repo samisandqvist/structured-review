@@ -13,11 +13,15 @@ export function createNodesRoute(ctx: AppContext) {
     const unitId = c.req.query("unitId");
     const nodes = unitId ? getNodesByUnit(ctx.db, unitId) : getNodesBySession(ctx.db, sessionId);
     const edges = ctx.db
-      .prepare("SELECT source_node_id, target_node_id FROM edges WHERE session_id = ?")
-      .all(sessionId) as { source_node_id: string; target_node_id: string }[];
+      .prepare("SELECT source_node_id, target_node_id, edge_type FROM edges WHERE session_id = ?")
+      .all(sessionId) as { source_node_id: string; target_node_id: string; edge_type: string }[];
     return c.json({
       nodes,
-      edges: edges.map((e) => ({ sourceNodeId: e.source_node_id, targetNodeId: e.target_node_id })),
+      edges: edges.map((e) => ({
+        sourceNodeId: e.source_node_id,
+        targetNodeId: e.target_node_id,
+        edgeType: e.edge_type,
+      })),
     });
   });
 

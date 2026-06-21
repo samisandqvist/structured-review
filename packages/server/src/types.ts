@@ -5,7 +5,7 @@ export type ReviewStatus =
   | "reviewed-clean"
   | "reviewed-commented"
   | "reviewed-elsewhere";
-export type EdgeType = "call";
+export type EdgeType = "call" | "test";
 
 export interface ReviewSession {
   id: string;
@@ -36,6 +36,7 @@ export interface Node {
   changeStatus: ChangeStatus;
   reviewStatus: ReviewStatus;
   reviewedInUnit: number | null;
+  isTest: boolean;
 }
 
 export interface Edge {

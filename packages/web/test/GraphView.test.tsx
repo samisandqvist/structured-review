@@ -10,15 +10,15 @@ vi.mock("../src/api/hooks.js", () => ({
         {
           id: "n1", sessionId: "s1", stableId: "fn:handleOrder", unitId: "u1",
           label: "handleOrder", file: "src/orders.ts", startLine: 10, endLine: 30,
-          changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null,
+          changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false,
         },
         {
           id: "n2", sessionId: "s1", stableId: "fn:validateOrder", unitId: null,
           label: "validateOrder", file: "src/orders.ts", startLine: 35, endLine: 50,
-          changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null,
+          changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false,
         },
       ],
-      edges: [{ sourceNodeId: "n1", targetNodeId: "n2" }],
+      edges: [{ sourceNodeId: "n1", targetNodeId: "n2", edgeType: "call" }],
     },
     isLoading: false,
   }),

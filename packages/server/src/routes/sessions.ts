@@ -17,6 +17,7 @@ export function createSessionsRoute(ctx: AppContext) {
         sessionId: session.id, stableId: gnode.stableId, unitId: null,
         label: gnode.label, file: gnode.file, startLine: gnode.startLine, endLine: gnode.endLine,
         changeStatus: gnode.changeStatus, reviewStatus: "unreviewed", reviewedInUnit: null,
+        isTest: gnode.isTest,
       });
     }
     const nodes = getNodesBySession(ctx.db, session.id);

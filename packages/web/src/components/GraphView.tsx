@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -12,44 +12,9 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import dagre from "@dagrejs/dagre";
 import { useNodes } from "../api/hooks.js";
-import type { Node } from "../api/client.js";
-
-function computeLevels(
-  nodeIds: string[],
-  edges: { sourceNodeId: string; targetNodeId: string }[]
-): Map<string, number> {
-  const adjacency = new Map<string, string[]>();
-  const inDegree = new Map<string, number>();
-  for (const id of nodeIds) {
-    adjacency.set(id, []);
-    inDegree.set(id, 0);
-  }
-  for (const e of edges) {
-    if (adjacency.has(e.sourceNodeId) && adjacency.has(e.targetNodeId)) {
-      adjacency.get(e.sourceNodeId)!.push(e.targetNodeId);
-      inDegree.set(e.targetNodeId, (inDegree.get(e.targetNodeId) ?? 0) + 1);
-    }
-  }
-  const levels = new Map<string, number>();
-  const queue = nodeIds.filter((id) => (inDegree.get(id) ?? 0) === 0);
-  for (const id of queue) levels.set(id, 0);
-  while (queue.length > 0) {
-    const id = queue.shift()!;
-    const level = levels.get(id) ?? 0;
-    for (const callee of adjacency.get(id) ?? []) {
-      const current = levels.get(callee);
-      if (current === undefined || current < level + 1) {
-        levels.set(callee, level + 1);
-        queue.push(callee);
-      }
-    }
-  }
-  for (const id of nodeIds) {
-    if (!levels.has(id)) levels.set(id, 0);
-  }
-  return levels;
-}
+import type { Node, GraphEdgeDTO } from "../api/client.js";
 
 const LED: Record<Node["reviewStatus"], string> = {
   unreviewed: "var(--led-unreviewed)",
@@ -58,23 +23,33 @@ const LED: Record<Node["reviewStatus"], string> = {
   "reviewed-elsewhere": "var(--led-elsewhere)",
 };
 
+const NODE_W = 188;
+const NODE_H = 62;
+
 type TraceData = {
   label: string;
   file: string;
-  level: number;
   reviewStatus: Node["reviewStatus"];
   changeStatus: Node["changeStatus"];
   isCurrent: boolean;
+  isTest: boolean;
+  testCount: number;
+  hiddenCallees: number;
+  expanded: boolean;
+  expandable: boolean;
+  onToggle: (id: string) => void;
+  nodeId: string;
 };
 
-/** A node rendered as an instrument readout: status LED, mono label, the
- *  source location, and the call depth (L0 = entry point, deeper = callee). */
+/** A node rendered as an instrument readout: status LED, label, source location,
+ *  a test count, and an expand control when it has undisclosed callees. */
 function TraceNode({ data }: NodeProps) {
   const d = data as TraceData;
   const cls = [
     "tnode",
     d.isCurrent ? "tnode--current" : "",
     d.changeStatus === "unchanged" ? "tnode--unchanged" : "",
+    d.isTest ? "tnode--test" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -83,10 +58,29 @@ function TraceNode({ data }: NodeProps) {
       <Handle type="target" position={Position.Top} className="tnode__handle" />
       <div className="tnode__top">
         <span className="tnode__led" style={{ color: LED[d.reviewStatus] }} />
-        <span className="tnode__label">{d.label}</span>
-        <span className="tnode__depth">L{d.level}</span>
+        <span className="tnode__label">
+          {d.isTest && <span className="tnode__flask">🧪</span>}
+          {d.label}
+        </span>
+        {d.testCount > 0 && !d.isTest && (
+          <span className="tnode__tests" title={`${d.testCount} test(s)`}>
+            🧪 {d.testCount}
+          </span>
+        )}
       </div>
       <div className="tnode__file">{d.file}</div>
+      {d.expandable && (
+        <button
+          className="tnode__expand"
+          onClick={(e) => {
+            e.stopPropagation();
+            d.onToggle(d.nodeId);
+          }}
+          title={d.expanded ? "Collapse callees" : `Expand ${d.hiddenCallees} callee(s)`}
+        >
+          {d.expanded ? "▾ callees" : `▸ ${d.hiddenCallees}`}
+        </button>
+      )}
       <Handle type="source" position={Position.Bottom} className="tnode__handle" />
     </div>
   );
@@ -94,8 +88,9 @@ function TraceNode({ data }: NodeProps) {
 
 const nodeTypes = { trace: TraceNode };
 
-const NODE_SPACING_X = 230;
-const NODE_SPACING_Y = 132;
+// Floor the fit zoom so wide changes stay readable (and pannable) instead of
+// shrinking to an illegible band; cap it so tiny graphs don't balloon.
+const FIT_OPTS = { padding: 0.2, minZoom: 0.5, maxZoom: 1.2, duration: 200 } as const;
 
 export function GraphView({
   sessionId,
@@ -110,20 +105,44 @@ export function GraphView({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const rfRef = useRef<ReactFlowInstance | null>(null);
 
-  // Keep the graph framed as its container changes size — window resize or a
-  // drag of the split divider both reshape the pane, and the view should follow.
-  // Debounced so React Flow's own size store settles before we re-fit (fitting
-  // against a stale width yields an under-zoomed, off-center view).
+  const [showTests, setShowTests] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const seededRef = useRef(false);
+
+  const onToggle = useCallback((id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }, []);
+
+  const allNodes = useMemo(() => data?.nodes ?? [], [data]);
+  const allEdges = useMemo(() => data?.edges ?? [], [data]);
+
+  // Structural graph (call edges, plus test edges only when tests are shown),
+  // visibility via progressive disclosure, and a dagre layout over what's visible.
+  const layout = useMemo(
+    () => computeLayout(allNodes, allEdges, { showTests, expanded, currentNodeId, onToggle }),
+    [allNodes, allEdges, showTests, expanded, currentNodeId, onToggle]
+  );
+
+  // Seed the initial disclosure: roots expanded one level.
+  useEffect(() => {
+    if (!seededRef.current && allNodes.length > 0) {
+      setExpanded(new Set(layout.rootIds));
+      seededRef.current = true;
+    }
+  }, [allNodes.length, layout.rootIds]);
+
+  // Re-fit when the visible set changes or the pane resizes (debounced).
   useEffect(() => {
     const el = wrapperRef.current;
     if (!el) return;
     let timer = 0;
     const observer = new ResizeObserver(() => {
       clearTimeout(timer);
-      timer = window.setTimeout(
-        () => rfRef.current?.fitView({ padding: 0.3, duration: 200 }),
-        120
-      );
+      timer = window.setTimeout(() => rfRef.current?.fitView(FIT_OPTS), 120);
     });
     observer.observe(el);
     return () => {
@@ -131,100 +150,201 @@ export function GraphView({
       observer.disconnect();
     };
   }, []);
-
-  const allNodes = data?.nodes ?? [];
-  const allEdges = data?.edges ?? [];
+  useEffect(() => {
+    const t = window.setTimeout(() => rfRef.current?.fitView(FIT_OPTS), 60);
+    return () => clearTimeout(t);
+  }, [layout.flowNodes.length]);
 
   if (allNodes.length === 0) {
     return (
-      <div
-        style={{
-          flex: 1,
-          height: "100%",
-          display: "grid",
-          placeItems: "center",
-          color: "var(--faint)",
-          background: "var(--panel)",
-        }}
-      >
+      <div className="graph-empty" style={emptyStyle}>
         No nodes in this session
       </div>
     );
   }
 
-  const levels = computeLevels(
-    allNodes.map((n) => n.id),
-    allEdges
-  );
-
-  const nodesByLevel = new Map<number, string[]>();
-  for (const n of allNodes) {
-    const level = levels.get(n.id) ?? 0;
-    if (!nodesByLevel.has(level)) nodesByLevel.set(level, []);
-    nodesByLevel.get(level)!.push(n.id);
-  }
-
-  const flowNodes: FlowNode[] = allNodes.map((n) => {
-    const level = levels.get(n.id) ?? 0;
-    const peers = nodesByLevel.get(level) ?? [n.id];
-    const indexInLevel = peers.indexOf(n.id);
-    const levelWidth = (peers.length - 1) * NODE_SPACING_X;
-    return {
-      id: n.id,
-      type: "trace",
-      position: {
-        x: indexInLevel * NODE_SPACING_X - levelWidth / 2,
-        y: level * NODE_SPACING_Y,
-      },
-      data: {
-        label: n.label,
-        file: `${n.file}:${n.startLine}`,
-        level,
-        reviewStatus: n.reviewStatus,
-        changeStatus: n.changeStatus,
-        isCurrent: n.id === currentNodeId,
-      } satisfies TraceData,
-    };
-  });
-
-  const flowEdges: FlowEdge[] = allEdges.map((e) => {
-    const live =
-      e.sourceNodeId === currentNodeId || e.targetNodeId === currentNodeId;
-    return {
-      id: `${e.sourceNodeId}-${e.targetNodeId}`,
-      source: e.sourceNodeId,
-      target: e.targetNodeId,
-      className: live ? "is-live" : undefined,
-      animated: live,
-    };
-  });
-
   return (
-    <div
-      ref={wrapperRef}
-      style={{ flex: 1, position: "relative", height: "100%", minHeight: 0 }}
-    >
+    <div ref={wrapperRef} style={{ flex: 1, position: "relative", height: "100%", minHeight: 0 }}>
       <ReactFlow
         nodeTypes={nodeTypes}
-        nodes={flowNodes}
-        edges={flowEdges}
+        nodes={layout.flowNodes}
+        edges={layout.flowEdges}
         onInit={(inst) => {
           rfRef.current = inst;
         }}
         onNodeClick={(_, n) => onSelectNode(n.id)}
         fitView
-        fitViewOptions={{ padding: 0.3 }}
+        fitViewOptions={FIT_OPTS}
         proOptions={{ hideAttribution: true }}
+        minZoom={0.12}
       >
         <Background variant={BackgroundVariant.Dots} gap={26} size={1} color="#222b3a" />
         <Controls showInteractive={false} />
       </ReactFlow>
+      <ControlPanel
+        showTests={showTests}
+        onToggleTests={() => setShowTests((v) => !v)}
+        testTotal={layout.testTotal}
+        onExpandAll={() => setExpanded(new Set(layout.expandableIds))}
+        onCollapse={() => setExpanded(new Set())}
+        shown={layout.flowNodes.length}
+        total={layout.candidateTotal}
+      />
       <Legend />
     </div>
   );
 }
 
-/** A corner HUD reading off what the LEDs mean — the instrument's key. */
+interface LayoutArgs {
+  showTests: boolean;
+  expanded: Set<string>;
+  currentNodeId: string | null;
+  onToggle: (id: string) => void;
+}
+
+function computeLayout(nodes: Node[], edges: GraphEdgeDTO[], args: LayoutArgs) {
+  const { showTests, expanded, currentNodeId, onToggle } = args;
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const callEdges = edges.filter((e) => e.edgeType === "call");
+  const testEdges = edges.filter((e) => e.edgeType === "test");
+
+  // How many tests each node has (TESTED_BY: source = tested node).
+  const testCount = new Map<string, number>();
+  for (const e of testEdges) testCount.set(e.sourceNodeId, (testCount.get(e.sourceNodeId) ?? 0) + 1);
+
+  const isCandidate = (n: Node) => showTests || !n.isTest;
+  const candidates = nodes.filter(isCandidate);
+  const candidateIds = new Set(candidates.map((n) => n.id));
+
+  const structural = [...callEdges, ...(showTests ? testEdges : [])].filter(
+    (e) => candidateIds.has(e.sourceNodeId) && candidateIds.has(e.targetNodeId)
+  );
+
+  const children = new Map<string, string[]>();
+  const incoming = new Map<string, number>();
+  for (const id of candidateIds) {
+    children.set(id, []);
+    incoming.set(id, 0);
+  }
+  for (const e of structural) {
+    children.get(e.sourceNodeId)!.push(e.targetNodeId);
+    incoming.set(e.targetNodeId, (incoming.get(e.targetNodeId) ?? 0) + 1);
+  }
+
+  const rootIds = candidates.filter((n) => (incoming.get(n.id) ?? 0) === 0).map((n) => n.id);
+  const expandableIds = candidates.filter((n) => (children.get(n.id)?.length ?? 0) > 0).map((n) => n.id);
+
+  // Disclosure BFS: roots are visible; a node reveals its children only if expanded.
+  const visible = new Set<string>(rootIds);
+  const queue = [...rootIds];
+  while (queue.length) {
+    const id = queue.shift()!;
+    if (!expanded.has(id)) continue;
+    for (const c of children.get(id) ?? []) {
+      if (!visible.has(c)) {
+        visible.add(c);
+        queue.push(c);
+      }
+    }
+  }
+
+  const visNodes = candidates.filter((n) => visible.has(n.id));
+  const visEdges = structural.filter((e) => visible.has(e.sourceNodeId) && visible.has(e.targetNodeId));
+
+  // dagre layered layout: callers above, callees below.
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({ rankdir: "TB", nodesep: 26, ranksep: 64, marginx: 20, marginy: 20 });
+  g.setDefaultEdgeLabel(() => ({}));
+  for (const n of visNodes) g.setNode(n.id, { width: NODE_W, height: NODE_H });
+  for (const e of visEdges) g.setEdge(e.sourceNodeId, e.targetNodeId);
+  dagre.layout(g);
+
+  const flowNodes: FlowNode[] = visNodes.map((n) => {
+    const pos = g.node(n.id);
+    const childIds = children.get(n.id) ?? [];
+    const hiddenCallees = childIds.filter((c) => !visible.has(c)).length;
+    return {
+      id: n.id,
+      type: "trace",
+      position: { x: pos.x - NODE_W / 2, y: pos.y - NODE_H / 2 },
+      data: {
+        label: n.label,
+        file: `${n.file}:${n.startLine}`,
+        reviewStatus: n.reviewStatus,
+        changeStatus: n.changeStatus,
+        isCurrent: n.id === currentNodeId,
+        isTest: n.isTest,
+        testCount: testCount.get(n.id) ?? 0,
+        hiddenCallees,
+        expanded: expanded.has(n.id),
+        expandable: childIds.length > 0,
+        onToggle,
+        nodeId: n.id,
+      } satisfies TraceData,
+    };
+  });
+
+  const flowEdges: FlowEdge[] = visEdges.map((e) => {
+    const live = e.sourceNodeId === currentNodeId || e.targetNodeId === currentNodeId;
+    return {
+      id: `${e.edgeType}-${e.sourceNodeId}-${e.targetNodeId}`,
+      source: e.sourceNodeId,
+      target: e.targetNodeId,
+      className: [e.edgeType === "test" ? "is-test" : "", live ? "is-live" : ""].filter(Boolean).join(" ") || undefined,
+      animated: live && e.edgeType === "call",
+    };
+  });
+
+  let testTotal = 0;
+  for (const v of testCount.values()) testTotal += v;
+
+  return {
+    flowNodes,
+    flowEdges,
+    rootIds,
+    expandableIds,
+    testTotal: nodes.filter((n) => n.isTest).length,
+    candidateTotal: candidates.length,
+  };
+}
+
+function ControlPanel({
+  showTests,
+  onToggleTests,
+  testTotal,
+  onExpandAll,
+  onCollapse,
+  shown,
+  total,
+}: {
+  showTests: boolean;
+  onToggleTests: () => void;
+  testTotal: number;
+  onExpandAll: () => void;
+  onCollapse: () => void;
+  shown: number;
+  total: number;
+}) {
+  return (
+    <div className="graph-controls">
+      <div className="graph-controls__row">
+        <span className="graph-controls__count">
+          {shown}
+          <span style={{ color: "var(--faint)" }}>/{total}</span> shown
+        </span>
+      </div>
+      <div className="graph-controls__row">
+        <button className="chip" onClick={onExpandAll}>Expand all</button>
+        <button className="chip" onClick={onCollapse}>Collapse</button>
+      </div>
+      <label className="graph-controls__toggle">
+        <input type="checkbox" checked={showTests} onChange={onToggleTests} />
+        <span>Show tests{testTotal > 0 ? ` (${testTotal})` : ""}</span>
+      </label>
+    </div>
+  );
+}
+
 function Legend() {
   const items: [string, string][] = [
     ["unreviewed", "var(--led-unreviewed)"],
@@ -233,39 +353,25 @@ function Legend() {
     ["elsewhere", "var(--led-elsewhere)"],
   ];
   return (
-    <div
-      style={{
-        position: "absolute",
-        top: 12,
-        right: 12,
-        display: "flex",
-        flexDirection: "column",
-        gap: 7,
-        padding: "11px 13px",
-        background: "rgba(15, 20, 30, 0.82)",
-        backdropFilter: "blur(6px)",
-        border: "1px solid var(--line)",
-        borderRadius: "var(--radius-sm)",
-        boxShadow: "var(--shadow-card)",
-      }}
-    >
-      <span style={{ color: "var(--dim)", fontSize: 13, letterSpacing: "0.1em" }}>
-        STATUS
-      </span>
+    <div className="graph-legend">
+      <span style={{ color: "var(--dim)", fontSize: 13, letterSpacing: "0.1em" }}>STATUS</span>
       {items.map(([label, color]) => (
         <div key={label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: "50%",
-              background: color,
-              boxShadow: `0 0 5px ${color}`,
-            }}
+            style={{ width: 8, height: 8, borderRadius: "50%", background: color, boxShadow: `0 0 5px ${color}` }}
           />
-          <span style={{ fontSize: 15, color: "var(--dim)" }}>{label}</span>
+          <span style={{ fontSize: 13, color: "var(--dim)" }}>{label}</span>
         </div>
       ))}
     </div>
   );
 }
+
+const emptyStyle: React.CSSProperties = {
+  flex: 1,
+  height: "100%",
+  display: "grid",
+  placeItems: "center",
+  color: "var(--faint)",
+  background: "var(--panel)",
+};

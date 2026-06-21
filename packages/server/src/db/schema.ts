@@ -27,7 +27,8 @@ CREATE TABLE IF NOT EXISTS nodes (
   end_line INTEGER NOT NULL,
   change_status TEXT NOT NULL,
   review_status TEXT NOT NULL DEFAULT 'unreviewed',
-  reviewed_in_unit INTEGER
+  reviewed_in_unit INTEGER,
+  is_test INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS edges (
