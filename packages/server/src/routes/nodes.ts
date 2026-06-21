@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import type { AppContext } from "../app.js";
 import type { ReviewStatus } from "../types.js";
 import { getNodesBySession, getNodesByUnit, getNode, getNodeNeighbors, updateNodeReviewStatus } from "../repo/nodes.js";
+import { getSession } from "../repo/sessions.js";
+import { getNodeDiff } from "../diff.js";
 
 export function createNodesRoute(ctx: AppContext) {
   const router = new Hono();
@@ -20,10 +22,15 @@ export function createNodesRoute(ctx: AppContext) {
   });
 
   router.get("/:id/nodes/:nodeId", (c) => {
+    const sessionId = c.req.param("id");
     const node = getNode(ctx.db, c.req.param("nodeId"));
-    if (!node || node.sessionId !== c.req.param("id")) return c.json({ error: "not found" }, 404);
+    if (!node || node.sessionId !== sessionId) return c.json({ error: "not found" }, 404);
     const { callers, callees } = getNodeNeighbors(ctx.db, node.id);
-    return c.json({ node, callers, callees });
+    const session = getSession(ctx.db, sessionId);
+    const diff = session
+      ? getNodeDiff(session.baseRef, node.file, node.startLine, node.endLine, node.changeStatus)
+      : { oldText: "", newText: "" };
+    return c.json({ node, callers, callees, diff });
   });
 
   router.patch("/:id/nodes/:nodeId", async (c) => {
