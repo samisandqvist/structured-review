@@ -30,6 +30,13 @@ const UNIT_KINDS = new Set(["Function", "Method", "Test"]);
 // review graph. Real functions are ~never that short.
 const isNoiseName = (name: string) => name.trim().length <= 2;
 
+// CRG only flags actual test cases (it/describe) as tests, so helpers defined in
+// a test file leak into the non-test view. Treat anything in a test file as test.
+const isTestFile = (filePath: string) =>
+  /\.(test|spec)\.[cm]?[jt]sx?$/.test(filePath) || /(^|\/)(test|tests|__tests__)\//.test(filePath);
+
+const isTestNode = (n: CrgNode) => n.kind === "Test" || n.is_test === true || isTestFile(n.file_path);
+
 interface CrgNode {
   id: number;
   kind: string;
@@ -136,7 +143,7 @@ export class CrgGraphProvider implements GraphProvider {
         endLine: n.line_end,
         isEntryPoint: false,
         changeStatus: (changed ? "changed" : "unchanged") as ChangeStatus,
-        isTest: n.kind === "Test" || n.is_test === true,
+        isTest: isTestNode(n),
       });
     };
     for (const n of impact.changed_nodes ?? []) add(n, true);
@@ -198,7 +205,7 @@ export class CrgGraphProvider implements GraphProvider {
         endLine: n.line_end,
         isEntryPoint: false,
         changeStatus: "unchanged" as ChangeStatus,
-        isTest: n.kind === "Test" || n.is_test === true,
+        isTest: isTestNode(n),
       }));
   }
 
