@@ -1,5 +1,5 @@
 import ReactDiffViewer from "react-diff-viewer-continued";
-import type { Node } from "../api/client.js";
+import type { Node, NodeDiff } from "../api/client.js";
 import { NodeBadge } from "./NodeBadge.js";
 
 /** Dark, instrument-matched theme for the side-by-side diff. */
@@ -42,12 +42,10 @@ const diffStyles = {
   },
 };
 
-export function DiffView({ node }: { node: Node }) {
-  const oldCode = `// ${node.label} — before (line ${node.startLine})\n// ... original code ...`;
-  const newCode =
-    node.changeStatus === "changed"
-      ? `// ${node.label} — after (line ${node.startLine})\n// ... new code ...`
-      : oldCode;
+export function DiffView({ node, diff }: { node: Node; diff?: NodeDiff }) {
+  const oldCode = diff?.oldText ?? "";
+  const newCode = diff?.newText ?? "";
+  const hasContent = oldCode.length > 0 || newCode.length > 0;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -83,15 +81,21 @@ export function DiffView({ node }: { node: Node }) {
         </span>
       </div>
       <div style={{ flex: 1, overflow: "auto" }}>
-        <ReactDiffViewer
-          oldValue={oldCode}
-          newValue={newCode}
-          splitView
-          useDarkTheme
-          showDiffOnly={false}
-          hideLineNumbers={false}
-          styles={diffStyles}
-        />
+        {hasContent ? (
+          <ReactDiffViewer
+            oldValue={oldCode}
+            newValue={newCode}
+            splitView
+            useDarkTheme
+            showDiffOnly={false}
+            hideLineNumbers={false}
+            styles={diffStyles}
+          />
+        ) : (
+          <div style={{ padding: 16, color: "var(--faint)", fontSize: 13 }}>
+            No source available for this node.
+          </div>
+        )}
       </div>
     </div>
   );

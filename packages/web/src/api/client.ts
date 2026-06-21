@@ -17,6 +17,7 @@ export interface Comment {
   id: string; sessionId: string; nodeId: string; hunkSnippet: string;
   text: string; structuralContext: string; createdAt: number;
 }
+export interface NodeDiff { oldText: string; newText: string; }
 export interface GraphNode {
   stableId: string; label: string; file: string; startLine: number; endLine: number;
   isEntryPoint: boolean; changeStatus: "changed" | "unchanged";
@@ -50,7 +51,9 @@ export const api = {
       `/sessions/${id}/nodes${unitId ? `?unitId=${unitId}` : ""}`
     ),
   getNode: (sessionId: string, nodeId: string) =>
-    fetchJson<{ node: Node; callers: Node[]; callees: Node[] }>(`/sessions/${sessionId}/nodes/${nodeId}`),
+    fetchJson<{ node: Node; callers: Node[]; callees: Node[]; diff: NodeDiff }>(
+      `/sessions/${sessionId}/nodes/${nodeId}`
+    ),
   updateNodeStatus: (sessionId: string, nodeId: string, reviewStatus: Node["reviewStatus"], reviewedInUnit?: number) =>
     fetchJson<{ node: Node }>(`/sessions/${sessionId}/nodes/${nodeId}`, {
       method: "PATCH", body: JSON.stringify({ reviewStatus, reviewedInUnit }),

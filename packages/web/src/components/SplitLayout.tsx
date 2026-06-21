@@ -67,7 +67,7 @@ export function SplitLayout({
           {currentNode ? (
             <>
               <div style={{ flex: 1, overflow: "auto", padding: "12px 14px" }}>
-                <DiffView node={currentNode} />
+                <DiffView node={currentNode} diff={nodeData?.diff} />
               </div>
               <div
                 style={{
