@@ -34,6 +34,30 @@ pnpm typecheck        # typecheck all packages
 pnpm lint             # lint all packages
 ```
 
+## Graph provider (CRG)
+
+Without `CRG_COMMAND` set, the server uses `StubGraphProvider` (3 fixed fake
+nodes). For a real call graph, use [code-review-graph](https://github.com/tirth8205/code-review-graph),
+a Python MCP server. One-time setup:
+
+```bash
+uv venv .venv-crg
+uv pip install --python .venv-crg code-review-graph
+.venv-crg/bin/code-review-graph build        # build the graph for this repo
+```
+
+Then run the hub with CRG enabled:
+
+```bash
+CRG_COMMAND="$PWD/.venv-crg/bin/code-review-graph serve" pnpm --filter @crw/server dev
+```
+
+`CrgGraphProvider` calls `get_impact_radius_tool` for the change subgraph
+(changed nodes + ±`CRG_IMPACT_DEPTH`-hop context + `CALLS` edges, keyed by
+qualified name) and `query_graph_tool` for callers/callees. Tuning envs:
+`CRG_IMPACT_DEPTH` (default 1), `CRG_REPO_ROOT` (default git root),
+`CRG_SKIP_BUILD` (skip the incremental rebuild on each session).
+
 ## Conventions
 
 - TypeScript strict mode everywhere.
