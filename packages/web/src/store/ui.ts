@@ -19,12 +19,13 @@ interface UIState {
 }
 
 export const useUIStore = create<UIState>((set) => ({
-  splitRatio: 0.5,
+  splitRatio: 1 / 3, // left (flows/graph) : right (diff) ≈ 1:2
+
   currentUnitIndex: 0,
   currentNodeId: null,
   walkPath: [],
   overviewOpen: false,
-  viewMode: "graph",
+  viewMode: "flows",
   setViewMode: (mode) => set({ viewMode: mode }),
   setSplitRatio: (ratio) => set({ splitRatio: Math.max(0.1, Math.min(0.9, ratio)) }),
   setCurrentUnit: (index) => set({ currentUnitIndex: index, currentNodeId: null, walkPath: [] }),

@@ -9,6 +9,7 @@ vi.mock("../src/api/hooks.js", () => ({
   useUpdateNodeStatus: () => ({ mutate: vi.fn() }),
   useComments: () => ({ data: { comments: [] }, isLoading: false }),
   useCreateComment: () => ({ mutate: vi.fn() }),
+  useFlows: () => ({ data: { flows: [] }, isLoading: false }),
 }));
 
 describe("App", () => {
