@@ -3,3 +3,9 @@ node_modules/
 dist/
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
+
+# code-review-graph (CRG) provider — Python venv + its graph store
+.venv-crg/
+.code-review-graph/

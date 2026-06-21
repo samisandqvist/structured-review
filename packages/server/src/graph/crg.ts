@@ -1,23 +1,88 @@
+import { execSync } from "node:child_process";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { GraphProvider, GraphNode, GraphEdge, ChangeSubgraph } from "./provider.js";
 import type { ChangeStatus, EdgeType } from "../types.js";
 
+/**
+ * Graph provider backed by code-review-graph (CRG), an MCP server that builds a
+ * tree-sitter call/dependency graph and maps git diffs onto it.
+ *
+ * CRG is a Python tool (`pip/uv install code-review-graph`) exposing MCP tools
+ * over stdio. Point `CRG_COMMAND` at it, e.g.
+ *   CRG_COMMAND=".venv-crg/bin/code-review-graph serve"
+ *
+ * We use three of its tools:
+ *  - build_or_update_graph_tool — (re)build the graph for the current checkout
+ *  - get_impact_radius_tool      — the change subgraph: changed nodes, ±N-hop
+ *                                  context, and the edges among them, all keyed
+ *                                  by stable qualified names
+ *  - query_graph_tool            — callers_of / callees_of for local moves
+ */
+
+// CRG node kinds that are reviewable units of code. "File" nodes are too coarse
+// for a call-graph view; everything else (CSS/HTML files, etc.) isn't in it.
+const UNIT_KINDS = new Set(["Function", "Method", "Class", "Test"]);
+
 interface CrgNode {
-  id: string; name: string; filePath: string; startLine: number; endLine: number;
-  isEntryPoint: boolean; isChanged: boolean;
+  id: number;
+  kind: string;
+  name: string;
+  qualified_name: string;
+  file_path: string;
+  line_start: number;
+  line_end: number;
+  language?: string;
+  parent_name?: string | null;
+  is_test?: boolean;
 }
-interface CrgEdge { sourceId: string; targetId: string; type: string; }
+interface CrgEdge {
+  kind: string; // CALLS | CONTAINS | IMPORTS_FROM | TESTED_BY | REFERENCES
+  source: string; // qualified_name
+  target: string; // qualified_name
+}
+interface ImpactResult {
+  status: string;
+  changed_nodes: CrgNode[];
+  impacted_nodes: CrgNode[];
+  edges: CrgEdge[];
+}
+interface QueryResult {
+  status: string;
+  results?: CrgNode[];
+}
+
+export interface CrgOptions {
+  /** Repo root for relativizing paths and scoping CRG. Defaults to git root. */
+  repoRoot?: string;
+  /** Hops of unchanged context to pull around the change. Default 1. */
+  impactDepth?: number;
+  /** Incrementally rebuild the graph before querying. Default true. */
+  build?: boolean;
+}
 
 export class CrgGraphProvider implements GraphProvider {
   private client: Client | null = null;
   private transport: StdioClientTransport | null = null;
+  private repoRoot: string;
+  private impactDepth: number;
+  private build: boolean;
 
-  constructor(private command: string[] = ["npx", "code-review-graph"]) {}
+  constructor(
+    private command: string[] = ["code-review-graph", "serve"],
+    opts: CrgOptions = {}
+  ) {
+    this.repoRoot = opts.repoRoot ?? process.env.CRG_REPO_ROOT ?? detectRepoRoot();
+    this.impactDepth = opts.impactDepth ?? Number(process.env.CRG_IMPACT_DEPTH ?? 1);
+    this.build = opts.build ?? process.env.CRG_SKIP_BUILD === undefined;
+  }
 
   private async getClient(): Promise<Client> {
     if (this.client) return this.client;
-    this.transport = new StdioClientTransport({ command: this.command[0], args: this.command.slice(1) });
+    this.transport = new StdioClientTransport({
+      command: this.command[0],
+      args: this.command.slice(1),
+    });
     this.client = new Client({ name: "crw-server", version: "1.0.0" }, { capabilities: {} });
     try {
       await this.client.connect(this.transport);
@@ -29,43 +94,136 @@ export class CrgGraphProvider implements GraphProvider {
     }
   }
 
-  async getChangeSubgraph(branch: string, baseRef: string): Promise<ChangeSubgraph> {
-    const client = await this.getClient();
-    const nodesResult = await client.callTool({ name: "get_changed_nodes", arguments: { branch, baseRef } });
-    const edgesResult = await client.callTool({ name: "get_changed_edges", arguments: { branch, baseRef } });
-    const crgNodes = this.parseContent<CrgNode[]>(nodesResult);
-    const crgEdges = this.parseContent<CrgEdge[]>(edgesResult);
-    const nodes: GraphNode[] = this.mapNodes(crgNodes);
-    const edges: GraphEdge[] = crgEdges.map(e => ({
-      sourceStableId: e.sourceId, targetStableId: e.targetId, edgeType: "call" as EdgeType,
-    }));
-    return { nodes, edges };
+  /**
+   * `branch` is informational: CRG diffs the current checkout against `baseRef`,
+   * so the working tree must already be on the branch under review.
+   */
+  async getChangeSubgraph(_branch: string, baseRef: string): Promise<ChangeSubgraph> {
+    if (this.build) {
+      await this.callTool("build_or_update_graph_tool", {
+        full_rebuild: false,
+        base: baseRef,
+        repo_root: this.repoRoot,
+      });
+    }
+    const impact = await this.callTool<ImpactResult>("get_impact_radius_tool", {
+      base: baseRef,
+      max_depth: this.impactDepth,
+      repo_root: this.repoRoot,
+      detail_level: "standard",
+    });
+
+    // qualified_name -> node. Changed wins over context if a node appears twice.
+    const byId = new Map<string, GraphNode>();
+    const add = (n: CrgNode, changed: boolean) => {
+      if (!UNIT_KINDS.has(n.kind)) return;
+      const existing = byId.get(n.qualified_name);
+      if (existing) {
+        if (changed) existing.changeStatus = "changed";
+        return;
+      }
+      byId.set(n.qualified_name, {
+        stableId: n.qualified_name,
+        label: n.name,
+        file: this.rel(n.file_path),
+        startLine: n.line_start,
+        endLine: n.line_end,
+        isEntryPoint: false,
+        changeStatus: (changed ? "changed" : "unchanged") as ChangeStatus,
+      });
+    };
+    for (const n of impact.changed_nodes ?? []) add(n, true);
+    for (const n of impact.impacted_nodes ?? []) add(n, false);
+
+    // Keep only CALLS edges between nodes we kept; dedupe.
+    const seen = new Set<string>();
+    const edges: GraphEdge[] = [];
+    for (const e of impact.edges ?? []) {
+      if (e.kind !== "CALLS") continue;
+      if (e.source === e.target) continue; // CRG name-resolution can emit self-loops
+      if (!byId.has(e.source) || !byId.has(e.target)) continue;
+      const key = `${e.source}\t${e.target}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      edges.push({ sourceStableId: e.source, targetStableId: e.target, edgeType: "call" as EdgeType });
+    }
+
+    // Entry point = a changed node nothing in the subgraph calls (top of a chain).
+    const called = new Set(edges.map((e) => e.targetStableId));
+    for (const node of byId.values()) {
+      if (node.changeStatus === "changed" && !called.has(node.stableId)) node.isEntryPoint = true;
+    }
+
+    return { nodes: [...byId.values()], edges };
   }
 
   async getNeighbors(stableId: string): Promise<{ callers: GraphNode[]; callees: GraphNode[] }> {
+    const [callers, callees] = await Promise.all([
+      this.callTool<QueryResult>("query_graph_tool", {
+        pattern: "callers_of",
+        target: stableId,
+        repo_root: this.repoRoot,
+      }),
+      this.callTool<QueryResult>("query_graph_tool", {
+        pattern: "callees_of",
+        target: stableId,
+        repo_root: this.repoRoot,
+      }),
+    ]);
+    return { callers: this.mapQueryNodes(callers), callees: this.mapQueryNodes(callees) };
+  }
+
+  /** Map query_graph results to context nodes, skipping unresolved built-ins. */
+  private mapQueryNodes(res: QueryResult): GraphNode[] {
+    return (res.results ?? [])
+      .filter((n) => UNIT_KINDS.has(n.kind) && n.qualified_name && n.file_path)
+      .map((n) => ({
+        stableId: n.qualified_name,
+        label: n.name,
+        file: this.rel(n.file_path),
+        startLine: n.line_start,
+        endLine: n.line_end,
+        isEntryPoint: false,
+        changeStatus: "unchanged" as ChangeStatus,
+      }));
+  }
+
+  private rel(filePath: string): string {
+    const root = this.repoRoot.endsWith("/") ? this.repoRoot : `${this.repoRoot}/`;
+    return filePath.startsWith(root) ? filePath.slice(root.length) : filePath;
+  }
+
+  private async callTool<T = unknown>(name: string, args: Record<string, unknown>): Promise<T> {
     const client = await this.getClient();
-    const callersResult = await client.callTool({ name: "get_callers", arguments: { nodeId: stableId } });
-    const calleesResult = await client.callTool({ name: "get_callees", arguments: { nodeId: stableId } });
-    return {
-      callers: this.mapNodes(this.parseContent<CrgNode[]>(callersResult)),
-      callees: this.mapNodes(this.parseContent<CrgNode[]>(calleesResult)),
+    const res = (await client.callTool({ name, arguments: args })) as {
+      isError?: boolean;
+      structuredContent?: unknown;
+      content?: { type?: string; text?: string }[];
     };
-  }
-
-  private mapNodes(crgNodes: CrgNode[]): GraphNode[] {
-    return crgNodes.map(n => ({
-      stableId: n.id, label: n.name, file: n.filePath, startLine: n.startLine, endLine: n.endLine,
-      isEntryPoint: n.isEntryPoint, changeStatus: (n.isChanged ? "changed" : "unchanged") as ChangeStatus,
-    }));
-  }
-
-  private parseContent<T>(result: unknown): T {
-    const content = (result as { content: { text: string }[] }).content;
-    const text = content?.[0]?.text;
-    return text ? JSON.parse(text) as T : [] as unknown as T;
+    if (res.isError) {
+      throw new Error(`CRG tool ${name} failed: ${JSON.stringify(res.content)}`);
+    }
+    if (res.structuredContent && typeof res.structuredContent === "object") {
+      return res.structuredContent as T;
+    }
+    const text = res.content?.find((c) => typeof c.text === "string")?.text;
+    if (text) return JSON.parse(text) as T;
+    throw new Error(`CRG tool ${name} returned no parseable content`);
   }
 
   async close(): Promise<void> {
-    if (this.transport) { await this.transport.close(); this.transport = null; this.client = null; }
+    if (this.transport) {
+      await this.transport.close();
+      this.transport = null;
+      this.client = null;
+    }
+  }
+}
+
+function detectRepoRoot(): string {
+  try {
+    return execSync("git rev-parse --show-toplevel", { encoding: "utf8" }).trim();
+  } catch {
+    return process.cwd();
   }
 }
