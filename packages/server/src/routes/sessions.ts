@@ -32,12 +32,18 @@ function reconcileSubgraph(
     status.set(n.stableId, cs);
   }
 
-  const changed = new Set([...status].filter(([, s]) => s === "changed").map(([id]) => id));
+  // Anchor context on changed *production* nodes only: a changed test shouldn't
+  // drag unchanged production code it happens to exercise into the graph (that
+  // would also orphan such a node whenever tests are hidden).
+  const isTest = new Map(subgraph.nodes.map((n) => [n.stableId, n.isTest]));
+  const anchors = new Set(
+    [...status].filter(([id, s]) => s === "changed" && !isTest.get(id)).map(([id]) => id)
+  );
   const adj = new Set<string>();
   for (const e of subgraph.edges) {
     if (e.edgeType !== "call") continue;
-    if (changed.has(e.sourceStableId)) adj.add(e.targetStableId);
-    if (changed.has(e.targetStableId)) adj.add(e.sourceStableId);
+    if (anchors.has(e.sourceStableId)) adj.add(e.targetStableId);
+    if (anchors.has(e.targetStableId)) adj.add(e.sourceStableId);
   }
   const nodes = subgraph.nodes.filter(
     (n) => status.get(n.stableId) === "changed" || n.isTest || adj.has(n.stableId)
