@@ -22,6 +22,39 @@ interface Hunk {
   lines: string[]; // raw diff lines incl. leading ' ', '+', '-'
 }
 
+export interface LineRange {
+  start: number;
+  end: number;
+}
+
+/**
+ * The new-file line ranges actually touched by `git diff` for a file, or null
+ * if there is no diff (or git errored) — meaning "unknown, don't reclassify".
+ * Uses --unified=0 so ranges are the changed lines themselves, no context.
+ */
+export function fileChangedRanges(baseRef: string, file: string, root: string = repoRoot()): LineRange[] | null {
+  let raw: string;
+  try {
+    raw = execFileSync("git", ["diff", "--text", "--unified=0", baseRef, "--", file], {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+    });
+  } catch {
+    return null;
+  }
+  if (!raw.trim()) return null;
+  return parseHunks(raw).map((h) => ({
+    start: h.newStart,
+    // A pure deletion has newCount 0; treat it as touching the line it sits at.
+    end: h.newStart + Math.max(h.newCount, 1) - 1,
+  }));
+}
+
+export function rangesOverlap(ranges: LineRange[], startLine: number, endLine: number): boolean {
+  return ranges.some((r) => overlaps(r.start, r.end, startLine, endLine));
+}
+
 let cachedRoot: string | undefined;
 export function repoRoot(): string {
   if (cachedRoot) return cachedRoot;
