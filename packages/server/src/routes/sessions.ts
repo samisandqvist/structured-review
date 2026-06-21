@@ -3,6 +3,7 @@ import type { AppContext } from "../app.js";
 import { createSession, getSession, updateSessionStatus } from "../repo/sessions.js";
 import { createUnit, getUnitsBySession, deleteUnit } from "../repo/units.js";
 import { createNode, getNodesBySession } from "../repo/nodes.js";
+import { fileChangedRanges, rangesOverlap, type LineRange } from "../diff.js";
 import { randomId } from "../util.js";
 
 export function createSessionsRoute(ctx: AppContext) {
@@ -12,11 +13,26 @@ export function createSessionsRoute(ctx: AppContext) {
     const body = await c.req.json<{ branch: string; baseRef: string }>();
     const session = createSession(ctx.db, body.branch, body.baseRef);
     const subgraph = await ctx.graphProvider.getChangeSubgraph(body.branch, body.baseRef);
+
+    // CRG flags nodes changed at file granularity. Reclassify a "changed" node
+    // as context when no actual diff hunk overlaps its line span, so only nodes
+    // with real line-level changes stay changed. Cache git diffs per file.
+    const rangesByFile = new Map<string, LineRange[] | null>();
     for (const gnode of subgraph.nodes) {
+      let changeStatus = gnode.changeStatus;
+      if (changeStatus === "changed") {
+        if (!rangesByFile.has(gnode.file)) {
+          rangesByFile.set(gnode.file, fileChangedRanges(body.baseRef, gnode.file));
+        }
+        const ranges = rangesByFile.get(gnode.file);
+        if (ranges && ranges.length > 0 && !rangesOverlap(ranges, gnode.startLine, gnode.endLine)) {
+          changeStatus = "unchanged";
+        }
+      }
       createNode(ctx.db, {
         sessionId: session.id, stableId: gnode.stableId, unitId: null,
         label: gnode.label, file: gnode.file, startLine: gnode.startLine, endLine: gnode.endLine,
-        changeStatus: gnode.changeStatus, reviewStatus: "unreviewed", reviewedInUnit: null,
+        changeStatus, reviewStatus: "unreviewed", reviewedInUnit: null,
         isTest: gnode.isTest,
       });
     }
