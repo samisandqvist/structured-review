@@ -166,7 +166,9 @@ export class CrgGraphProvider implements GraphProvider {
     }
 
     // Entry point = a changed, non-test node that nothing in the subgraph calls
-    // (top of a chain). Tests are never entry points.
+    // (top of a chain). Tests are never entry points. (Final change-status
+    // refinement and context pruning happen in the sessions route, which has
+    // the git diff — see reconcileSubgraph there.)
     const called = new Set(edges.filter((e) => e.edgeType === "call").map((e) => e.targetStableId));
     for (const node of byId.values()) {
       if (node.changeStatus === "changed" && !node.isTest && !called.has(node.stableId)) {

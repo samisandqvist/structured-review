@@ -4,7 +4,46 @@ import { createSession, getSession, updateSessionStatus } from "../repo/sessions
 import { createUnit, getUnitsBySession, deleteUnit } from "../repo/units.js";
 import { createNode, getNodesBySession } from "../repo/nodes.js";
 import { fileChangedRanges, rangesOverlap, type LineRange } from "../diff.js";
+import type { ChangeSubgraph, GraphNode } from "../graph/provider.js";
+import type { ChangeStatus } from "../types.js";
 import { randomId } from "../util.js";
+
+/**
+ * Turn a provider subgraph into the nodes we actually store:
+ *  1. Refine change status — CRG flags nodes changed at file granularity, so a
+ *     node stays "changed" only if a real diff hunk overlaps its line span.
+ *  2. Prune context — keep changed nodes, tests, and unchanged nodes that are a
+ *     direct call caller/callee of a changed node; drop the rest (impact radius
+ *     pulls in disconnected siblings — other interface impls, test-only code).
+ */
+function reconcileSubgraph(
+  subgraph: ChangeSubgraph,
+  baseRef: string
+): { nodes: GraphNode[]; status: Map<string, ChangeStatus> } {
+  const rangesByFile = new Map<string, LineRange[] | null>();
+  const status = new Map<string, ChangeStatus>();
+  for (const n of subgraph.nodes) {
+    let cs = n.changeStatus;
+    if (cs === "changed") {
+      if (!rangesByFile.has(n.file)) rangesByFile.set(n.file, fileChangedRanges(baseRef, n.file));
+      const ranges = rangesByFile.get(n.file);
+      if (ranges && ranges.length > 0 && !rangesOverlap(ranges, n.startLine, n.endLine)) cs = "unchanged";
+    }
+    status.set(n.stableId, cs);
+  }
+
+  const changed = new Set([...status].filter(([, s]) => s === "changed").map(([id]) => id));
+  const adj = new Set<string>();
+  for (const e of subgraph.edges) {
+    if (e.edgeType !== "call") continue;
+    if (changed.has(e.sourceStableId)) adj.add(e.targetStableId);
+    if (changed.has(e.targetStableId)) adj.add(e.sourceStableId);
+  }
+  const nodes = subgraph.nodes.filter(
+    (n) => status.get(n.stableId) === "changed" || n.isTest || adj.has(n.stableId)
+  );
+  return { nodes, status };
+}
 
 export function createSessionsRoute(ctx: AppContext) {
   const router = new Hono();
@@ -13,33 +52,20 @@ export function createSessionsRoute(ctx: AppContext) {
     const body = await c.req.json<{ branch: string; baseRef: string }>();
     const session = createSession(ctx.db, body.branch, body.baseRef);
     const subgraph = await ctx.graphProvider.getChangeSubgraph(body.branch, body.baseRef);
+    const { nodes: keptNodes, status } = reconcileSubgraph(subgraph, body.baseRef);
 
-    // CRG flags nodes changed at file granularity. Reclassify a "changed" node
-    // as context when no actual diff hunk overlaps its line span, so only nodes
-    // with real line-level changes stay changed. Cache git diffs per file.
-    const rangesByFile = new Map<string, LineRange[] | null>();
-    for (const gnode of subgraph.nodes) {
-      let changeStatus = gnode.changeStatus;
-      if (changeStatus === "changed") {
-        if (!rangesByFile.has(gnode.file)) {
-          rangesByFile.set(gnode.file, fileChangedRanges(body.baseRef, gnode.file));
-        }
-        const ranges = rangesByFile.get(gnode.file);
-        if (ranges && ranges.length > 0 && !rangesOverlap(ranges, gnode.startLine, gnode.endLine)) {
-          changeStatus = "unchanged";
-        }
-      }
+    for (const gnode of keptNodes) {
       createNode(ctx.db, {
         sessionId: session.id, stableId: gnode.stableId, unitId: null,
         label: gnode.label, file: gnode.file, startLine: gnode.startLine, endLine: gnode.endLine,
-        changeStatus, reviewStatus: "unreviewed", reviewedInUnit: null,
+        changeStatus: status.get(gnode.stableId)!, reviewStatus: "unreviewed", reviewedInUnit: null,
         isTest: gnode.isTest,
       });
     }
-    const nodes = getNodesBySession(ctx.db, session.id);
+    const dbNodes = getNodesBySession(ctx.db, session.id);
     for (const gedge of subgraph.edges) {
-      const source = nodes.find(n => n.stableId === gedge.sourceStableId);
-      const target = nodes.find(n => n.stableId === gedge.targetStableId);
+      const source = dbNodes.find(n => n.stableId === gedge.sourceStableId);
+      const target = dbNodes.find(n => n.stableId === gedge.targetStableId);
       if (source && target) {
         ctx.db.prepare(
           "INSERT INTO edges (id, session_id, source_node_id, target_node_id, edge_type) VALUES (?, ?, ?, ?, ?)"
