@@ -65,6 +65,8 @@ function StatusBar({ sessionId }: { sessionId: string }) {
         style={{ width: 1, height: 22, background: "var(--line)" }}
       />
 
+      <ViewToggle />
+
       <Field label="branch">{session?.branch ?? "—"}</Field>
       {unit && (
         <Field label="unit" className="statusbar__field--unit">
@@ -109,6 +111,24 @@ function StatusBar({ sessionId }: { sessionId: string }) {
         </div>
       )}
     </header>
+  );
+}
+
+function ViewToggle() {
+  const viewMode = useUIStore((s) => s.viewMode);
+  const setViewMode = useUIStore((s) => s.setViewMode);
+  return (
+    <div className="viewtoggle statusbar__rule">
+      {(["graph", "flows"] as const).map((mode) => (
+        <button
+          key={mode}
+          className={`viewtoggle__opt${viewMode === mode ? " is-active" : ""}`}
+          onClick={() => setViewMode(mode)}
+        >
+          {mode === "graph" ? "Graph" : "Flows"}
+        </button>
+      ))}
+    </div>
   );
 }
 

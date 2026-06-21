@@ -16,6 +16,9 @@ export function useNode(sessionId: string, nodeId: string | null) {
 export function useComments(sessionId: string) {
   return useQuery({ queryKey: ["comments", sessionId], queryFn: () => api.getComments(sessionId) });
 }
+export function useFlows(sessionId: string) {
+  return useQuery({ queryKey: ["flows", sessionId], queryFn: () => api.getFlows(sessionId) });
+}
 export function useUpdateNodeStatus(sessionId: string) {
   const qc = useQueryClient();
   return useMutation({

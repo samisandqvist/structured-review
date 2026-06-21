@@ -19,6 +19,24 @@ export interface Comment {
   text: string; structuralContext: string; createdAt: number;
 }
 export interface NodeDiff { oldText: string; newText: string; }
+export interface FlowStep {
+  label: string;
+  file: string;
+  startLine: number;
+  endLine: number;
+  isTest: boolean;
+  nodeId: string | null;
+  changeStatus: "changed" | "unchanged" | null;
+  reviewStatus: Node["reviewStatus"] | null;
+}
+export interface Flow {
+  id: number;
+  name: string;
+  criticality: number;
+  depth: number;
+  affected: boolean;
+  steps: FlowStep[];
+}
 export interface GraphEdgeDTO {
   sourceNodeId: string;
   targetNodeId: string;
@@ -70,6 +88,7 @@ export const api = {
     fetchJson<{ comment: Comment }>(`/sessions/${id}/comments`, {
       method: "POST", body: JSON.stringify({ nodeId, hunkSnippet, text, structuralContext }),
     }),
+  getFlows: (id: string) => fetchJson<{ flows: Flow[] }>(`/sessions/${id}/flows`),
   exportComments: (id: string) =>
     fetchJson<Record<string, unknown>>(`/sessions/${id}/export`),
 };
