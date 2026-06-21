@@ -2,6 +2,7 @@ import { useRef, useCallback } from "react";
 import { useUIStore } from "../store/ui.js";
 import { useNode, useUpdateNodeStatus } from "../api/hooks.js";
 import { GraphView } from "./GraphView.js";
+import { FlowsView } from "./FlowsView.js";
 import { DiffView } from "./DiffView.js";
 import { CommentBox } from "./CommentBox.js";
 
@@ -15,6 +16,7 @@ export function SplitLayout({
   const splitRatio = useUIStore((s) => s.splitRatio);
   const setSplitRatio = useUIStore((s) => s.setSplitRatio);
   const setCurrentNode = useUIStore((s) => s.setCurrentNode);
+  const viewMode = useUIStore((s) => s.viewMode);
   const containerRef = useRef<HTMLDivElement>(null);
   const { data: nodeData } = useNode(sessionId, currentNodeId);
   const updateStatus = useUpdateNodeStatus(sessionId);
@@ -45,11 +47,19 @@ export function SplitLayout({
     >
       <div ref={containerRef} style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         <div style={{ flex: splitRatio, overflow: "hidden", height: "100%" }}>
-          <GraphView
-            sessionId={sessionId}
-            currentNodeId={currentNodeId}
-            onSelectNode={setCurrentNode}
-          />
+          {viewMode === "flows" ? (
+            <FlowsView
+              sessionId={sessionId}
+              currentNodeId={currentNodeId}
+              onSelectNode={setCurrentNode}
+            />
+          ) : (
+            <GraphView
+              sessionId={sessionId}
+              currentNodeId={currentNodeId}
+              onSelectNode={setCurrentNode}
+            />
+          )}
         </div>
 
         <Divider onMouseDown={handleMouseDown} />
