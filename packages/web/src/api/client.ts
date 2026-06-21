@@ -12,12 +12,18 @@ export interface Node {
   changeStatus: "changed" | "unchanged";
   reviewStatus: "unreviewed" | "reviewed-clean" | "reviewed-commented" | "reviewed-elsewhere";
   reviewedInUnit: number | null;
+  isTest: boolean;
 }
 export interface Comment {
   id: string; sessionId: string; nodeId: string; hunkSnippet: string;
   text: string; structuralContext: string; createdAt: number;
 }
 export interface NodeDiff { oldText: string; newText: string; }
+export interface GraphEdgeDTO {
+  sourceNodeId: string;
+  targetNodeId: string;
+  edgeType: "call" | "test";
+}
 export interface GraphNode {
   stableId: string; label: string; file: string; startLine: number; endLine: number;
   isEntryPoint: boolean; changeStatus: "changed" | "unchanged";
@@ -47,7 +53,7 @@ export const api = {
       method: "PUT", body: JSON.stringify({ units }),
     }),
   getNodes: (id: string, unitId?: string) =>
-    fetchJson<{ nodes: Node[]; edges: { sourceNodeId: string; targetNodeId: string }[] }>(
+    fetchJson<{ nodes: Node[]; edges: GraphEdgeDTO[] }>(
       `/sessions/${id}/nodes${unitId ? `?unitId=${unitId}` : ""}`
     ),
   getNode: (sessionId: string, nodeId: string) =>

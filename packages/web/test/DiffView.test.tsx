@@ -5,7 +5,7 @@ import { DiffView } from "../src/components/DiffView.js";
 const baseNode = {
   id: "n1", sessionId: "s1", stableId: "fn:handleOrder", unitId: "u1",
   label: "handleOrder", file: "src/orders.ts", startLine: 10, endLine: 30,
-  changeStatus: "changed" as const, reviewStatus: "unreviewed" as const, reviewedInUnit: null,
+  changeStatus: "changed" as const, reviewStatus: "unreviewed" as const, reviewedInUnit: null, isTest: false,
 };
 
 describe("DiffView", () => {

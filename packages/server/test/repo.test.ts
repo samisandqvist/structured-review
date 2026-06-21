@@ -51,7 +51,7 @@ describe("nodes repo", () => {
     const node = createNode(db, {
       sessionId: session.id, stableId: "fn:handleOrder", unitId: unit.id,
       label: "handleOrder", file: "src/orders.ts", startLine: 10, endLine: 30,
-      changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null,
+      changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false,
     });
     expect(getNode(db, node.id)).toBeDefined();
     expect(getNodesByUnit(db, unit.id)).toHaveLength(1);
@@ -61,11 +61,11 @@ describe("nodes repo", () => {
     const session = createSession(db, "feat", "main");
     const caller = createNode(db, {
       sessionId: session.id, stableId: "fn:caller", unitId: null, label: "caller",
-      file: "a.ts", startLine: 1, endLine: 5, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null,
+      file: "a.ts", startLine: 1, endLine: 5, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false,
     });
     const callee = createNode(db, {
       sessionId: session.id, stableId: "fn:callee", unitId: null, label: "callee",
-      file: "b.ts", startLine: 1, endLine: 5, changeStatus: "unchanged", reviewStatus: "unreviewed", reviewedInUnit: null,
+      file: "b.ts", startLine: 1, endLine: 5, changeStatus: "unchanged", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false,
     });
     db.prepare(
       "INSERT INTO edges (id, session_id, source_node_id, target_node_id, edge_type) VALUES (?, ?, ?, ?, 'call')"
@@ -77,7 +77,7 @@ describe("nodes repo", () => {
     const session = createSession(db, "feat", "main");
     const node = createNode(db, {
       sessionId: session.id, stableId: "fn:x", unitId: null, label: "x",
-      file: "x.ts", startLine: 1, endLine: 2, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null,
+      file: "x.ts", startLine: 1, endLine: 2, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false,
     });
     updateNodeReviewStatus(db, node.id, "reviewed-clean", 0);
     expect(getNode(db, node.id)!.reviewStatus).toBe("reviewed-clean");
@@ -90,7 +90,7 @@ describe("comments repo", () => {
     const session = createSession(db, "feat", "main");
     const node = createNode(db, {
       sessionId: session.id, stableId: "fn:x", unitId: null, label: "x",
-      file: "x.ts", startLine: 1, endLine: 2, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null,
+      file: "x.ts", startLine: 1, endLine: 2, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false,
     });
     createComment(db, session.id, node.id, "snippet", "needs fix", "callers: A");
     expect(getCommentsBySession(db, session.id)).toHaveLength(1);
@@ -99,7 +99,7 @@ describe("comments repo", () => {
     const session = createSession(db, "feat", "main");
     const node = createNode(db, {
       sessionId: session.id, stableId: "fn:handleOrder", unitId: null, label: "handleOrder",
-      file: "src/orders.ts", startLine: 10, endLine: 30, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null,
+      file: "src/orders.ts", startLine: 10, endLine: 30, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false,
     });
     createComment(db, session.id, node.id, "old", "bug here", "callers: routeHandler");
     const exported = exportComments(db, session.id);

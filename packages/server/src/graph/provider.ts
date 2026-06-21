@@ -8,6 +8,7 @@ export interface GraphNode {
   endLine: number;
   isEntryPoint: boolean;
   changeStatus: ChangeStatus;
+  isTest: boolean;
 }
 
 export interface GraphEdge {

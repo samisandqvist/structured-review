@@ -130,28 +130,35 @@ export class CrgGraphProvider implements GraphProvider {
         endLine: n.line_end,
         isEntryPoint: false,
         changeStatus: (changed ? "changed" : "unchanged") as ChangeStatus,
+        isTest: n.kind === "Test" || n.is_test === true,
       });
     };
     for (const n of impact.changed_nodes ?? []) add(n, true);
     for (const n of impact.impacted_nodes ?? []) add(n, false);
 
-    // Keep only CALLS edges between nodes we kept; dedupe.
+    // Keep CALLS edges (the call graph) and TESTED_BY edges (node -> its tests)
+    // between nodes we kept; drop self-loops and dedupe.
     const seen = new Set<string>();
     const edges: GraphEdge[] = [];
     for (const e of impact.edges ?? []) {
-      if (e.kind !== "CALLS") continue;
+      const edgeType: EdgeType | null =
+        e.kind === "CALLS" ? "call" : e.kind === "TESTED_BY" ? "test" : null;
+      if (!edgeType) continue;
       if (e.source === e.target) continue; // CRG name-resolution can emit self-loops
       if (!byId.has(e.source) || !byId.has(e.target)) continue;
-      const key = `${e.source}\t${e.target}`;
+      const key = `${edgeType}\t${e.source}\t${e.target}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      edges.push({ sourceStableId: e.source, targetStableId: e.target, edgeType: "call" as EdgeType });
+      edges.push({ sourceStableId: e.source, targetStableId: e.target, edgeType });
     }
 
-    // Entry point = a changed node nothing in the subgraph calls (top of a chain).
-    const called = new Set(edges.map((e) => e.targetStableId));
+    // Entry point = a changed, non-test node that nothing in the subgraph calls
+    // (top of a chain). Tests are never entry points.
+    const called = new Set(edges.filter((e) => e.edgeType === "call").map((e) => e.targetStableId));
     for (const node of byId.values()) {
-      if (node.changeStatus === "changed" && !called.has(node.stableId)) node.isEntryPoint = true;
+      if (node.changeStatus === "changed" && !node.isTest && !called.has(node.stableId)) {
+        node.isEntryPoint = true;
+      }
     }
 
     return { nodes: [...byId.values()], edges };
@@ -185,6 +192,7 @@ export class CrgGraphProvider implements GraphProvider {
         endLine: n.line_end,
         isEntryPoint: false,
         changeStatus: "unchanged" as ChangeStatus,
+        isTest: n.kind === "Test" || n.is_test === true,
       }));
   }
 

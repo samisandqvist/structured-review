@@ -1,9 +1,9 @@
 import type { GraphProvider, GraphNode, GraphEdge, ChangeSubgraph } from "./provider.js";
 
 const STUB_NODES: GraphNode[] = [
-  { stableId: "fn:handleOrder", label: "handleOrder", file: "src/orders.ts", startLine: 10, endLine: 30, isEntryPoint: true, changeStatus: "changed" },
-  { stableId: "fn:validateOrder", label: "validateOrder", file: "src/orders.ts", startLine: 35, endLine: 50, isEntryPoint: false, changeStatus: "changed" },
-  { stableId: "fn:saveOrder", label: "saveOrder", file: "src/db.ts", startLine: 100, endLine: 120, isEntryPoint: false, changeStatus: "unchanged" },
+  { stableId: "fn:handleOrder", label: "handleOrder", file: "src/orders.ts", startLine: 10, endLine: 30, isEntryPoint: true, changeStatus: "changed", isTest: false },
+  { stableId: "fn:validateOrder", label: "validateOrder", file: "src/orders.ts", startLine: 35, endLine: 50, isEntryPoint: false, changeStatus: "changed", isTest: false },
+  { stableId: "fn:saveOrder", label: "saveOrder", file: "src/db.ts", startLine: 100, endLine: 120, isEntryPoint: false, changeStatus: "unchanged", isTest: false },
 ];
 
 const STUB_EDGES: GraphEdge[] = [
