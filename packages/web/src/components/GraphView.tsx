@@ -265,39 +265,41 @@ function computeLayout(nodes: Node[], edges: GraphEdgeDTO[], args: LayoutArgs) {
   const rootIds = candidates.filter((n) => (incoming.get(n.id) ?? 0) === 0).map((n) => n.id);
   const expandableIds = candidates.filter((n) => (children.get(n.id)?.length ?? 0) > 0).map((n) => n.id);
 
-  // Entry points = changed, non-test nodes nothing in the call graph calls.
+  // Entry points = changed, non-test roots (nothing calls them) that actually
+  // head a call tree (≥1 callee). Isolated changed leaves aren't useful focus
+  // targets, so they're left out of the picker (still visible in the graph).
   const entryPoints = candidates
-    .filter((n) => !n.isTest && n.changeStatus === "changed" && (callIncoming.get(n.id) ?? 0) === 0)
-    .map((n) => ({ id: n.id, label: n.label, file: n.file }));
+    .filter(
+      (n) =>
+        !n.isTest &&
+        n.changeStatus === "changed" &&
+        (callIncoming.get(n.id) ?? 0) === 0 &&
+        (callees.get(n.id)?.length ?? 0) > 0
+    )
+    .map((n) => ({ id: n.id, label: n.label, file: n.file, callees: callees.get(n.id)?.length ?? 0 }))
+    .sort((a, b) => b.callees - a.callees);
 
-  let visible: Set<string>;
+  // Focus pins the view to one node: it and its direct callers (context) become
+  // the roots, and the focus node starts expanded so its callees show; from
+  // there the normal expand/collapse applies, so you can explore deeper.
+  const focusCallers: string[] = [];
   if (focusId) {
-    // Focus: the node, its transitive callees (its dependencies), its direct
-    // callers (context), and — when tests are shown — the tests of all those.
-    visible = new Set<string>([focusId]);
-    const q = [focusId];
-    while (q.length) {
-      const id = q.shift()!;
-      for (const c of callees.get(id) ?? []) if (!visible.has(c)) (visible.add(c), q.push(c));
+    for (const e of callEdges) {
+      if (e.targetNodeId === focusId && candidateIds.has(e.sourceNodeId)) focusCallers.push(e.sourceNodeId);
     }
-    for (const e of callEdges) if (e.targetNodeId === focusId) visible.add(e.sourceNodeId);
-    if (showTests) {
-      const tested = new Set(visible);
-      for (const e of testEdges) if (tested.has(e.sourceNodeId)) visible.add(e.targetNodeId);
-    }
-    visible = new Set([...visible].filter((id) => candidateIds.has(id)));
-  } else {
-    // Disclosure BFS: roots are visible; a node reveals its children if expanded.
-    visible = new Set<string>(rootIds);
-    const queue = [...rootIds];
-    while (queue.length) {
-      const id = queue.shift()!;
-      if (!expanded.has(id)) continue;
-      for (const c of children.get(id) ?? []) {
-        if (!visible.has(c)) {
-          visible.add(c);
-          queue.push(c);
-        }
+  }
+  const roots = focusId ? [focusId, ...focusCallers] : rootIds;
+  const isExpanded = (id: string) => id === focusId || expanded.has(id);
+
+  const visible = new Set<string>(roots);
+  const queue = [...roots];
+  while (queue.length) {
+    const id = queue.shift()!;
+    if (!isExpanded(id)) continue;
+    for (const c of children.get(id) ?? []) {
+      if (!visible.has(c)) {
+        visible.add(c);
+        queue.push(c);
       }
     }
   }
@@ -330,8 +332,8 @@ function computeLayout(nodes: Node[], edges: GraphEdgeDTO[], args: LayoutArgs) {
         isTest: n.isTest,
         testCount: testCount.get(n.id) ?? 0,
         hiddenCallees,
-        expanded: expanded.has(n.id),
-        expandable: !focusId && childIds.length > 0,
+        expanded: isExpanded(n.id),
+        expandable: childIds.length > 0,
         onToggle,
         nodeId: n.id,
       } satisfies TraceData,
@@ -368,6 +370,7 @@ interface EntryPoint {
   id: string;
   label: string;
   file: string;
+  callees: number;
 }
 
 function ControlPanel({
@@ -431,9 +434,10 @@ function ControlPanel({
                 key={ep.id}
                 className={`graph-entries__item${ep.id === focusId ? " is-active" : ""}`}
                 onClick={() => onFocus(ep.id)}
-                title={ep.file}
+                title={`${ep.label} — ${ep.file}`}
               >
-                {ep.label}
+                <span className="graph-entries__name">{ep.label}</span>
+                <span className="graph-entries__count">{ep.callees}</span>
               </button>
             ))}
           </div>
