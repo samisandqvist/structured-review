@@ -21,8 +21,9 @@ import type { ChangeStatus, EdgeType } from "../types.js";
  */
 
 // CRG node kinds that are reviewable units of code. "File" nodes are too coarse
-// for a call-graph view; everything else (CSS/HTML files, etc.) isn't in it.
-const UNIT_KINDS = new Set(["Function", "Method", "Class", "Test"]);
+// and "Class" nodes float disconnected (their CONTAINS links to methods aren't
+// call edges) — the methods carry the actual calls, so we keep those instead.
+const UNIT_KINDS = new Set(["Function", "Method", "Test"]);
 
 // CRG sometimes extracts a "function" for an inline lambda parameter (`.catch(e
 // => …)`, `(n) => …`). These surface as 1–2 char nodes that are pure noise in a
@@ -60,7 +61,7 @@ interface QueryResult {
 export interface CrgOptions {
   /** Repo root for relativizing paths and scoping CRG. Defaults to git root. */
   repoRoot?: string;
-  /** Hops of unchanged context to pull around the change. Default 1. */
+  /** Hops of unchanged context to pull around the change. Default 2. */
   impactDepth?: number;
   /** Incrementally rebuild the graph before querying. Default true. */
   build?: boolean;
@@ -78,7 +79,7 @@ export class CrgGraphProvider implements GraphProvider {
     opts: CrgOptions = {}
   ) {
     this.repoRoot = opts.repoRoot ?? process.env.CRG_REPO_ROOT ?? detectRepoRoot();
-    this.impactDepth = opts.impactDepth ?? Number(process.env.CRG_IMPACT_DEPTH ?? 1);
+    this.impactDepth = opts.impactDepth ?? Number(process.env.CRG_IMPACT_DEPTH ?? 2);
     this.build = opts.build ?? process.env.CRG_SKIP_BUILD === undefined;
   }
 

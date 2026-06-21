@@ -541,19 +541,34 @@ textarea:focus {
   padding-right: 2px;
 }
 .graph-entries__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   text-align: left;
   font-family: var(--mono);
   font-size: 12.5px;
+  line-height: 1.7;
   color: var(--dim);
   background: transparent;
   border: none;
   border-radius: 5px;
-  padding: 3px 7px;
+  padding: 4px 8px;
   cursor: pointer;
-  white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.graph-entries__name {
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
-  transition: background 0.12s ease, color 0.12s ease;
+  white-space: nowrap;
+}
+.graph-entries__count {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--faint);
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 0 7px;
 }
 .graph-entries__item:hover {
   background: var(--surface-2);
@@ -562,6 +577,10 @@ textarea:focus {
 .graph-entries__item.is-active {
   background: var(--trace-soft);
   color: var(--trace);
+}
+.graph-entries__item.is-active .graph-entries__count {
+  background: var(--trace);
+  color: #03131b;
 }
 
 @media (prefers-reduced-motion: reduce) {

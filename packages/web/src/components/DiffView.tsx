@@ -1,4 +1,4 @@
-import ReactDiffViewer from "react-diff-viewer-continued";
+import ReactDiffViewer, { DiffMethod } from "react-diff-viewer-continued";
 import type { Node, NodeDiff } from "../api/client.js";
 import { NodeBadge } from "./NodeBadge.js";
 
@@ -87,6 +87,7 @@ export function DiffView({ node, diff }: { node: Node; diff?: NodeDiff }) {
             newValue={newCode}
             splitView
             useDarkTheme
+            compareMethod={DiffMethod.WORDS}
             showDiffOnly={false}
             hideLineNumbers={false}
             styles={diffStyles}
