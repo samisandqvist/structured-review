@@ -74,3 +74,53 @@ disambiguation matters. I.e. SCIP+LSP, SCIP-first.
 Next step if approved: implement a `ScipGraphProvider` behind the existing
 `GraphProvider` interface (index on session create, cache per commit), and keep
 CRG as a fallback while we validate other languages.
+
+---
+
+# LSP probe — does call hierarchy beat SCIP's derived edges?
+
+Drove `typescript-language-server` headless (LSP `initialize` →
+`documentSymbol` + `callHierarchy`) over `crg.ts` and compared its calls to the
+SCIP-derived edges for the same functions.
+
+**Setup confirmed:** `callHierarchyProvider: true`, `documentSymbol` returns
+kinds.
+
+**Gap 1 (kind) — only partly fixed.** LSP gives `Method` for methods, but
+arrow-const functions (`const isNoiseName = () => …`) report as **`Constant`**,
+not `Function`. So "is it a function?" still needs the same has-a-body /
+is-callable heuristic — LSP `kind` helps but doesn't cleanly solve it.
+
+**Gap 2 (call edges) — LSP is more complete but noisier, and needs the same
+filtering.** `outgoingCalls` returns *every* call, including built-ins/library:
+
+| function | LSP raw outgoing | LSP first-party (in-repo) | SCIP-derived |
+|---|---|---|---|
+| getNeighbors | all, all, callTool, mapQueryNodes | **callTool, mapQueryNodes** | callTool, mapQueryNodes |
+| callTool | getClient, stringify, find, parse | **getClient** | getClient |
+| isTestNode | isTestFile | **isTestFile** | isTestFile |
+| getChangeSubgraph | callTool, add, has, push, map, filter, values | **callTool, add** | callTool, isNoiseName, rel, isTestNode |
+
+`all` (better-sqlite3), `has/push/map/filter/values` (Map/Array), `stringify/
+parse` (JSON), `trim` (string) are library calls — LSP includes them; you must
+filter to in-repo targets. SCIP gets that filtering for free (it only counts
+references to first-party function *nodes*).
+
+**After first-party filtering, LSP ≈ SCIP.** The only real difference is
+local-helper granularity: LSP shows `getChangeSubgraph → add` (a local arrow),
+while SCIP rolls `add`'s calls up into `getChangeSubgraph`. Both defensible;
+neither is "more correct" for our de-noised altitude.
+
+**Cost:** LSP = multi-second project warm-up + a per-symbol crawl (prepare +
+outgoing per node) + library filtering. SCIP = one index pass for the whole repo.
+
+## Revised recommendation
+The probe undercuts the abstract case for LSP. For **first-party call edges**,
+SCIP-derived edges already match LSP's (after the filtering LSP also needs), and
+LSP's theoretical edge (call-vs-reference disambiguation) produced no materially
+cleaner graph here — at a real orchestration cost.
+
+**Go SCIP-only for now.** Keep LSP in the back pocket as a targeted refinement
+for specific cases (disambiguating a genuine call from a value-pass; languages
+where the SCIP indexer is weak), not as a graph-wide booster we build today.
+Revisit if we hit concrete accuracy gaps on real review sessions.
