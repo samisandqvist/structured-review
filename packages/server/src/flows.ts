@@ -1,34 +1,18 @@
 import Database from "better-sqlite3";
 import { join } from "node:path";
 import { repoRoot } from "./diff.js";
+import type { Flow } from "./graph/provider.js";
+import { buildFlowTree, type FlowNodeInfo } from "./graph/flow-tree.js";
 
 /**
- * EXPERIMENT: read execution flows from CRG's graph store.
+ * Read execution flows from CRG's graph store (used by CrgGraphProvider.getFlows).
  *
- * CRG traces "flows" — ordered call paths from an entry point to a leaf — and
- * stores them in its own SQLite graph (.code-review-graph/graph.db). The flow
- * path is a list of CRG node ids; we resolve each to the node's qualified name
- * (which is our stableId), so the review server can line flows up against a
- * session's changed nodes. Reading CRG's DB directly is a deliberate shortcut
- * for the experiment — the MCP API exposes flows but not id→node resolution.
+ * CRG traces flows and stores them in its own SQLite graph
+ * (.code-review-graph/graph.db). We take only CRG's entry points + criticality,
+ * then rebuild the real call tree from the edges via the shared DFS builder, so
+ * shared nodes show at each call site. Reading CRG's DB directly is a shortcut —
+ * the MCP API exposes flows but not id→node resolution.
  */
-export interface FlowStep {
-  stableId: string;
-  label: string;
-  file: string;
-  startLine: number;
-  endLine: number;
-  isTest: boolean;
-  depth: number;
-}
-export interface Flow {
-  id: number;
-  name: string;
-  criticality: number;
-  depth: number;
-  steps: FlowStep[];
-}
-
 interface FlowRow {
   id: number;
   name: string;
@@ -44,9 +28,6 @@ interface NodeRow {
   line_end: number;
   is_test: number;
 }
-
-const MAX_TREE_DEPTH = 10;
-const MAX_TREE_STEPS = 120;
 
 export function readFlows(root: string = repoRoot()): Flow[] {
   const dbPath = process.env.CRG_GRAPH_DB || join(root, ".code-review-graph", "graph.db");
@@ -89,21 +70,18 @@ export function readFlows(root: string = repoRoot()): Flow[] {
 
     const rootSlash = root.endsWith("/") ? root : `${root}/`;
     const rel = (p: string) => (p.startsWith(rootSlash) ? p.slice(rootSlash.length) : p);
-    const stepOf = (n: NodeRow, depth: number): FlowStep => ({
-      stableId: n.qualified_name,
-      label: n.name,
-      file: rel(n.file_path),
-      startLine: n.line_start,
-      endLine: n.line_end,
-      isTest: n.is_test === 1,
-      depth,
-    });
+    const resolve = (qn: string): FlowNodeInfo | undefined => {
+      const n = nodeByQn.get(qn);
+      return n
+        ? { label: n.name, file: rel(n.file_path), startLine: n.line_start, endLine: n.line_end, isTest: n.is_test === 1 }
+        : undefined;
+    };
 
     return flows
       .map((f) => {
         const entry = nodeById.get(f.entry_point_id);
         if (!entry) return null;
-        const steps = buildTree(entry.qualified_name, callAdj, nodeByQn, stepOf);
+        const steps = buildFlowTree(entry.qualified_name, callAdj, resolve);
         const depth = steps.reduce((m, s) => Math.max(m, s.depth), 0);
         return { id: f.id, name: f.name, criticality: f.criticality, depth, steps };
       })
@@ -111,35 +89,4 @@ export function readFlows(root: string = repoRoot()): Flow[] {
   } finally {
     db.close();
   }
-}
-
-/**
- * Depth-first call tree from an entry: preorder so each node is immediately
- * followed by its own children (indent = real nesting). No global dedup, so a
- * shared callee appears under every caller; an ancestor set guards cycles, and
- * depth/step caps bound pathological fan-out.
- */
-function buildTree(
-  entryQn: string,
-  callAdj: Map<string, string[]>,
-  nodeByQn: Map<string, NodeRow>,
-  stepOf: (n: NodeRow, depth: number) => FlowStep
-): FlowStep[] {
-  const steps: FlowStep[] = [];
-  const ancestors = new Set<string>();
-  const walk = (qn: string, depth: number) => {
-    if (steps.length >= MAX_TREE_STEPS) return;
-    const n = nodeByQn.get(qn);
-    if (!n) return;
-    steps.push(stepOf(n, depth));
-    if (depth >= MAX_TREE_DEPTH) return;
-    ancestors.add(qn);
-    for (const callee of callAdj.get(qn) ?? []) {
-      if (ancestors.has(callee)) continue; // cycle / recursion guard
-      walk(callee, depth + 1);
-    }
-    ancestors.delete(qn);
-  };
-  walk(entryQn, 0);
-  return steps;
 }

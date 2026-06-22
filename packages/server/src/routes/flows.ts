@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import type { AppContext } from "../app.js";
 import { getNodesBySession } from "../repo/nodes.js";
-import { readFlows } from "../flows.js";
 
 /**
  * EXPERIMENT: execution-flows view of a review. Lines CRG's traced flows up
@@ -11,11 +10,12 @@ import { readFlows } from "../flows.js";
 export function createFlowsRoute(ctx: AppContext) {
   const router = new Hono();
 
-  router.get("/:id/flows", (c) => {
+  router.get("/:id/flows", async (c) => {
     const nodes = getNodesBySession(ctx.db, c.req.param("id"));
     const byStable = new Map(nodes.map((n) => [n.stableId, n]));
 
-    const flows = readFlows().map((f) => {
+    const allFlows = await ctx.graphProvider.getFlows();
+    const flows = allFlows.map((f) => {
       let affected = false;
       const steps = f.steps.map((s) => {
         const node = byStable.get(s.stableId);
