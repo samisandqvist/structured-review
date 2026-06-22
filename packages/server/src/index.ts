@@ -8,9 +8,9 @@ import { ScipGraphProvider } from "./graph/scip.js";
 
 const db = createDatabase(process.env.CRW_DB_PATH || "review.db");
 
-// GRAPH_PROVIDER selects the graph source; defaults to crg if CRG_COMMAND is
-// set, else the stub. "scip" uses the SCIP indexer (scip-typescript).
-const which = (process.env.GRAPH_PROVIDER || (process.env.CRG_COMMAND ? "crg" : "stub")).toLowerCase();
+// GRAPH_PROVIDER selects the graph source; SCIP (scip-typescript) is the
+// default. Set GRAPH_PROVIDER=crg or =stub to override.
+const which = (process.env.GRAPH_PROVIDER || "scip").toLowerCase();
 let graphProvider: GraphProvider;
 switch (which) {
   case "scip":
