@@ -125,26 +125,78 @@ coverage: { changedTotal: number, covered: number, unassigned: number }
 ### Layer 2 — Skill
 
 The plan is produced by **Claude at skill-run time**, backstopped by the server.
+Claude accesses the data through a **thin CLI wrapper** (`orchestrate.ts`) over
+the existing HTTP server — the same endpoints the web UI uses, no second
+implementation of "what's a flow / what's an orphan".
+
+#### Data interface (CLI)
+
+**`orchestrate plan-context --branch <b> --base <base>`** — creates the session
+and prints one JSON bundle: `{ sessionId, flows, orphans, changes }`, where
+`changes` is a **compact, software-computed change summary per changed node** —
+*no raw diff text*. One record per changed node, bounded by node count, not diff
+size:
+
+```jsonc
+{
+  "stableId": "fn:validateOrder",
+  "label": "validateOrder",
+  "kind": "function",          // SCIP symbol kind: function|method|type|const|test|…
+  "file": "src/orders.ts",
+  "startLine": 35, "endLine": 50,
+  "status": "modified",        // added | modified | deleted
+  "added": 6, "removed": 2,    // changed lines overlapping this node's span
+  "signature": "function validateOrder(o: Order): Result"  // declaration line only
+}
+```
+
+Derivation, all deterministic and in software:
+- `kind` from SCIP `SymbolInformation.kind` (surfaced onto the graph node; falls
+  back to a name/`isTest` heuristic where SCIP gives none);
+- `added`/`removed` by intersecting the file's changed hunks (`fileChangedRanges`
+  in `diff.ts`) with the node's `[startLine, endLine]` span;
+- `signature` = the node's declaration line (first line of its span).
+
+A 500-line change to one function still emits one small record (`added: 500`,
+signature, kind) — never the 500 lines.
+
+**No raw diffs in planning context (rule).** The branch diff is for the human in
+the web UI, not for planning. Claude builds the plan from `flows + orphans +
+changes` alone. For the rare case it must read code to make a grouping call,
+**`orchestrate diff --session <id> --node <stableId>`** returns just that one
+node's diff slice (bounded) — never `git diff` over the branch. skill.md
+instructs Claude to never run `git diff` itself for planning.
+
+**`orchestrate submit-plan --session <id> --plan <plan.json>`** — validates the
+ordered, kind-tagged units, `PUT`s them, and prints the returned `coverage`
+report so Claude can self-correct.
+
+#### skill.md guidance
+
 `packages/skill/skill.md` gains a "Building the review plan" section instructing
 Claude to:
 
-- Fetch the subgraph, flows, and **orphans** (the server-computed set).
+- Run `plan-context` and read `flows + orphans + changes` (not diffs).
 - Build an ordered list of units: every **affected flow** becomes a flow-unit;
   group the orphans into orphan-units by shared purpose (e.g. "type/contract
-  changes", "test fixtures"). Do not split or merge flows.
+  changes", "test fixtures"), using `kind`/`file`/`signature` from the change
+  summary. Do not split or merge flows.
 - Give each unit a `label` and an optional short `rationale` describing the
   unit's purpose/functionality.
 - Order units for a sensible review walk (e.g. foundational/orphan contract
   changes first, then the flows that depend on them — Claude's judgment).
-- After writing the plan, check `coverage.unassigned`; if `> 0`, add orphan-units
+- Pull a single node's diff via `orchestrate diff` only when a grouping decision
+  genuinely needs the code; never run `git diff` over the branch.
+- Run `submit-plan`; if the printed `coverage.unassigned > 0`, add orphan-units
   for the leftovers and re-submit.
 
-**`orchestrate.ts`.** `UnitInput` becomes the kind-tagged shape. `partitionFn`
-returns the ordered units. The CLI `main()` keeps a deterministic default:
-one flow-unit per affected flow (criticality order) + a single "Other changes"
-orphan-unit holding all orphans — safe because the server backstops coverage
-anyway. `createSession` / `writePlan` / `exportComments` seams are otherwise
-unchanged.
+**`orchestrate.ts` internals.** `UnitInput` becomes the kind-tagged shape;
+`partitionFn` returns the ordered units. The CLI keeps a deterministic default
+partition (used when run non-interactively): one flow-unit per affected flow
+(criticality order) + a single "Other changes" orphan-unit holding all orphans —
+safe because the server backstops coverage anyway. `createSession` / `writePlan`
+/ `exportComments` seams are otherwise unchanged; `plan-context`, `diff`, and
+`submit-plan` are thin commands over them plus the change-summary computation.
 
 ---
 
@@ -189,8 +241,9 @@ mark-reviewed flow, and split-pane resize.
 
 1. Skill run → `createSession` → server builds change subgraph, stores changed +
    context nodes.
-2. Claude fetches flows + orphans, builds an ordered plan (flow-units +
-   orphan-units, each labeled/described).
+2. Claude runs `plan-context`, reads `flows + orphans + changes` (compact
+   summary, no diffs), and builds an ordered plan (flow-units + orphan-units,
+   each labeled/described) → `submit-plan`.
 3. `PUT /plan` → server stores units, computes coverage, sweeps any uncovered
    changed node into "Unassigned changes".
 4. Plan view reads `units` (+ flows for flow-units, member stableIds for
@@ -217,9 +270,12 @@ mark-reviewed flow, and split-pane resize.
   "Unassigned changes"; `covered + unassigned === changedTotal`; shared node
   counted as covered when any containing unit is present; changed tests in the
   universe, unchanged context nodes not.
-- **Skill (vitest):** `orchestrate` default plan returns kind-tagged units (one
-  flow-unit per affected flow + an orphan-unit); round-trips through `writePlan`;
-  post-write coverage reports zero unassigned for a fully-covered fixture.
+- **Skill (vitest):** change-summary computation (per-node `added`/`removed` from
+  hunk∩span; `kind`/`signature`; `status`); `plan-context` bundle shape;
+  `orchestrate` default plan returns kind-tagged units (one flow-unit per
+  affected flow + an orphan-unit); round-trips through `submit-plan`; post-write
+  coverage reports zero unassigned for a fully-covered fixture. `plan-context`
+  never emits raw diff bodies.
 - **Web:** Plan renders units in order; flow-units as tracks, orphan-units as
   chip groups; shared node shows reviewed state across units; "Unassigned
   changes" gets warning treatment; coverage chip reflects `coverage`. App builds
