@@ -62,15 +62,24 @@ function UnitBlock({
   onSelectNode: (nodeId: string) => void;
 }) {
   const memberNodes = unit.memberStableIds.map((s) => nodeByStable.get(s)).filter((n): n is Node => !!n);
-  const reviewed = memberNodes.filter((n) => n.reviewStatus !== "unreviewed").length;
+
+  // For a flow-unit with a resolved flow, progress is over the flow's changed steps.
+  // For orphan-units (or flow-units with no resolved flow), progress is over memberNodes.
+  const flowChangedSteps = unit.kind === "flow" && flow
+    ? flow.steps.filter((s) => s.changeStatus === "changed")
+    : null;
+  const total = flowChangedSteps ? flowChangedSteps.length : memberNodes.length;
+  const reviewed = flowChangedSteps
+    ? flowChangedSteps.filter((s) => s.reviewStatus && s.reviewStatus !== "unreviewed").length
+    : memberNodes.filter((n) => n.reviewStatus !== "unreviewed").length;
 
   return (
     <div className={`unit${unit.auto ? " unit--auto" : ""}`}>
       <div className="unit__bar">
         <h3 className="unit__name">{unit.label}</h3>
         {unit.auto && <span className="unit__badge">unassigned</span>}
-        {memberNodes.length > 0 && (
-          <span className="unit__progress">{reviewed}/{memberNodes.length}</span>
+        {total > 0 && (
+          <span className="unit__progress">{reviewed}/{total}</span>
         )}
       </div>
       {unit.rationale && <p className="unit__rationale">{unit.rationale}</p>}

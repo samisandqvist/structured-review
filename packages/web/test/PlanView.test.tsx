@@ -10,7 +10,10 @@ vi.mock("../src/api/hooks.js", () => ({
   ], coverage: { changedTotal: 3, covered: 2, unassigned: 1 } } }),
   useFlows: () => ({ data: { flows: [
     { id: 1, name: "handleOrder", criticality: 1, depth: 1, affected: true, entryStableId: "fn:handleOrder",
-      steps: [{ label: "handleOrder", file: "o.ts", startLine: 1, endLine: 2, isTest: false, depth: 0, nodeId: "n1", changeStatus: "changed", reviewStatus: "unreviewed" }] },
+      steps: [
+        { label: "handleOrder", file: "o.ts", startLine: 1, endLine: 2, isTest: false, depth: 0, nodeId: "n1", changeStatus: "changed", reviewStatus: "unreviewed" },
+        { label: "processOrder", file: "o.ts", startLine: 10, endLine: 20, isTest: false, depth: 1, nodeId: "n4", changeStatus: "changed", reviewStatus: "reviewed-clean" },
+      ] },
   ], orphans: [] } }),
   useNodes: () => ({ data: { nodes: [
     { id: "n2", stableId: "fn:validateOrder", label: "validateOrder", file: "o.ts", startLine: 3, endLine: 4, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false },
@@ -26,5 +29,14 @@ describe("PlanView", () => {
     expect(screen.getByText("handleOrder")).toBeInTheDocument();   // flow track step
     expect(screen.getByText("validateOrder")).toBeInTheDocument(); // orphan chip
     expect(screen.getByText("Unassigned changes").closest(".unit")).toHaveClass("unit--auto");
+  });
+
+  it("shows flow-unit progress over changed steps, not memberStableIds", () => {
+    render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={() => {}} />);
+    // The flow has 2 changed steps (entry unreviewed, callee reviewed-clean) → 1/2
+    const orderUnit = screen.getByText("Order handling").closest(".unit")!;
+    const progress = orderUnit.querySelector(".unit__progress");
+    expect(progress).not.toBeNull();
+    expect(progress!.textContent).toBe("1/2");
   });
 });
