@@ -200,3 +200,25 @@ describe("GET /api/sessions/:id/flows", () => {
     expect(body.orphans.map((n: any) => n.stableId).sort()).toEqual(["fn:handleOrder", "fn:validateOrder"]);
   });
 });
+
+describe("GET /api/sessions/:id/changes", () => {
+  it("returns one compact summary per changed node, no diff bodies", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const res = await app.request(`/api/sessions/${session.id}/changes`);
+    expect(res.status).toBe(200);
+    const { changes } = await res.json();
+    expect(changes.map((c: any) => c.stableId).sort()).toEqual(["fn:handleOrder", "fn:validateOrder"]);
+    for (const ch of changes) {
+      expect(ch).toHaveProperty("added");
+      expect(ch).toHaveProperty("removed");
+      expect(ch).toHaveProperty("signature");
+      expect(ch.kind).toBe("function");
+      expect(ch).not.toHaveProperty("oldText");
+      expect(ch).not.toHaveProperty("newText");
+    }
+  });
+});
