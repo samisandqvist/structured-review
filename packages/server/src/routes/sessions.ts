@@ -86,7 +86,14 @@ export function createSessionsRoute(ctx: AppContext) {
     const session = getSession(ctx.db, c.req.param("id"));
     if (!session) return c.json({ error: "not found" }, 404);
     const units = getUnitsBySession(ctx.db, session.id);
-    return c.json({ session, units });
+    const changed = getNodesBySession(ctx.db, session.id).filter((n) => n.changeStatus === "changed");
+    const autoMembers = new Set(units.filter((u) => u.auto).flatMap((u) => u.memberStableIds));
+    const unassigned = changed.filter((n) => autoMembers.has(n.stableId)).length;
+    return c.json({
+      session,
+      units,
+      coverage: { changedTotal: changed.length, covered: changed.length - unassigned, unassigned },
+    });
   });
 
   router.put("/:id/plan", async (c) => {
@@ -94,14 +101,31 @@ export function createSessionsRoute(ctx: AppContext) {
     const session = getSession(ctx.db, sessionId);
     if (!session) return c.json({ error: "not found" }, 404);
     const body = await c.req.json<{ units: PlanUnitInput[] }>();
+
+    const flows = await ctx.graphProvider.getFlows();
+    const changedStableIds = getNodesBySession(ctx.db, sessionId)
+      .filter((n) => n.changeStatus === "changed")
+      .map((n) => n.stableId);
+    const { unassigned } = computeCoverage(body.units, flows, changedStableIds);
+
     for (const u of getUnitsBySession(ctx.db, sessionId)) deleteUnit(ctx.db, u.id);
     let pos = 0;
     for (const u of body.units) {
-      const members = u.kind === "flow" ? [u.flowEntryStableId ?? ""] : (u.orphanStableIds ?? []);
+      const members = u.kind === "flow" ? [u.flowEntryStableId!] : (u.orphanStableIds ?? []);
       createUnit(ctx.db, sessionId, pos++, u.label, u.rationale ?? "", u.kind, members, false);
     }
+    if (unassigned.length > 0) {
+      createUnit(ctx.db, sessionId, pos++, "Unassigned changes",
+        "Changes not covered by any chosen unit.", "orphans", unassigned, true);
+    }
     updateSessionStatus(ctx.db, sessionId, "walking");
-    return c.json({ units: getUnitsBySession(ctx.db, sessionId) });
+
+    const coverage = {
+      changedTotal: changedStableIds.length,
+      covered: changedStableIds.length - unassigned.length,
+      unassigned: unassigned.length,
+    };
+    return c.json({ units: getUnitsBySession(ctx.db, sessionId), coverage });
   });
 
   return router;
