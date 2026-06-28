@@ -46,7 +46,7 @@ describe("GET /api/sessions/:id", () => {
 });
 
 describe("PUT /api/sessions/:id/plan", () => {
-  it("replaces the plan with new units", async () => {
+  it("replaces the plan with kind-tagged units", async () => {
     const cr = await app.request("/api/sessions", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "feat", baseRef: "main" }),
@@ -55,14 +55,19 @@ describe("PUT /api/sessions/:id/plan", () => {
     const res = await app.request(`/api/sessions/${session.id}/plan`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        units: [{ label: "Order handlers", rationale: "all order endpoints", entryPointNodeIds: ["fn:handleOrder"] }],
+        units: [
+          { kind: "flow", flowEntryStableId: "fn:handleOrder", label: "Order handling", rationale: "the order path" },
+          { kind: "orphans", orphanStableIds: ["fn:validateOrder"], label: "Validation helpers" },
+        ],
       }),
     });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.units).toHaveLength(1);
-    expect(body.units[0].label).toBe("Order handlers");
-    expect(body.units[0].position).toBe(0);
+    expect(body.units.length).toBeGreaterThanOrEqual(2);
+    expect(body.units[0].kind).toBe("flow");
+    expect(body.units[0].memberStableIds).toEqual(["fn:handleOrder"]);
+    expect(body.units[1].kind).toBe("orphans");
+    expect(body.units[1].memberStableIds).toEqual(["fn:validateOrder"]);
   });
 });
 

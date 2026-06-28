@@ -6,6 +6,7 @@ import { createNode, getNodesBySession } from "../repo/nodes.js";
 import { fileChangedRanges, rangesOverlap, type LineRange } from "../diff.js";
 import type { ChangeSubgraph, GraphNode } from "../graph/provider.js";
 import type { ChangeStatus } from "../types.js";
+import { computeCoverage, type PlanUnitInput } from "../coverage.js";
 import { randomId } from "../util.js";
 
 /**
@@ -62,7 +63,7 @@ export function createSessionsRoute(ctx: AppContext) {
 
     for (const gnode of keptNodes) {
       createNode(ctx.db, {
-        sessionId: session.id, stableId: gnode.stableId, unitId: null,
+        sessionId: session.id, stableId: gnode.stableId,
         label: gnode.label, file: gnode.file, startLine: gnode.startLine, endLine: gnode.endLine,
         changeStatus: status.get(gnode.stableId)!, reviewStatus: "unreviewed", reviewedInUnit: null,
         isTest: gnode.isTest,
@@ -92,15 +93,15 @@ export function createSessionsRoute(ctx: AppContext) {
     const sessionId = c.req.param("id");
     const session = getSession(ctx.db, sessionId);
     if (!session) return c.json({ error: "not found" }, 404);
-    const body = await c.req.json<{
-      units: { label: string; rationale: string; entryPointNodeIds: string[] }[];
-    }>();
+    const body = await c.req.json<{ units: PlanUnitInput[] }>();
     for (const u of getUnitsBySession(ctx.db, sessionId)) deleteUnit(ctx.db, u.id);
-    const created = body.units.map((u, i) =>
-      createUnit(ctx.db, sessionId, i, u.label, u.rationale, u.entryPointNodeIds)
-    );
+    let pos = 0;
+    for (const u of body.units) {
+      const members = u.kind === "flow" ? [u.flowEntryStableId ?? ""] : (u.orphanStableIds ?? []);
+      createUnit(ctx.db, sessionId, pos++, u.label, u.rationale ?? "", u.kind, members, false);
+    }
     updateSessionStatus(ctx.db, sessionId, "walking");
-    return c.json({ units: created });
+    return c.json({ units: getUnitsBySession(ctx.db, sessionId) });
   });
 
   return router;
