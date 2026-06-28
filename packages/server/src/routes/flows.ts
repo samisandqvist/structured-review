@@ -21,23 +21,21 @@ export function createFlowsRoute(ctx: AppContext) {
         const node = byStable.get(s.stableId);
         if (node && node.changeStatus === "changed") affected = true;
         return {
-          label: s.label,
-          file: s.file,
-          startLine: s.startLine,
-          endLine: s.endLine,
-          isTest: s.isTest,
-          depth: s.depth,
+          label: s.label, file: s.file, startLine: s.startLine, endLine: s.endLine,
+          isTest: s.isTest, depth: s.depth,
           nodeId: node?.id ?? null,
           changeStatus: node?.changeStatus ?? null,
           reviewStatus: node?.reviewStatus ?? null,
         };
       });
-      return { id: f.id, name: f.name, criticality: f.criticality, depth: f.depth, affected, steps };
+      return { id: f.id, name: f.name, criticality: f.criticality, depth: f.depth, affected, entryStableId: f.steps[0]?.stableId ?? "", steps };
     });
-
-    // Affected flows first; criticality order is preserved within each group.
     flows.sort((a, b) => Number(b.affected) - Number(a.affected));
-    return c.json({ flows });
+
+    const inAnyFlow = new Set(allFlows.flatMap((f) => f.steps.map((s) => s.stableId)));
+    const orphans = nodes.filter((n) => n.changeStatus === "changed" && !inAnyFlow.has(n.stableId));
+
+    return c.json({ flows, orphans });
   });
 
   return router;
