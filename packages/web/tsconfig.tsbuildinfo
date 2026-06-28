@@ -1,0 +1,1 @@
+{"root":["./src/App.tsx","./src/main.tsx","./src/api/client.ts","./src/api/hooks.ts","./src/components/CommentBox.tsx","./src/components/DiffView.tsx","./src/components/FlowsView.tsx","./src/components/NodeBadge.tsx","./src/components/SplitLayout.tsx","./src/store/ui.ts","./src/test/setup.ts"],"version":"5.9.3"}
