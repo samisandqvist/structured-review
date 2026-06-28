@@ -26,6 +26,9 @@ export function createChangesRoute(ctx: AppContext) {
       const { added, removed } = raw ? nodeChangeStats(raw, n.startLine, n.endLine) : { added: 0, removed: 0 };
       const span = n.endLine - n.startLine + 1;
       const status = removed === 0 && added >= span ? "added" : "modified";
+      // Heuristic: SCIP sets no symbol kind, and only functions/methods reach this point
+      // (types/namespaces are filtered upstream when building graph nodes). So `kind` is
+      // limited to "function" | "method" | "test" in practice and will never emit "type"/"const".
       const kind = n.isTest ? "test" : n.stableId.includes("#") ? "method" : "function";
       return {
         stableId: n.stableId, label: n.label, kind,

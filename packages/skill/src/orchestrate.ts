@@ -104,6 +104,13 @@ async function main() {
     return;
   }
 
+  // Guard against unrecognized subcommands — only proceed with the default path when
+  // no subcommand was given (cmd is undefined) or when the first arg is a flag (starts with --).
+  if (cmd !== undefined && !cmd.startsWith("--")) {
+    process.stderr.write(`Unknown command: ${cmd}\n`);
+    process.exit(1);
+  }
+
   // Default (no subcommand): create a session and write the deterministic plan.
   const branch = opt("--branch") ?? "HEAD";
   const baseRef = opt("--base") ?? "main";
