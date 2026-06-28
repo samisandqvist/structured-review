@@ -184,3 +184,19 @@ describe("GET /api/sessions/:id/export", () => {
     expect(body[nodes[0].id].text).toBe("fix this");
   });
 });
+
+describe("GET /api/sessions/:id/flows", () => {
+  it("returns flows and the orphan set (changed nodes in no flow)", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const res = await app.request(`/api/sessions/${session.id}/flows`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.flows)).toBe(true);
+    // stub has no flows → both changed nodes are orphans
+    expect(body.orphans.map((n: any) => n.stableId).sort()).toEqual(["fn:handleOrder", "fn:validateOrder"]);
+  });
+});
