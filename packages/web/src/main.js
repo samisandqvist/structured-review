@@ -1,8 +1,0 @@
-import { jsx as _jsx } from "react/jsx-runtime";
-import { createRoot } from "react-dom/client";
-import { App } from "./App.js";
-import "./styles.css";
-const root = document.getElementById("root");
-if (root)
-    createRoot(root).render(_jsx(App, {}));
-//# sourceMappingURL=main.js.map
