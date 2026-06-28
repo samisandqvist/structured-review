@@ -4,10 +4,13 @@ export interface ReviewSession {
 }
 export interface Unit {
   id: string; sessionId: string; position: number; label: string;
-  rationale: string; entryPointNodeIds: string[];
+  rationale: string;
+  kind: "flow" | "orphans";
+  memberStableIds: string[];
+  auto: boolean;
 }
 export interface Node {
-  id: string; sessionId: string; stableId: string; unitId: string | null;
+  id: string; sessionId: string; stableId: string;
   label: string; file: string; startLine: number; endLine: number;
   changeStatus: "changed" | "unchanged";
   reviewStatus: "unreviewed" | "reviewed-clean" | "reviewed-commented" | "reviewed-elsewhere";
@@ -37,6 +40,7 @@ export interface Flow {
   depth: number;
   affected: boolean;
   steps: FlowStep[];
+  entryStableId: string;
 }
 export interface GraphEdgeDTO {
   sourceNodeId: string;
@@ -49,6 +53,11 @@ export interface GraphNode {
 }
 export interface GraphEdge { sourceStableId: string; targetStableId: string; edgeType: "call"; }
 export interface ChangeSubgraph { nodes: GraphNode[]; edges: GraphEdge[]; }
+
+export interface Coverage { changedTotal: number; covered: number; unassigned: number; }
+export type UnitInput =
+  | { kind: "flow"; flowEntryStableId: string; label: string; rationale?: string }
+  | { kind: "orphans"; orphanStableIds: string[]; label: string; rationale?: string };
 
 const API_BASE = "/api";
 
@@ -66,15 +75,13 @@ export const api = {
       method: "POST", body: JSON.stringify({ branch, baseRef }),
     }),
   getSession: (id: string) =>
-    fetchJson<{ session: ReviewSession; units: Unit[] }>(`/sessions/${id}`),
-  updatePlan: (id: string, units: { label: string; rationale: string; entryPointNodeIds: string[] }[]) =>
-    fetchJson<{ units: Unit[] }>(`/sessions/${id}/plan`, {
+    fetchJson<{ session: ReviewSession; units: Unit[]; coverage: Coverage }>(`/sessions/${id}`),
+  updatePlan: (id: string, units: UnitInput[]) =>
+    fetchJson<{ units: Unit[]; coverage: Coverage }>(`/sessions/${id}/plan`, {
       method: "PUT", body: JSON.stringify({ units }),
     }),
-  getNodes: (id: string, unitId?: string) =>
-    fetchJson<{ nodes: Node[]; edges: GraphEdgeDTO[] }>(
-      `/sessions/${id}/nodes${unitId ? `?unitId=${unitId}` : ""}`
-    ),
+  getNodes: (id: string) =>
+    fetchJson<{ nodes: Node[]; edges: GraphEdgeDTO[] }>(`/sessions/${id}/nodes`),
   getNode: (sessionId: string, nodeId: string) =>
     fetchJson<{ node: Node; callers: Node[]; callees: Node[]; diff: NodeDiff }>(
       `/sessions/${sessionId}/nodes/${nodeId}`
@@ -89,7 +96,7 @@ export const api = {
     fetchJson<{ comment: Comment }>(`/sessions/${id}/comments`, {
       method: "POST", body: JSON.stringify({ nodeId, hunkSnippet, text, structuralContext }),
     }),
-  getFlows: (id: string) => fetchJson<{ flows: Flow[] }>(`/sessions/${id}/flows`),
+  getFlows: (id: string) => fetchJson<{ flows: Flow[]; orphans: Node[] }>(`/sessions/${id}/flows`),
   exportComments: (id: string) =>
     fetchJson<Record<string, unknown>>(`/sessions/${id}/export`),
 };
