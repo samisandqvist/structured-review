@@ -139,6 +139,31 @@ describe("GET /api/sessions/:id/comments", () => {
   });
 });
 
+describe("coverage reconciliation", () => {
+  it("sweeps uncovered changed nodes into an auto Unassigned unit and reports coverage", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    // Stub flows = [], so an orphan-unit covering one changed node leaves the rest unassigned.
+    const res = await app.request(`/api/sessions/${session.id}/plan`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ units: [{ kind: "orphans", orphanStableIds: ["fn:handleOrder"], label: "Orders" }] }),
+    });
+    const body = await res.json();
+    expect(body.coverage.changedTotal).toBe(2); // fn:handleOrder + fn:validateOrder are "changed" in the stub
+    expect(body.coverage.covered).toBe(1);
+    expect(body.coverage.unassigned).toBe(1);
+    const auto = body.units.find((u: any) => u.auto);
+    expect(auto.label).toBe("Unassigned changes");
+    expect(auto.memberStableIds).toEqual(["fn:validateOrder"]);
+
+    const sres = await app.request(`/api/sessions/${session.id}`);
+    expect((await sres.json()).coverage).toEqual({ changedTotal: 2, covered: 1, unassigned: 1 });
+  });
+});
+
 describe("GET /api/sessions/:id/export", () => {
   it("exports comments keyed by node id with structural context", async () => {
     const cr = await app.request("/api/sessions", {
