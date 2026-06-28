@@ -12,15 +12,16 @@ CREATE TABLE IF NOT EXISTS units (
   session_id TEXT NOT NULL REFERENCES review_sessions(id) ON DELETE CASCADE,
   position INTEGER NOT NULL,
   label TEXT NOT NULL,
-  rationale TEXT NOT NULL,
-  entry_point_node_ids TEXT NOT NULL DEFAULT '[]'
+  rationale TEXT NOT NULL DEFAULT '',
+  kind TEXT NOT NULL DEFAULT 'orphans',
+  member_stable_ids TEXT NOT NULL DEFAULT '[]',
+  auto INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS nodes (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL REFERENCES review_sessions(id) ON DELETE CASCADE,
   stable_id TEXT NOT NULL,
-  unit_id TEXT REFERENCES units(id) ON DELETE SET NULL,
   label TEXT NOT NULL,
   file TEXT NOT NULL,
   start_line INTEGER NOT NULL,
@@ -50,7 +51,6 @@ CREATE TABLE IF NOT EXISTS comments (
 );
 
 CREATE INDEX IF NOT EXISTS idx_nodes_session ON nodes(session_id);
-CREATE INDEX IF NOT EXISTS idx_nodes_unit ON nodes(unit_id);
 CREATE INDEX IF NOT EXISTS idx_edges_source ON edges(source_node_id);
 CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_node_id);
 CREATE INDEX IF NOT EXISTS idx_comments_session ON comments(session_id);
