@@ -23,25 +23,43 @@ where file-tree review doesn't map to the code's actual structure.
 
 ## How to orchestrate
 
-Run the orchestration script:
+The orchestration CLI provides three subcommands:
 
 ```bash
-npx tsx packages/skill/src/orchestrate.ts --branch <branch> --base <base-ref>
+npx tsx packages/skill/src/orchestrate.ts plan-context --branch <b> --base <base>
+npx tsx packages/skill/src/orchestrate.ts submit-plan --session <id> --plan plan.json
+npx tsx packages/skill/src/orchestrate.ts diff --session <id> --node <stableId>
 ```
 
-The script will:
-- Start the review server if not already running
-- Create a session and fetch the change subgraph
-- Present the subgraph for partitioning
-- Write the plan
-- Open the web UI
-- Wait for the reviewer to finish
-- Export comments as JSON
+- `plan-context` — fetch the change subgraph and return session metadata
+- `submit-plan` — write the plan to the server and get coverage summary
+- `diff` — retrieve a single node's diff for reading before grouping
 
-## Partitioning guidance
+## Building the review plan
 
-- A unit = "a correct commit" — independently valuable, logically whole
-- Structure proposes: cluster by entry points and domain entity
-- Intent decides: merge/split/label by purpose using the diff
-- Every unit carries a one-line rationale
-- Well-scoped work yields a single unit; don't split artificially
+The plan is an ordered list of **units**, each either a **flow** or an **orphan group**:
+
+- **flow-unit** — `{ "kind": "flow", "flowEntryStableId": "<entry>", "label": "...", "rationale": "..." }`
+- **orphan-unit** — `{ "kind": "orphans", "orphanStableIds": ["..."], "label": "...", "rationale": "..." }`
+
+Steps:
+
+1. Run `npx tsx packages/skill/src/orchestrate.ts plan-context --branch <b> --base <base>`.
+   It prints `{ sessionId, flows, orphans, changes }`. `changes` is a compact per-node
+   summary (kind, file, lines, +/- counts, signature) — **not** diff bodies.
+2. Make one flow-unit per **affected** flow (`flows[].affected === true`), using `entryStableId`.
+   Do not split or merge flows.
+3. Group the `orphans` into orphan-units by shared purpose (e.g. "validation helpers",
+   "test fixtures"), using each change's `kind`/`file`/`signature` from `changes`.
+4. Give each unit a `label` and an optional short `rationale` describing **what the unit
+   does** (its functionality/purpose) — not why you ordered it.
+5. Order units for a sensible walk (foundational/helper changes first, then the flows that
+   depend on them — your judgment).
+6. Write the units array to a JSON file and run
+   `npx tsx packages/skill/src/orchestrate.ts submit-plan --session <sessionId> --plan plan.json`.
+   It prints `coverage`. If `coverage.unassigned > 0`, add orphan-units for the leftovers
+   (they were swept into the auto "Unassigned changes" unit) and re-submit.
+
+**Never run `git diff` for planning.** If you must read a node's code to decide grouping,
+run `npx tsx packages/skill/src/orchestrate.ts diff --session <sessionId> --node <stableId>`
+— it returns just that one node's diff.

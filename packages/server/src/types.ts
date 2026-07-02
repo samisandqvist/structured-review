@@ -1,4 +1,5 @@
 export type SessionStatus = "planning" | "walking" | "complete";
+export type UnitKind = "flow" | "orphans";
 export type ChangeStatus = "changed" | "unchanged";
 export type ReviewStatus =
   | "unreviewed"
@@ -21,14 +22,15 @@ export interface Unit {
   position: number;
   label: string;
   rationale: string;
-  entryPointNodeIds: string[];
+  kind: UnitKind;
+  memberStableIds: string[];
+  auto: boolean;
 }
 
 export interface Node {
   id: string;
   sessionId: string;
   stableId: string;
-  unitId: string | null;
   label: string;
   file: string;
   startLine: number;

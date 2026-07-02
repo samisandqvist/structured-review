@@ -1,0 +1,6 @@
+# tsc -b build artifacts (bundling is done by vite into dist/)
+src/**/*.js
+src/**/*.d.ts
+src/**/*.js.map
+src/**/*.d.ts.map
+*.tsbuildinfo

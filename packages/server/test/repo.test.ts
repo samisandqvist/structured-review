@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { DB } from "../src/db/connection.js";
 import { createMemoryDatabase } from "../src/db/connection.js";
 import { createSession, getSession, updateSessionStatus } from "../src/repo/sessions.js";
-import { createUnit, getUnitsBySession, updateUnit, deleteUnit } from "../src/repo/units.js";
-import { createNode, getNodesBySession, getNodesByUnit, getNode, getNodeNeighbors, updateNodeReviewStatus } from "../src/repo/nodes.js";
+import { createUnit, getUnitsBySession, deleteUnit } from "../src/repo/units.js";
+import { createNode, getNodesBySession, getNode, getNodeNeighbors, updateNodeReviewStatus } from "../src/repo/nodes.js";
 import { createComment, getCommentsBySession, exportComments } from "../src/repo/comments.js";
 
 let db: DB;
@@ -27,18 +27,16 @@ describe("sessions repo", () => {
 describe("units repo", () => {
   it("creates and lists units ordered by position", () => {
     const session = createSession(db, "feat", "main");
-    createUnit(db, session.id, 1, "Second", "r2", []);
-    createUnit(db, session.id, 0, "First", "r1", ["n1"]);
+    createUnit(db, session.id, 1, "Second", "r2", "orphans", [], false);
+    createUnit(db, session.id, 0, "First", "r1", "flow", ["fn:n1"], false);
     const units = getUnitsBySession(db, session.id);
     expect(units).toHaveLength(2);
     expect(units[0].label).toBe("First");
-    expect(units[0].entryPointNodeIds).toEqual(["n1"]);
+    expect(units[0].memberStableIds).toEqual(["fn:n1"]);
   });
-  it("updates and deletes units", () => {
+  it("deletes units", () => {
     const session = createSession(db, "feat", "main");
-    const unit = createUnit(db, session.id, 0, "Label", "Reason", []);
-    updateUnit(db, unit.id, "New", "NewReason", ["n2"]);
-    expect(getUnitsBySession(db, session.id)[0].label).toBe("New");
+    const unit = createUnit(db, session.id, 0, "Label", "Reason", "flow", [], false);
     deleteUnit(db, unit.id);
     expect(getUnitsBySession(db, session.id)).toHaveLength(0);
   });
@@ -47,24 +45,22 @@ describe("units repo", () => {
 describe("nodes repo", () => {
   it("creates and retrieves nodes", () => {
     const session = createSession(db, "feat", "main");
-    const unit = createUnit(db, session.id, 0, "Unit", "Reason", []);
     const node = createNode(db, {
-      sessionId: session.id, stableId: "fn:handleOrder", unitId: unit.id,
+      sessionId: session.id, stableId: "fn:handleOrder",
       label: "handleOrder", file: "src/orders.ts", startLine: 10, endLine: 30,
       changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false,
     });
     expect(getNode(db, node.id)).toBeDefined();
-    expect(getNodesByUnit(db, unit.id)).toHaveLength(1);
     expect(getNodesBySession(db, session.id)).toHaveLength(1);
   });
   it("gets node neighbors via edges", () => {
     const session = createSession(db, "feat", "main");
     const caller = createNode(db, {
-      sessionId: session.id, stableId: "fn:caller", unitId: null, label: "caller",
+      sessionId: session.id, stableId: "fn:caller", label: "caller",
       file: "a.ts", startLine: 1, endLine: 5, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false,
     });
     const callee = createNode(db, {
-      sessionId: session.id, stableId: "fn:callee", unitId: null, label: "callee",
+      sessionId: session.id, stableId: "fn:callee", label: "callee",
       file: "b.ts", startLine: 1, endLine: 5, changeStatus: "unchanged", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false,
     });
     db.prepare(
@@ -76,7 +72,7 @@ describe("nodes repo", () => {
   it("updates review status", () => {
     const session = createSession(db, "feat", "main");
     const node = createNode(db, {
-      sessionId: session.id, stableId: "fn:x", unitId: null, label: "x",
+      sessionId: session.id, stableId: "fn:x", label: "x",
       file: "x.ts", startLine: 1, endLine: 2, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false,
     });
     updateNodeReviewStatus(db, node.id, "reviewed-clean", 0);
@@ -89,7 +85,7 @@ describe("comments repo", () => {
   it("creates and lists comments", () => {
     const session = createSession(db, "feat", "main");
     const node = createNode(db, {
-      sessionId: session.id, stableId: "fn:x", unitId: null, label: "x",
+      sessionId: session.id, stableId: "fn:x", label: "x",
       file: "x.ts", startLine: 1, endLine: 2, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false,
     });
     createComment(db, session.id, node.id, "snippet", "needs fix", "callers: A");
@@ -98,7 +94,7 @@ describe("comments repo", () => {
   it("exports comments keyed by node id", () => {
     const session = createSession(db, "feat", "main");
     const node = createNode(db, {
-      sessionId: session.id, stableId: "fn:handleOrder", unitId: null, label: "handleOrder",
+      sessionId: session.id, stableId: "fn:handleOrder", label: "handleOrder",
       file: "src/orders.ts", startLine: 10, endLine: 30, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false,
     });
     createComment(db, session.id, node.id, "old", "bug here", "callers: routeHandler");
@@ -106,5 +102,16 @@ describe("comments repo", () => {
     expect(Object.keys(exported)).toHaveLength(1);
     expect(exported[node.id].stableId).toBe("fn:handleOrder");
     expect(exported[node.id].structuralContext).toBe("callers: routeHandler");
+  });
+});
+
+describe("units repo (kind-tagged)", () => {
+  it("round-trips kind, memberStableIds, and auto", () => {
+    const s = createSession(db, "feat", "main");
+    createUnit(db, s.id, 0, "Order flow", "the order path", "flow", ["fn:handleOrder"], false);
+    createUnit(db, s.id, 1, "Unassigned changes", "leftovers", "orphans", ["fn:x"], true);
+    const units = getUnitsBySession(db, s.id);
+    expect(units[0]).toMatchObject({ kind: "flow", memberStableIds: ["fn:handleOrder"], auto: false });
+    expect(units[1]).toMatchObject({ kind: "orphans", memberStableIds: ["fn:x"], auto: true });
   });
 });
