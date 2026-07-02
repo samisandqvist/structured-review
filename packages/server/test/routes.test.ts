@@ -7,6 +7,7 @@ import type { DB } from "../src/db/connection.js";
 import { createMemoryDatabase } from "../src/db/connection.js";
 import { createApp } from "../src/app.js";
 import { StubGraphProvider } from "../src/graph/stub.js";
+import type { Flow } from "../src/graph/provider.js";
 
 let db: DB;
 let app: ReturnType<typeof createApp>;
@@ -224,6 +225,34 @@ describe("GET /api/sessions/:id/flows", () => {
     expect(Array.isArray(body.flows)).toBe(true);
     // stub has no flows → both changed nodes are orphans
     expect(body.orphans.map((n: any) => n.stableId).sort()).toEqual(["fn:handleOrder", "fn:validateOrder"]);
+  });
+});
+
+class FlowStub extends StubGraphProvider {
+  override async getFlows(): Promise<Flow[]> {
+    return [{
+      id: 1, name: "handleOrder", criticality: 1, depth: 1,
+      steps: [
+        { stableId: "fn:handleOrder", label: "handleOrder", file: "src/orders.ts", startLine: 10, endLine: 30, isTest: false, depth: 0 },
+        { stableId: "fn:validateOrder", label: "validateOrder", file: "src/orders.ts", startLine: 35, endLine: 50, isTest: false, depth: 1 },
+        { stableId: "fn:saveOrder", label: "saveOrder", file: "src/db.ts", startLine: 100, endLine: 120, isTest: false, depth: 1 },
+      ],
+    }];
+  }
+}
+
+describe("flows route step identity", () => {
+  it("exposes stableId per step and changedStableIds per flow", async () => {
+    const app2 = createApp({ db, graphProvider: new FlowStub(), repoRoot: fixtureRoot });
+    const cr = await app2.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const res = await app2.request(`/api/sessions/${session.id}/flows`);
+    const { flows } = await res.json();
+    expect(flows[0].steps.map((s: any) => s.stableId)).toEqual(["fn:handleOrder", "fn:validateOrder", "fn:saveOrder"]);
+    expect(flows[0].changedStableIds.sort()).toEqual(["fn:handleOrder", "fn:validateOrder"]);
   });
 });
 
