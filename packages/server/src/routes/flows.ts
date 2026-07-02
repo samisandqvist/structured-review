@@ -16,11 +16,14 @@ export function createFlowsRoute(ctx: AppContext) {
 
     const allFlows = await ctx.graphProvider.getFlows();
     const flows = allFlows.map((f) => {
-      let affected = false;
+      const changedStableIds: string[] = [];
       const steps = f.steps.map((s) => {
         const node = byStable.get(s.stableId);
-        if (node && node.changeStatus === "changed") affected = true;
+        if (node && node.changeStatus === "changed" && !changedStableIds.includes(s.stableId)) {
+          changedStableIds.push(s.stableId);
+        }
         return {
+          stableId: s.stableId,
           label: s.label, file: s.file, startLine: s.startLine, endLine: s.endLine,
           isTest: s.isTest, depth: s.depth,
           nodeId: node?.id ?? null,
@@ -28,7 +31,11 @@ export function createFlowsRoute(ctx: AppContext) {
           reviewStatus: node?.reviewStatus ?? null,
         };
       });
-      return { id: f.id, name: f.name, criticality: f.criticality, depth: f.depth, affected, entryStableId: f.steps[0]?.stableId ?? "", steps };
+      const affected = changedStableIds.length > 0;
+      return {
+        id: f.id, name: f.name, criticality: f.criticality, depth: f.depth,
+        affected, changedStableIds, entryStableId: f.steps[0]?.stableId ?? "", steps,
+      };
     });
     flows.sort((a, b) => Number(b.affected) - Number(a.affected));
 
