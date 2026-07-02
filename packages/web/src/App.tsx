@@ -75,6 +75,12 @@ export function StatusBar({ sessionId }: { sessionId: string }) {
           </span>
         </div>
       )}
+      {sessionData?.stale && (
+        <div className="statusbar__field" data-testid="stale-chip" style={{ color: "var(--warn, #d98a2b)" }}>
+          <span style={{ fontSize: 13 }}>⚠</span>
+          <span style={{ fontSize: 14 }}>repo moved since session start</span>
+        </div>
+      )}
 
       <div style={{ flex: 1, minWidth: 8 }} />
 
