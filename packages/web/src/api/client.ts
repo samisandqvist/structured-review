@@ -79,7 +79,7 @@ export const api = {
       method: "POST", body: JSON.stringify({ branch, baseRef }),
     }),
   getSession: (id: string) =>
-    fetchJson<{ session: ReviewSession; units: Unit[]; coverage: Coverage }>(`/sessions/${id}`),
+    fetchJson<{ session: ReviewSession; units: Unit[]; coverage: Coverage; stale?: boolean }>(`/sessions/${id}`),
   updatePlan: (id: string, units: UnitInput[]) =>
     fetchJson<{ units: Unit[]; coverage: Coverage }>(`/sessions/${id}/plan`, {
       method: "PUT", body: JSON.stringify({ units }),
