@@ -41,7 +41,9 @@ export function PlanView({
           <UnitBlock
             key={u.id}
             unit={u}
-            flow={u.kind === "flow" ? flowByEntry.get(u.memberStableIds[0]) : undefined}
+            flows={u.kind === "flow"
+              ? u.memberStableIds.map((id) => flowByEntry.get(id)).filter((f): f is Flow => !!f)
+              : []}
             nodeByStable={nodeByStable}
             currentNodeId={currentNodeId}
             onSelectNode={onSelectNode}
@@ -53,24 +55,29 @@ export function PlanView({
 }
 
 function UnitBlock({
-  unit, flow, nodeByStable, currentNodeId, onSelectNode,
+  unit, flows, nodeByStable, currentNodeId, onSelectNode,
 }: {
   unit: Unit;
-  flow?: Flow;
+  flows: Flow[];
   nodeByStable: Map<string, Node>;
   currentNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
 }) {
   const memberNodes = unit.memberStableIds.map((s) => nodeByStable.get(s)).filter((n): n is Node => !!n);
 
-  // For a flow-unit with a resolved flow, progress is over the flow's changed steps.
-  // For orphan-units (or flow-units with no resolved flow), progress is over memberNodes.
-  const flowChangedSteps = unit.kind === "flow" && flow
-    ? flow.steps.filter((s) => s.changeStatus === "changed")
-    : null;
-  const total = flowChangedSteps ? flowChangedSteps.length : memberNodes.length;
-  const reviewed = flowChangedSteps
-    ? flowChangedSteps.filter((s) => s.reviewStatus && s.reviewStatus !== "unreviewed").length
+  // For a flow-unit with resolved flows, progress is over the distinct changed
+  // steps across all its tracks (a shared node counts once). For orphan-units
+  // (or flow-units with no resolved flow), progress is over memberNodes.
+  const changedByStable = new Map<string, FlowStep>();
+  for (const f of flows) {
+    for (const s of f.steps) {
+      if (s.changeStatus === "changed" && !changedByStable.has(s.stableId)) changedByStable.set(s.stableId, s);
+    }
+  }
+  const useFlowProgress = unit.kind === "flow" && flows.length > 0;
+  const total = useFlowProgress ? changedByStable.size : memberNodes.length;
+  const reviewed = useFlowProgress
+    ? [...changedByStable.values()].filter((s) => s.reviewStatus && s.reviewStatus !== "unreviewed").length
     : memberNodes.filter((n) => n.reviewStatus !== "unreviewed").length;
 
   return (
@@ -84,14 +91,20 @@ function UnitBlock({
       </div>
       {unit.rationale && <p className="unit__rationale">{unit.rationale}</p>}
 
-      {unit.kind === "flow" && flow ? (
-        <FlowTrack flow={flow} currentNodeId={currentNodeId} onSelectNode={onSelectNode} />
+      {unit.kind === "flow" && flows.length > 0 ? (
+        flows.map((f) => (
+          <div key={f.entryStableId}>
+            {flows.length > 1 && <div className="unit__track-caption">{f.name}</div>}
+            <FlowTrack flow={f} currentNodeId={currentNodeId} onSelectNode={onSelectNode} />
+          </div>
+        ))
       ) : (
         <div className="unit__chips">
           {memberNodes.map((n) => (
             <StepChip
               key={n.id}
               step={{
+                stableId: n.stableId,
                 label: n.label, file: n.file, startLine: n.startLine, endLine: n.endLine,
                 isTest: n.isTest, depth: 0, nodeId: n.id, changeStatus: n.changeStatus, reviewStatus: n.reviewStatus,
               }}

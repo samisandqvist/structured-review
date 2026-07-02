@@ -23,6 +23,7 @@ export interface Comment {
 }
 export interface NodeDiff { oldText: string; newText: string; }
 export interface FlowStep {
+  stableId: string;
   label: string;
   file: string;
   startLine: number;
@@ -39,6 +40,7 @@ export interface Flow {
   criticality: number;
   depth: number;
   affected: boolean;
+  changedStableIds: string[];
   steps: FlowStep[];
   entryStableId: string;
 }
@@ -56,7 +58,7 @@ export interface ChangeSubgraph { nodes: GraphNode[]; edges: GraphEdge[]; }
 
 export interface Coverage { changedTotal: number; covered: number; unassigned: number; }
 export type UnitInput =
-  | { kind: "flow"; flowEntryStableId: string; label: string; rationale?: string }
+  | { kind: "flow"; flowEntryStableId?: string; flowEntryStableIds?: string[]; label: string; rationale?: string }
   | { kind: "orphans"; orphanStableIds: string[]; label: string; rationale?: string };
 
 const API_BASE = "/api";
