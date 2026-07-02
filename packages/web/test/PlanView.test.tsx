@@ -1,8 +1,12 @@
 import { render, screen, fireEvent } from "@testing-library/react";
-import { vi } from "vitest";
+import { vi, beforeEach } from "vitest";
 import { PlanView } from "../src/components/PlanView.js";
+import { useUIStore } from "../src/store/ui.js";
+
+const mockUpdateStatus = vi.fn();
 
 vi.mock("../src/api/hooks.js", () => ({
+  useUpdateNodeStatus: () => ({ mutate: mockUpdateStatus }),
   useSession: () => ({ data: { units: [
     { id: "u1", position: 0, kind: "flow", label: "Order handling", rationale: "the order path", memberStableIds: ["fn:handleOrder"], auto: false },
     { id: "u2", position: 1, kind: "orphans", label: "Validation helpers", rationale: "", memberStableIds: ["fn:validateOrder"], auto: false },
@@ -37,6 +41,11 @@ vi.mock("../src/api/hooks.js", () => ({
   ] } }),
 }));
 
+beforeEach(() => {
+  mockUpdateStatus.mockClear();
+  useUIStore.setState({ collapsedUnits: [], expandedUnits: [] });
+});
+
 describe("PlanView", () => {
   it("renders units in order with flow track, orphan chips, and an unassigned warning", () => {
     render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={() => {}} />);
@@ -54,6 +63,24 @@ describe("PlanView", () => {
     const progress = orderUnit.querySelector(".unit__progress");
     expect(progress).not.toBeNull();
     expect(progress!.textContent).toBe("1/2");
+  });
+
+  it("collapses and expands a unit via the header chevron", () => {
+    render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={() => {}} />);
+    const chevron = screen.getAllByTestId("unit-collapse")[0];
+    fireEvent.click(chevron);
+    expect(screen.queryByText("handleOrder")).not.toBeInTheDocument();
+    fireEvent.click(chevron);
+    expect(screen.getByText("handleOrder")).toBeInTheDocument();
+  });
+
+  it("marks remaining nodes reviewed after confirm", () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={() => {}} />);
+    // First unit ("Order handling"): one unreviewed changed step (handleOrder)
+    fireEvent.click(screen.getAllByTestId("mark-remaining")[0]);
+    expect(mockUpdateStatus).toHaveBeenCalledTimes(1);
+    expect(mockUpdateStatus).toHaveBeenCalledWith({ nodeId: "n1", reviewStatus: "reviewed-clean" });
   });
 
   it("collapses consecutive off-path steps into an expandable run", () => {

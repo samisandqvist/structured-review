@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useFlows, useNodes, useSession } from "../api/hooks.js";
+import { useFlows, useNodes, useSession, useUpdateNodeStatus } from "../api/hooks.js";
+import { useUIStore } from "../store/ui.js";
 import type { Flow, FlowStep, Node, Unit } from "../api/client.js";
 
 export function PlanView({
@@ -41,6 +42,7 @@ export function PlanView({
         {units.map((u) => (
           <UnitBlock
             key={u.id}
+            sessionId={sessionId}
             unit={u}
             flows={u.kind === "flow"
               ? u.memberStableIds.map((id) => flowByEntry.get(id)).filter((f): f is Flow => !!f)
@@ -56,8 +58,9 @@ export function PlanView({
 }
 
 function UnitBlock({
-  unit, flows, nodeByStable, currentNodeId, onSelectNode,
+  sessionId, unit, flows, nodeByStable, currentNodeId, onSelectNode,
 }: {
+  sessionId: string;
   unit: Unit;
   flows: Flow[];
   nodeByStable: Map<string, Node>;
@@ -81,18 +84,57 @@ function UnitBlock({
     ? [...changedByStable.values()].filter((s) => s.reviewStatus && s.reviewStatus !== "unreviewed").length
     : memberNodes.filter((n) => n.reviewStatus !== "unreviewed").length;
 
+  // Collapse: manual toggle wins; a fully reviewed unit auto-collapses until
+  // deliberately re-expanded.
+  const collapsedSet = useUIStore((s) => s.collapsedUnits);
+  const expandedSet = useUIStore((s) => s.expandedUnits);
+  const toggle = useUIStore((s) => s.toggleUnitCollapsed);
+  const allReviewed = total > 0 && reviewed === total;
+  const collapsed = collapsedSet.includes(unit.id) || (allReviewed && !expandedSet.includes(unit.id));
+
+  const updateStatus = useUpdateNodeStatus(sessionId);
+  // Unreviewed changed nodeIds of this unit: flow-units from their tracks'
+  // steps, orphan-units (or unresolved flows) from memberNodes.
+  const remaining: string[] = useFlowProgress
+    ? [...changedByStable.values()]
+        .filter((s) => s.nodeId && (!s.reviewStatus || s.reviewStatus === "unreviewed"))
+        .map((s) => s.nodeId as string)
+    : memberNodes.filter((n) => n.reviewStatus === "unreviewed").map((n) => n.id);
+  const markRemaining = () => {
+    if (!window.confirm(`Mark ${remaining.length} node${remaining.length === 1 ? "" : "s"} reviewed?`)) return;
+    for (const nodeId of remaining) updateStatus.mutate({ nodeId, reviewStatus: "reviewed-clean" });
+  };
+
   return (
     <div className={`unit${unit.auto ? " unit--auto" : ""}`}>
       <div className="unit__bar">
+        <button
+          data-testid="unit-collapse"
+          className="unit__chevron"
+          aria-label={collapsed ? "expand unit" : "collapse unit"}
+          onClick={() => toggle(unit.id, collapsed)}
+        >
+          {collapsed ? "▸" : "▾"}
+        </button>
         <h3 className="unit__name">{unit.label}</h3>
         {unit.auto && <span className="unit__badge">unassigned</span>}
+        {remaining.length > 0 && (
+          <button
+            data-testid="mark-remaining"
+            className="unit__bulk"
+            title="Mark remaining reviewed"
+            onClick={markRemaining}
+          >
+            ✓✓
+          </button>
+        )}
         {total > 0 && (
           <span className="unit__progress">{reviewed}/{total}</span>
         )}
       </div>
-      {unit.rationale && <p className="unit__rationale">{unit.rationale}</p>}
+      {!collapsed && unit.rationale && <p className="unit__rationale">{unit.rationale}</p>}
 
-      {unit.kind === "flow" && flows.length > 0 ? (
+      {collapsed ? null : unit.kind === "flow" && flows.length > 0 ? (
         flows.map((f) => (
           <div key={f.entryStableId}>
             {flows.length > 1 && <div className="unit__track-caption">{f.name}</div>}
