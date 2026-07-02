@@ -9,7 +9,7 @@ import type { GraphProvider, GraphNode, GraphEdge, ChangeSubgraph, Flow } from "
 import type { ChangeStatus, EdgeType } from "../types.js";
 import { fileChangedRanges, rangesOverlap, repoRoot, type LineRange } from "../diff.js";
 import { isTestFile } from "../util.js";
-import { buildFlowTree, makeFlow } from "./flow-tree.js";
+import { buildFlowTree, makeFlow, reachesChanged } from "./flow-tree.js";
 
 /**
  * Graph provider backed by SCIP (Sourcegraph Code Intelligence Protocol).
@@ -163,8 +163,9 @@ export class ScipGraphProvider implements GraphProvider {
     return { callers, callees };
   }
 
-  async getFlows(): Promise<Flow[]> {
+  async getFlows(changedStableIds?: Set<string>): Promise<Flow[]> {
     const g = await this.buildGraph();
+    const relevant = changedStableIds ? reachesChanged(changedStableIds, g.callAdj) : undefined;
     const resolve = (sym: string) => {
       const n = g.nodes.get(sym);
       return n ? { label: n.label, file: n.file, startLine: n.startLine, endLine: n.endLine, isTest: n.isTest } : undefined;
@@ -174,7 +175,7 @@ export class ScipGraphProvider implements GraphProvider {
       ([sym, n]) => !n.isTest && (g.callAdj.get(sym)?.length ?? 0) > 0 && (g.callRev.get(sym)?.length ?? 0) === 0
     );
     return entries
-      .map(([sym, n], i) => makeFlow(i + 1, n.label, buildFlowTree(sym, g.callAdj, resolve)))
+      .map(([sym, n], i) => makeFlow(i + 1, n.label, buildFlowTree(sym, g.callAdj, resolve, relevant)))
       .filter((f) => f.steps.length > 1)
       .sort((a, b) => b.criticality - a.criticality);
   }

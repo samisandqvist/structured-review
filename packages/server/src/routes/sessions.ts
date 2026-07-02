@@ -121,10 +121,10 @@ export function createSessionsRoute(ctx: AppContext) {
     if (!session) return c.json({ error: "not found" }, 404);
     const body = await c.req.json<{ units: PlanUnitInput[] }>();
 
-    const flows = await ctx.graphProvider.getFlows();
     const changedStableIds = getNodesBySession(ctx.db, sessionId)
       .filter((n) => n.changeStatus === "changed")
       .map((n) => n.stableId);
+    const flows = await ctx.graphProvider.getFlows(new Set(changedStableIds));
     const { unassigned } = computeCoverage(body.units, flows, changedStableIds);
 
     for (const u of getUnitsBySession(ctx.db, sessionId)) deleteUnit(ctx.db, u.id);

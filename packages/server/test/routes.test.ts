@@ -256,6 +256,28 @@ describe("flows route step identity", () => {
   });
 });
 
+class RecordingFlowStub extends FlowStub {
+  received: Set<string> | undefined;
+  override async getFlows(changedStableIds?: Set<string>): Promise<Flow[]> {
+    this.received = changedStableIds;
+    return super.getFlows();
+  }
+}
+
+describe("flows route passes the changed set to the provider", () => {
+  it("provides changed session stableIds to getFlows", async () => {
+    const provider = new RecordingFlowStub();
+    const app2 = createApp({ db, graphProvider: provider, repoRoot: fixtureRoot });
+    const cr = await app2.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    await app2.request(`/api/sessions/${session.id}/flows`);
+    expect([...(provider.received ?? [])].sort()).toEqual(["fn:handleOrder", "fn:validateOrder"]);
+  });
+});
+
 describe("residual pseudo-nodes", () => {
   function gitInFixture(...a: string[]) {
     return execFileSync("git", a, { cwd: fixtureRoot, encoding: "utf8" });
