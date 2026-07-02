@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import { join } from "node:path";
 import { repoRoot } from "./diff.js";
 import type { Flow } from "./graph/provider.js";
-import { buildFlowTree, type FlowNodeInfo } from "./graph/flow-tree.js";
+import { buildFlowTree, reachesChanged, type FlowNodeInfo } from "./graph/flow-tree.js";
 
 /**
  * Read execution flows from CRG's graph store (used by CrgGraphProvider.getFlows).
@@ -29,7 +29,7 @@ interface NodeRow {
   is_test: number;
 }
 
-export function readFlows(root: string = repoRoot()): Flow[] {
+export function readFlows(root: string = repoRoot(), changedStableIds?: Set<string>): Flow[] {
   const dbPath = process.env.CRG_GRAPH_DB || join(root, ".code-review-graph", "graph.db");
   let db: Database.Database;
   try {
@@ -77,11 +77,12 @@ export function readFlows(root: string = repoRoot()): Flow[] {
         : undefined;
     };
 
+    const relevant = changedStableIds ? reachesChanged(changedStableIds, callAdj) : undefined;
     return flows
       .map((f) => {
         const entry = nodeById.get(f.entry_point_id);
         if (!entry) return null;
-        const steps = buildFlowTree(entry.qualified_name, callAdj, resolve);
+        const steps = buildFlowTree(entry.qualified_name, callAdj, resolve, relevant);
         const depth = steps.reduce((m, s) => Math.max(m, s.depth), 0);
         return { id: f.id, name: f.name, criticality: f.criticality, depth, steps };
       })

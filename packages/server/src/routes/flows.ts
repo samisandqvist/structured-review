@@ -14,7 +14,8 @@ export function createFlowsRoute(ctx: AppContext) {
     const nodes = getNodesBySession(ctx.db, c.req.param("id"));
     const byStable = new Map(nodes.map((n) => [n.stableId, n]));
 
-    const allFlows = await ctx.graphProvider.getFlows();
+    const changed = new Set(nodes.filter((n) => n.changeStatus === "changed").map((n) => n.stableId));
+    const allFlows = await ctx.graphProvider.getFlows(changed);
     const flows = allFlows.map((f) => {
       const changedStableIds: string[] = [];
       const steps = f.steps.map((s) => {
