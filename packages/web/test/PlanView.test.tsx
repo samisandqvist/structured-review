@@ -37,10 +37,19 @@ vi.mock("../src/api/hooks.js", () => ({
         { stableId: "fn:shared", label: "sharedHelper", file: "s.ts", startLine: 1, endLine: 2, isTest: false, depth: 1, nodeId: "n6", changeStatus: "changed", reviewStatus: "reviewed-clean" },
       ] },
   ], orphans: [] } }),
-  useNodes: () => ({ data: { nodes: [
-    { id: "n2", stableId: "fn:validateOrder", label: "validateOrder", file: "o.ts", startLine: 3, endLine: 4, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false },
-    { id: "n3", stableId: "fn:lonely", label: "lonely", file: "x.ts", startLine: 1, endLine: 2, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false },
-  ] } }),
+  useNodes: () => ({ data: {
+    nodes: [
+      { id: "n2", stableId: "fn:validateOrder", label: "validateOrder", file: "o.ts", startLine: 3, endLine: 4, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false },
+      { id: "n3", stableId: "fn:lonely", label: "lonely", file: "x.ts", startLine: 1, endLine: 2, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false },
+      { id: "n-t1", stableId: "fn:testOrder", label: "testOrder", file: "o.test.ts", startLine: 1, endLine: 9, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: true },
+      { id: "n-t2", stableId: "fn:testLegacy", label: "testLegacy", file: "o.test.ts", startLine: 12, endLine: 20, changeStatus: "unchanged", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: true },
+    ],
+    edges: [
+      { sourceNodeId: "n1", targetNodeId: "n-t1", edgeType: "test" },
+      { sourceNodeId: "n1", targetNodeId: "n-t2", edgeType: "test" },
+      { sourceNodeId: "n2", targetNodeId: "n-t2", edgeType: "test" },
+    ],
+  } }),
 }));
 
 beforeEach(() => {
@@ -66,6 +75,24 @@ describe("PlanView", () => {
     const progress = orderUnit.querySelector(".unit__progress");
     expect(progress).not.toBeNull();
     expect(progress!.textContent).toBe("1/2");
+  });
+
+  it("shows a test chip counting changed/total linked tests and selects a test on click", () => {
+    const onSelect = vi.fn();
+    render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={onSelect} />);
+    const chip = screen.getByTestId("test-chip-u1"); // handleOrder unit: n-t1 changed, n-t2 not
+    expect(chip.textContent).toContain("tests 1/2");
+    expect(chip.className).not.toContain("unit__tests--warn");
+    fireEvent.click(chip);
+    expect(onSelect).toHaveBeenCalledWith("n-t1");
+  });
+
+  it("warns when linked tests exist but none changed, hides when none linked", () => {
+    render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={() => {}} />);
+    const warnChip = screen.getByTestId("test-chip-u2"); // validateOrder unit: only unchanged n-t2
+    expect(warnChip.textContent).toContain("tests 0/1");
+    expect(warnChip.className).toContain("unit__tests--warn");
+    expect(screen.queryByTestId("test-chip-u4")).not.toBeInTheDocument(); // merged unit: no test edges
   });
 
   it("renames a unit inline on double-click", () => {
