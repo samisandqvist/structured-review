@@ -728,6 +728,11 @@ textarea:focus {
 .unit__chevron:hover { color: var(--text); }
 .unit__bulk { background: none; border: 1px solid var(--line-bright); border-radius: 4px; color: var(--dim); cursor: pointer; font-size: 11px; padding: 0 5px; }
 .unit__bulk:hover { color: var(--text); border-color: var(--text); }
+.unit__name-input {
+  font-size: 14px; font-weight: 700; font-family: inherit;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--line-bright); border-radius: 4px; padding: 0 4px;
+}
 .unit__rationale { margin: 2px 0 8px; font-size: 12px; color: var(--dim); line-height: 1.5; }
 .unit__chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .unit__track-caption { font-size: 11px; color: var(--dim); font-family: var(--mono); letter-spacing: 0.05em; margin: 6px 0 2px; }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useFlows, useNodes, useSession, useUpdateNodeStatus } from "../api/hooks.js";
+import { useFlows, useNodes, useSession, useUpdateNodeStatus, useUpdateUnit } from "../api/hooks.js";
 import { useUIStore } from "../store/ui.js";
 import type { Flow, FlowStep, Node, Unit } from "../api/client.js";
 
@@ -92,6 +92,11 @@ function UnitBlock({
   const allReviewed = total > 0 && reviewed === total;
   const collapsed = collapsedSet.includes(unit.id) || (allReviewed && !expandedSet.includes(unit.id));
 
+  // Inline rename (double-click) — the auto unit is not editable.
+  const updateUnit = useUpdateUnit(sessionId);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(unit.label);
+
   const updateStatus = useUpdateNodeStatus(sessionId);
   // Unreviewed changed nodeIds of this unit: flow-units from their tracks'
   // steps, orphan-units (or unresolved flows) from memberNodes.
@@ -106,7 +111,18 @@ function UnitBlock({
   };
 
   return (
-    <div className={`unit${unit.auto ? " unit--auto" : ""}`}>
+    <div
+      className={`unit${unit.auto ? " unit--auto" : ""}`}
+      draggable={!unit.auto && !editing}
+      onDragStart={(e) => e.dataTransfer.setData("text/unit-id", unit.id)}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        const draggedId = e.dataTransfer.getData("text/unit-id");
+        if (draggedId && draggedId !== unit.id && !unit.auto) {
+          updateUnit.mutate({ unitId: draggedId, position: unit.position });
+        }
+      }}
+    >
       <div className="unit__bar">
         <button
           data-testid="unit-collapse"
@@ -116,7 +132,27 @@ function UnitBlock({
         >
           {collapsed ? "▸" : "▾"}
         </button>
-        <h3 className="unit__name">{unit.label}</h3>
+        {editing && !unit.auto ? (
+          <input
+            autoFocus
+            className="unit__name-input"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && draft.trim()) {
+                updateUnit.mutate({ unitId: unit.id, label: draft.trim() });
+                setEditing(false);
+              }
+              if (e.key === "Escape") {
+                setDraft(unit.label);
+                setEditing(false);
+              }
+            }}
+            onBlur={() => setEditing(false)}
+          />
+        ) : (
+          <h3 className="unit__name" onDoubleClick={() => !unit.auto && setEditing(true)}>{unit.label}</h3>
+        )}
         {unit.auto && <span className="unit__badge">unassigned</span>}
         {remaining.length > 0 && (
           <button
