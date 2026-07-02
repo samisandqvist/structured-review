@@ -81,6 +81,7 @@ export function CommentBox({
 
       <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
         <textarea
+          data-testid="comment-input"
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
