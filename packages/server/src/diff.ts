@@ -55,6 +55,20 @@ export function rangesOverlap(ranges: LineRange[], startLine: number, endLine: n
   return ranges.some((r) => overlaps(r.start, r.end, startLine, endLine));
 }
 
+/** Repo-relative paths changed vs baseRef ([] on git failure). */
+export function changedFiles(baseRef: string, root: string = repoRoot()): string[] {
+  try {
+    const raw = execFileSync("git", ["diff", "--name-only", baseRef], {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+    });
+    return raw.split("\n").map((l) => l.trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 /** Parts of `ranges` not covered by any of `spans`. */
 export function subtractRanges(ranges: LineRange[], spans: LineRange[]): LineRange[] {
   const out: LineRange[] = [];

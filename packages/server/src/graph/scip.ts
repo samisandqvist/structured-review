@@ -8,6 +8,7 @@ import protobuf from "protobufjs";
 import type { GraphProvider, GraphNode, GraphEdge, ChangeSubgraph, Flow } from "./provider.js";
 import type { ChangeStatus, EdgeType } from "../types.js";
 import { fileChangedRanges, rangesOverlap, repoRoot, type LineRange } from "../diff.js";
+import { isTestFile } from "../util.js";
 import { buildFlowTree, makeFlow } from "./flow-tree.js";
 
 /**
@@ -29,9 +30,6 @@ import { buildFlowTree, makeFlow } from "./flow-tree.js";
  */
 const require = createRequire(import.meta.url);
 const SCIP_PROTO = fileURLToPath(new URL("./scip.proto", import.meta.url));
-
-const isTestFile = (p: string) =>
-  /\.(test|spec)\.[cm]?[jt]sx?$/.test(p) || /(^|\/)(test|tests|__tests__)\//.test(p);
 
 interface RawNode {
   label: string;
