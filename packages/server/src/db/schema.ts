@@ -4,7 +4,8 @@ CREATE TABLE IF NOT EXISTS review_sessions (
   branch TEXT NOT NULL,
   base_ref TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'planning',
-  created_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL,
+  head_sha TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS units (

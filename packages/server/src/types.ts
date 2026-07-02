@@ -14,6 +14,7 @@ export interface ReviewSession {
   baseRef: string;
   status: SessionStatus;
   createdAt: number;
+  headSha: string;
 }
 
 export interface Unit {

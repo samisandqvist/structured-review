@@ -55,6 +55,15 @@ export function rangesOverlap(ranges: LineRange[], startLine: number, endLine: n
   return ranges.some((r) => overlaps(r.start, r.end, startLine, endLine));
 }
 
+/** Current HEAD sha, or null when git is unavailable. */
+export function gitHeadSha(root: string = repoRoot()): string | null {
+  try {
+    return execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+  } catch {
+    return null;
+  }
+}
+
 /** Repo-relative paths changed vs baseRef ([] on git failure). */
 export function changedFiles(baseRef: string, root: string = repoRoot()): string[] {
   try {

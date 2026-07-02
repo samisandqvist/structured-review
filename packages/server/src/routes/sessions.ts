@@ -3,7 +3,7 @@ import type { AppContext } from "../app.js";
 import { createSession, getSession, updateSessionStatus } from "../repo/sessions.js";
 import { createUnit, getUnitsBySession, deleteUnit } from "../repo/units.js";
 import { createNode, getNodesBySession } from "../repo/nodes.js";
-import { fileChangedRanges, rangesOverlap, type LineRange } from "../diff.js";
+import { fileChangedRanges, gitHeadSha, rangesOverlap, type LineRange } from "../diff.js";
 import { computeResiduals } from "../residuals.js";
 import type { ChangeSubgraph, GraphNode } from "../graph/provider.js";
 import type { ChangeStatus } from "../types.js";
@@ -59,7 +59,7 @@ export function createSessionsRoute(ctx: AppContext) {
 
   router.post("/", async (c) => {
     const body = await c.req.json<{ branch: string; baseRef: string }>();
-    const session = createSession(ctx.db, body.branch, body.baseRef);
+    const session = createSession(ctx.db, body.branch, body.baseRef, gitHeadSha(ctx.repoRoot) ?? "");
     const subgraph = await ctx.graphProvider.getChangeSubgraph(body.branch, body.baseRef);
     const { nodes: keptNodes, status } = reconcileSubgraph(subgraph, body.baseRef, ctx.repoRoot!);
 
@@ -108,10 +108,15 @@ export function createSessionsRoute(ctx: AppContext) {
     const changed = getNodesBySession(ctx.db, session.id).filter((n) => n.changeStatus === "changed");
     const autoMembers = new Set(units.filter((u) => u.auto).flatMap((u) => u.memberStableIds));
     const unassigned = changed.filter((n) => autoMembers.has(n.stableId)).length;
+    // Stale = repo HEAD moved past the session snapshot; omitted when git (or
+    // the recorded sha) is unavailable — degrade silently.
+    const currentHead = gitHeadSha(ctx.repoRoot);
+    const stale = currentHead && session.headSha ? currentHead !== session.headSha : undefined;
     return c.json({
       session,
       units,
       coverage: { changedTotal: changed.length, covered: changed.length - unassigned, unassigned },
+      ...(stale === undefined ? {} : { stale }),
     });
   });
 

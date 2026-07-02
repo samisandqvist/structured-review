@@ -322,6 +322,44 @@ describe("residual pseudo-nodes", () => {
   });
 });
 
+describe("stale session indicator", () => {
+  it("reports stale=false right after creation and true after HEAD moves", async () => {
+    const g = (...a: string[]) => execFileSync("git", a, { cwd: fixtureRoot, encoding: "utf8" });
+    g("init", "-b", "main");
+    g("config", "user.email", "t@t");
+    g("config", "user.name", "t");
+    writeFileSync(join(fixtureRoot, "a.txt"), "1\n");
+    g("add", ".");
+    g("commit", "-m", "one");
+
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+
+    let res = await app.request(`/api/sessions/${session.id}`);
+    expect((await res.json()).stale).toBe(false);
+
+    writeFileSync(join(fixtureRoot, "a.txt"), "2\n");
+    g("add", ".");
+    g("commit", "-m", "two");
+    res = await app.request(`/api/sessions/${session.id}`);
+    expect((await res.json()).stale).toBe(true);
+  });
+
+  it("omits stale when the repo has no git", async () => {
+    // default beforeEach fixtureRoot is not a git repo
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const res = await app.request(`/api/sessions/${session.id}`);
+    expect((await res.json()).stale).toBeUndefined();
+  });
+});
+
 describe("GET /api/sessions/:id/changes", () => {
   it("returns one compact summary per changed node, no diff bodies", async () => {
     const cr = await app.request("/api/sessions", {
