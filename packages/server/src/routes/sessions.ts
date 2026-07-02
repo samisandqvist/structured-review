@@ -7,7 +7,7 @@ import { fileChangedRanges, rangesOverlap, type LineRange } from "../diff.js";
 import { computeResiduals } from "../residuals.js";
 import type { ChangeSubgraph, GraphNode } from "../graph/provider.js";
 import type { ChangeStatus } from "../types.js";
-import { computeCoverage, type PlanUnitInput } from "../coverage.js";
+import { computeCoverage, flowEntries, type PlanUnitInput } from "../coverage.js";
 import { randomId } from "../util.js";
 
 /**
@@ -130,7 +130,7 @@ export function createSessionsRoute(ctx: AppContext) {
     for (const u of getUnitsBySession(ctx.db, sessionId)) deleteUnit(ctx.db, u.id);
     let pos = 0;
     for (const u of body.units) {
-      const members = u.kind === "flow" ? [u.flowEntryStableId!] : (u.orphanStableIds ?? []);
+      const members = u.kind === "flow" ? flowEntries(u) : (u.orphanStableIds ?? []);
       createUnit(ctx.db, sessionId, pos++, u.label, u.rationale ?? "", u.kind, members, false);
     }
     if (unassigned.length > 0) {
