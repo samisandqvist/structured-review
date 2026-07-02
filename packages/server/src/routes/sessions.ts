@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { AppContext } from "../app.js";
 import { createSession, getSession, updateSessionStatus } from "../repo/sessions.js";
-import { createUnit, getUnitsBySession, deleteUnit } from "../repo/units.js";
+import { createUnit, getUnitsBySession, deleteUnit, updateUnitLabel, setUnitPositions } from "../repo/units.js";
 import { createNode, getNodesBySession } from "../repo/nodes.js";
 import { fileChangedRanges, gitHeadSha, rangesOverlap, type LineRange } from "../diff.js";
 import { computeResiduals } from "../residuals.js";
@@ -150,6 +150,23 @@ export function createSessionsRoute(ctx: AppContext) {
       unassigned: unassigned.length,
     };
     return c.json({ units: getUnitsBySession(ctx.db, sessionId), coverage });
+  });
+
+  router.patch("/:id/units/:unitId", async (c) => {
+    const sessionId = c.req.param("id");
+    if (!getSession(ctx.db, sessionId)) return c.json({ error: "not found" }, 404);
+    const units = getUnitsBySession(ctx.db, sessionId);
+    const unit = units.find((u) => u.id === c.req.param("unitId"));
+    if (!unit) return c.json({ error: "not found" }, 404);
+    if (unit.auto) return c.json({ error: "auto unit is not editable" }, 400);
+    const body = await c.req.json<{ label?: string; position?: number }>();
+    if (typeof body.label === "string" && body.label.trim()) updateUnitLabel(ctx.db, unit.id, body.label.trim());
+    if (typeof body.position === "number") {
+      const ids = units.map((u) => u.id).filter((id) => id !== unit.id);
+      ids.splice(Math.max(0, Math.min(body.position, ids.length)), 0, unit.id);
+      setUnitPositions(ctx.db, ids);
+    }
+    return c.json({ units: getUnitsBySession(ctx.db, sessionId) });
   });
 
   return router;
