@@ -3,7 +3,7 @@ import type { Node, ReviewStatus, ChangeStatus } from "../types.js";
 import { randomId } from "../util.js";
 
 interface NodeRow {
-  id: string; session_id: string; stable_id: string; unit_id: string | null;
+  id: string; session_id: string; stable_id: string;
   label: string; file: string; start_line: number; end_line: number;
   change_status: ChangeStatus; review_status: ReviewStatus; reviewed_in_unit: number | null;
   is_test: number;
@@ -11,7 +11,7 @@ interface NodeRow {
 
 function rowToNode(row: NodeRow): Node {
   return {
-    id: row.id, sessionId: row.session_id, stableId: row.stable_id, unitId: row.unit_id,
+    id: row.id, sessionId: row.session_id, stableId: row.stable_id,
     label: row.label, file: row.file, startLine: row.start_line, endLine: row.end_line,
     changeStatus: row.change_status, reviewStatus: row.review_status, reviewedInUnit: row.reviewed_in_unit,
     isTest: row.is_test === 1,
@@ -21,19 +21,15 @@ function rowToNode(row: NodeRow): Node {
 export function createNode(db: DB, node: Omit<Node, "id">): Node {
   const id = randomId("node");
   db.prepare(
-    `INSERT INTO nodes (id, session_id, stable_id, unit_id, label, file, start_line, end_line, change_status, review_status, reviewed_in_unit, is_test)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(id, node.sessionId, node.stableId, node.unitId, node.label, node.file,
+    `INSERT INTO nodes (id, session_id, stable_id, label, file, start_line, end_line, change_status, review_status, reviewed_in_unit, is_test)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(id, node.sessionId, node.stableId, node.label, node.file,
     node.startLine, node.endLine, node.changeStatus, node.reviewStatus, node.reviewedInUnit, node.isTest ? 1 : 0);
   return { ...node, id };
 }
 
 export function getNodesBySession(db: DB, sessionId: string): Node[] {
   return (db.prepare("SELECT * FROM nodes WHERE session_id = ?").all(sessionId) as NodeRow[]).map(rowToNode);
-}
-
-export function getNodesByUnit(db: DB, unitId: string): Node[] {
-  return (db.prepare("SELECT * FROM nodes WHERE unit_id = ?").all(unitId) as NodeRow[]).map(rowToNode);
 }
 
 export function getNode(db: DB, id: string): Node | undefined {

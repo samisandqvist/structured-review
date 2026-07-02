@@ -4,8 +4,8 @@ import { api } from "./client.js";
 export function useSession(sessionId: string) {
   return useQuery({ queryKey: ["session", sessionId], queryFn: () => api.getSession(sessionId) });
 }
-export function useNodes(sessionId: string, unitId?: string) {
-  return useQuery({ queryKey: ["nodes", sessionId, unitId], queryFn: () => api.getNodes(sessionId, unitId) });
+export function useNodes(sessionId: string) {
+  return useQuery({ queryKey: ["nodes", sessionId], queryFn: () => api.getNodes(sessionId) });
 }
 export function useNode(sessionId: string, nodeId: string | null) {
   return useQuery({

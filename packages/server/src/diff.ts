@@ -148,6 +148,57 @@ export function extractHunkDiff(rawDiff: string, startLine: number, endLine: num
   return { oldText: oldLines.join("\n"), newText: newLines.join("\n") };
 }
 
+/** The full unified diff (context 3) of a file vs baseRef, or null if none/errored. */
+export function fileUnifiedDiff(baseRef: string, file: string, root: string = repoRoot()): string | null {
+  try {
+    const raw = execFileSync("git", ["diff", "--text", "--unified=3", baseRef, "--", file], {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+    });
+    return raw.trim() ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Count +/- lines of a unified diff that fall within the new-file span [startLine, endLine]. */
+export function nodeChangeStats(rawDiff: string, startLine: number, endLine: number): { added: number; removed: number } {
+  let added = 0;
+  let removed = 0;
+  for (const h of parseHunks(rawDiff)) {
+    let newLine = h.newStart;
+    for (const line of h.lines) {
+      const marker = line[0];
+      const inSpan = newLine >= startLine && newLine <= endLine;
+      if (marker === "+") {
+        if (inSpan) added++;
+        newLine++;
+      } else if (marker === " ") {
+        newLine++;
+      } else {
+        // '-': no new-file line of its own; attribute to the upcoming new line.
+        if (inSpan) removed++;
+      }
+    }
+  }
+  return { added, removed };
+}
+
+/** The declaration line of a node: first non-blank line at/after startLine. */
+export function nodeSignature(file: string, startLine: number, root: string = repoRoot()): string {
+  try {
+    const lines = readFileSync(join(root, file), "utf8").split("\n");
+    for (let i = startLine - 1; i < Math.min(lines.length, startLine + 4); i++) {
+      const t = lines[i]?.trim();
+      if (t) return t;
+    }
+  } catch {
+    /* fall through */
+  }
+  return "";
+}
+
 function sliceBoth(root: string, file: string, startLine: number, endLine: number): NodeDiff {
   const slice = readSlice(root, file, startLine, endLine);
   return { oldText: slice, newText: slice };

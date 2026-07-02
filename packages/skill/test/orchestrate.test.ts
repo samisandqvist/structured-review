@@ -3,8 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("node:child_process", () => ({ spawn: vi.fn(() => ({ unref: vi.fn() })) }));
 
-import { createSession, writePlan, exportComments, orchestrate } from "../src/orchestrate.js";
-import type { ChangeSubgraph } from "../src/orchestrate.js";
+import { createSession, writePlan, exportComments, defaultPartition } from "../src/orchestrate.js";
 
 const mockFetch = vi.fn();
 global.fetch = mockFetch as unknown as typeof fetch;
@@ -26,34 +25,33 @@ describe("orchestrate", () => {
     expect(mockFetch).toHaveBeenCalledWith("http://localhost:3456/api/sessions", expect.objectContaining({ method: "POST" }));
   });
 
-  it("writes a plan", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse({ units: [] }));
-    await writePlan("s1", [{ label: "U1", rationale: "r", entryPointNodeIds: [] }]);
-    expect(mockFetch).toHaveBeenCalledWith("http://localhost:3456/api/sessions/s1/plan", expect.objectContaining({ method: "PUT" }));
-  });
-
   it("exports comments", async () => {
     mockFetch.mockResolvedValueOnce(mockResponse({ node1: { text: "fix" } }));
     const result = await exportComments("s1");
     expect(result).toEqual({ node1: { text: "fix" } });
   });
+});
 
-  it("orchestrates the full flow", async () => {
-    const subgraph = {
-      nodes: [{ stableId: "fn:a", label: "a", file: "a.ts", startLine: 1, endLine: 5, isEntryPoint: true, changeStatus: "changed" }],
-      edges: [],
-    };
-    mockFetch
-      .mockResolvedValueOnce(mockResponse({ session: { id: "s1", branch: "feat", baseRef: "main", status: "planning", createdAt: 0 }, subgraph }))
-      .mockResolvedValueOnce(mockResponse({ units: [] }))
-      .mockResolvedValueOnce(mockResponse({}));
-
-    const partitionFn = vi.fn((s: ChangeSubgraph) => [
-      { label: "Unit A", rationale: "all in one", entryPointNodeIds: s.nodes.map(n => n.stableId) },
+describe("defaultPartition", () => {
+  it("makes one flow-unit per affected flow plus an orphan unit", () => {
+    const flows = [
+      { id: 1, name: "handleOrder", affected: true, entryStableId: "fn:handleOrder", steps: [] },
+      { id: 2, name: "unused", affected: false, entryStableId: "fn:unused", steps: [] },
+    ];
+    const orphans = [{ stableId: "fn:helper", label: "helper", file: "h.ts" }];
+    const units = defaultPartition(flows as any, orphans as any);
+    expect(units).toEqual([
+      { kind: "flow", flowEntryStableId: "fn:handleOrder", label: "handleOrder" },
+      { kind: "orphans", orphanStableIds: ["fn:helper"], label: "Other changes" },
     ]);
+  });
+});
 
-    await orchestrate("feat", "main", partitionFn);
-    expect(partitionFn).toHaveBeenCalledWith(subgraph);
-    expect(mockFetch).toHaveBeenCalledTimes(3);
+describe("writePlan", () => {
+  it("PUTs kind-tagged units and returns coverage", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse({ units: [], coverage: { changedTotal: 1, covered: 1, unassigned: 0 } }));
+    const r = await writePlan("s1", [{ kind: "flow", flowEntryStableId: "fn:a", label: "A" }]);
+    expect(r.coverage.unassigned).toBe(0);
+    expect(mockFetch).toHaveBeenCalledWith("http://localhost:3456/api/sessions/s1/plan", expect.objectContaining({ method: "PUT" }));
   });
 });

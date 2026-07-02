@@ -6,6 +6,7 @@ import { createNodesRoute } from "./routes/nodes.js";
 import { createCommentsRoute } from "./routes/comments.js";
 import { createEventsRoute } from "./routes/events.js";
 import { createFlowsRoute } from "./routes/flows.js";
+import { createChangesRoute } from "./routes/changes.js";
 
 export interface AppContext {
   db: DB;
@@ -20,5 +21,6 @@ export function createApp(ctx: AppContext) {
   app.route("/api/sessions", createCommentsRoute(ctx));
   app.route("/api/sessions", createEventsRoute(ctx));
   app.route("/api/sessions", createFlowsRoute(ctx));
+  app.route("/api/sessions", createChangesRoute(ctx));
   return app;
 }

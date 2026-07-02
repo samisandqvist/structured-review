@@ -1,8 +1,7 @@
 import { useRef, useCallback } from "react";
 import { useUIStore } from "../store/ui.js";
 import { useNode, useUpdateNodeStatus } from "../api/hooks.js";
-import { GraphView } from "./GraphView.js";
-import { FlowsView } from "./FlowsView.js";
+import { PlanView } from "./PlanView.js";
 import { DiffView } from "./DiffView.js";
 import { CommentBox } from "./CommentBox.js";
 
@@ -16,7 +15,6 @@ export function SplitLayout({
   const splitRatio = useUIStore((s) => s.splitRatio);
   const setSplitRatio = useUIStore((s) => s.setSplitRatio);
   const setCurrentNode = useUIStore((s) => s.setCurrentNode);
-  const viewMode = useUIStore((s) => s.viewMode);
   const containerRef = useRef<HTMLDivElement>(null);
   const { data: nodeData } = useNode(sessionId, currentNodeId);
   const updateStatus = useUpdateNodeStatus(sessionId);
@@ -47,19 +45,7 @@ export function SplitLayout({
     >
       <div ref={containerRef} style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         <div style={{ flex: splitRatio, overflow: "hidden", height: "100%" }}>
-          {viewMode === "flows" ? (
-            <FlowsView
-              sessionId={sessionId}
-              currentNodeId={currentNodeId}
-              onSelectNode={setCurrentNode}
-            />
-          ) : (
-            <GraphView
-              sessionId={sessionId}
-              currentNodeId={currentNodeId}
-              onSelectNode={setCurrentNode}
-            />
-          )}
+          <PlanView sessionId={sessionId} currentNodeId={currentNodeId} onSelectNode={setCurrentNode} />
         </div>
 
         <Divider onMouseDown={handleMouseDown} />
@@ -153,8 +139,7 @@ function EmptyState() {
         <div style={{ fontSize: 28, marginBottom: 12, opacity: 0.5 }}>⌖</div>
         <h2 style={{ fontSize: 17, marginBottom: 6 }}>Pick a node to start the walk</h2>
         <p style={{ color: "var(--dim)", fontSize: 15, lineHeight: 1.6, margin: 0 }}>
-          The graph is the change, laid out by call depth — callers on top,
-          callees below. Select any node to read its diff and leave a comment.
+          Pick a unit&apos;s node to read its diff and leave a comment.
         </p>
       </div>
     </div>

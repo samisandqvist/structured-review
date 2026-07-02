@@ -29,12 +29,13 @@ function ReviewShell() {
 
 /** The header reads like an instrument status line: who we are, what branch /
  *  unit is under the lens, and how far the walk has gotten. */
-function StatusBar({ sessionId }: { sessionId: string }) {
+export function StatusBar({ sessionId }: { sessionId: string }) {
   const { data: sessionData } = useSession(sessionId);
   const { data: nodeData } = useNodes(sessionId);
 
   const session = sessionData?.session;
-  const unit = sessionData?.units?.[0];
+  const coverage = sessionData?.coverage;
+  const units = sessionData?.units ?? [];
   const nodes = nodeData?.nodes ?? [];
   const changed = nodes.filter((n) => n.changeStatus === "changed");
   const reviewed = changed.filter((n) => n.reviewStatus !== "unreviewed").length;
@@ -60,18 +61,19 @@ function StatusBar({ sessionId }: { sessionId: string }) {
         </span>
       </div>
 
-      <div
-        className="statusbar__rule"
-        style={{ width: 1, height: 22, background: "var(--line)" }}
-      />
-
-      <ViewToggle />
-
       <Field label="branch">{session?.branch ?? "—"}</Field>
-      {unit && (
-        <Field label="unit" className="statusbar__field--unit">
-          {unit.label}
-        </Field>
+      {coverage && (
+        <div
+          className="statusbar__field"
+          data-testid="coverage-chip"
+          data-warn={coverage.unassigned > 0}
+          style={{ color: coverage.unassigned > 0 ? "var(--warn, #d98a2b)" : "var(--text)" }}
+        >
+          <span style={{ color: "var(--dim)", fontSize: 13, letterSpacing: "0.08em" }}>PLAN</span>
+          <span style={{ fontSize: 15, fontVariantNumeric: "tabular-nums" }}>
+            {units.length} units · {coverage.covered}/{coverage.changedTotal} changes
+          </span>
+        </div>
       )}
 
       <div style={{ flex: 1, minWidth: 8 }} />
@@ -111,24 +113,6 @@ function StatusBar({ sessionId }: { sessionId: string }) {
         </div>
       )}
     </header>
-  );
-}
-
-function ViewToggle() {
-  const viewMode = useUIStore((s) => s.viewMode);
-  const setViewMode = useUIStore((s) => s.setViewMode);
-  return (
-    <div className="viewtoggle statusbar__rule">
-      {(["graph", "flows"] as const).map((mode) => (
-        <button
-          key={mode}
-          className={`viewtoggle__opt${viewMode === mode ? " is-active" : ""}`}
-          onClick={() => setViewMode(mode)}
-        >
-          {mode === "graph" ? "Graph" : "Flows"}
-        </button>
-      ))}
-    </div>
   );
 }
 

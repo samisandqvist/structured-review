@@ -46,7 +46,7 @@ describe("GET /api/sessions/:id", () => {
 });
 
 describe("PUT /api/sessions/:id/plan", () => {
-  it("replaces the plan with new units", async () => {
+  it("replaces the plan with kind-tagged units", async () => {
     const cr = await app.request("/api/sessions", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "feat", baseRef: "main" }),
@@ -55,14 +55,19 @@ describe("PUT /api/sessions/:id/plan", () => {
     const res = await app.request(`/api/sessions/${session.id}/plan`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        units: [{ label: "Order handlers", rationale: "all order endpoints", entryPointNodeIds: ["fn:handleOrder"] }],
+        units: [
+          { kind: "flow", flowEntryStableId: "fn:handleOrder", label: "Order handling", rationale: "the order path" },
+          { kind: "orphans", orphanStableIds: ["fn:validateOrder"], label: "Validation helpers" },
+        ],
       }),
     });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.units).toHaveLength(1);
-    expect(body.units[0].label).toBe("Order handlers");
-    expect(body.units[0].position).toBe(0);
+    expect(body.units.length).toBeGreaterThanOrEqual(2);
+    expect(body.units[0].kind).toBe("flow");
+    expect(body.units[0].memberStableIds).toEqual(["fn:handleOrder"]);
+    expect(body.units[1].kind).toBe("orphans");
+    expect(body.units[1].memberStableIds).toEqual(["fn:validateOrder"]);
   });
 });
 
@@ -134,6 +139,31 @@ describe("GET /api/sessions/:id/comments", () => {
   });
 });
 
+describe("coverage reconciliation", () => {
+  it("sweeps uncovered changed nodes into an auto Unassigned unit and reports coverage", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    // Stub flows = [], so an orphan-unit covering one changed node leaves the rest unassigned.
+    const res = await app.request(`/api/sessions/${session.id}/plan`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ units: [{ kind: "orphans", orphanStableIds: ["fn:handleOrder"], label: "Orders" }] }),
+    });
+    const body = await res.json();
+    expect(body.coverage.changedTotal).toBe(2); // fn:handleOrder + fn:validateOrder are "changed" in the stub
+    expect(body.coverage.covered).toBe(1);
+    expect(body.coverage.unassigned).toBe(1);
+    const auto = body.units.find((u: any) => u.auto);
+    expect(auto.label).toBe("Unassigned changes");
+    expect(auto.memberStableIds).toEqual(["fn:validateOrder"]);
+
+    const sres = await app.request(`/api/sessions/${session.id}`);
+    expect((await sres.json()).coverage).toEqual({ changedTotal: 2, covered: 1, unassigned: 1 });
+  });
+});
+
 describe("GET /api/sessions/:id/export", () => {
   it("exports comments keyed by node id with structural context", async () => {
     const cr = await app.request("/api/sessions", {
@@ -152,5 +182,43 @@ describe("GET /api/sessions/:id/export", () => {
     const body = await res.json();
     expect(Object.keys(body).length).toBe(1);
     expect(body[nodes[0].id].text).toBe("fix this");
+  });
+});
+
+describe("GET /api/sessions/:id/flows", () => {
+  it("returns flows and the orphan set (changed nodes in no flow)", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const res = await app.request(`/api/sessions/${session.id}/flows`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.flows)).toBe(true);
+    // stub has no flows → both changed nodes are orphans
+    expect(body.orphans.map((n: any) => n.stableId).sort()).toEqual(["fn:handleOrder", "fn:validateOrder"]);
+  });
+});
+
+describe("GET /api/sessions/:id/changes", () => {
+  it("returns one compact summary per changed node, no diff bodies", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const res = await app.request(`/api/sessions/${session.id}/changes`);
+    expect(res.status).toBe(200);
+    const { changes } = await res.json();
+    expect(changes.map((c: any) => c.stableId).sort()).toEqual(["fn:handleOrder", "fn:validateOrder"]);
+    for (const ch of changes) {
+      expect(ch).toHaveProperty("added");
+      expect(ch).toHaveProperty("removed");
+      expect(ch).toHaveProperty("signature");
+      expect(ch.kind).toBe("function");
+      expect(ch).not.toHaveProperty("oldText");
+      expect(ch).not.toHaveProperty("newText");
+    }
   });
 });
