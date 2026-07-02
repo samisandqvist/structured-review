@@ -51,6 +51,10 @@ Steps:
    Do not split or merge flows.
 3. Group the `orphans` into orphan-units by shared purpose (e.g. "validation helpers",
    "test fixtures"), using each change's `kind`/`file`/`signature` from `changes`.
+   Changes with `kind: "file"` are module-scope / non-code-graph changes (types,
+   imports, configs, dependency manifests) — group them by purpose (e.g. "dependency
+   & config changes", "type/contract edits") and order them early: they are the
+   foundations the flows sit on.
 4. Give each unit a `label` and an optional short `rationale` describing **what the unit
    does** (its functionality/purpose) — not why you ordered it.
 5. Order units for a sensible walk (foundational/helper changes first, then the flows that
