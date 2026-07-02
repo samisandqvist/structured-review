@@ -322,6 +322,71 @@ describe("residual pseudo-nodes", () => {
   });
 });
 
+describe("PATCH /api/sessions/:id/units/:unitId", () => {
+  async function makePlan() {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const pr = await app.request(`/api/sessions/${session.id}/plan`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ units: [
+        { kind: "orphans", orphanStableIds: ["fn:handleOrder"], label: "A" },
+        { kind: "orphans", orphanStableIds: ["fn:validateOrder"], label: "B" },
+      ] }),
+    });
+    const { units } = await pr.json();
+    return { session, units };
+  }
+
+  it("renames a unit", async () => {
+    const { session, units } = await makePlan();
+    const res = await app.request(`/api/sessions/${session.id}/units/${units[0].id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label: "Renamed" }),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).units[0].label).toBe("Renamed");
+  });
+
+  it("moves a unit and reindexes positions densely", async () => {
+    const { session, units } = await makePlan();
+    const res = await app.request(`/api/sessions/${session.id}/units/${units[1].id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ position: 0 }),
+    });
+    const body = await res.json();
+    expect(body.units.map((u: any) => u.label)).toEqual(["B", "A"]);
+    expect(body.units.map((u: any) => u.position)).toEqual([0, 1]);
+  });
+
+  it("rejects edits to the auto unit and 404s unknown units", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    // empty plan → both stub changed nodes swept into the auto unit
+    await app.request(`/api/sessions/${session.id}/plan`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ units: [] }),
+    });
+    const ur = await app.request(`/api/sessions/${session.id}`);
+    const autoUnit = (await ur.json()).units.find((u: any) => u.auto);
+    const res = await app.request(`/api/sessions/${session.id}/units/${autoUnit.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label: "nope" }),
+    });
+    expect(res.status).toBe(400);
+    const missing = await app.request(`/api/sessions/${session.id}/units/unit_missing`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label: "x" }),
+    });
+    expect(missing.status).toBe(404);
+  });
+});
+
 describe("stale session indicator", () => {
   it("reports stale=false right after creation and true after HEAD moves", async () => {
     const g = (...a: string[]) => execFileSync("git", a, { cwd: fixtureRoot, encoding: "utf8" });
