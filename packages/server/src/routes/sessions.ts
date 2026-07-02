@@ -4,6 +4,7 @@ import { createSession, getSession, updateSessionStatus } from "../repo/sessions
 import { createUnit, getUnitsBySession, deleteUnit } from "../repo/units.js";
 import { createNode, getNodesBySession } from "../repo/nodes.js";
 import { fileChangedRanges, rangesOverlap, type LineRange } from "../diff.js";
+import { computeResiduals } from "../residuals.js";
 import type { ChangeSubgraph, GraphNode } from "../graph/provider.js";
 import type { ChangeStatus } from "../types.js";
 import { computeCoverage, type PlanUnitInput } from "../coverage.js";
@@ -19,14 +20,15 @@ import { randomId } from "../util.js";
  */
 function reconcileSubgraph(
   subgraph: ChangeSubgraph,
-  baseRef: string
+  baseRef: string,
+  root: string
 ): { nodes: GraphNode[]; status: Map<string, ChangeStatus> } {
   const rangesByFile = new Map<string, LineRange[] | null>();
   const status = new Map<string, ChangeStatus>();
   for (const n of subgraph.nodes) {
     let cs = n.changeStatus;
     if (cs === "changed") {
-      if (!rangesByFile.has(n.file)) rangesByFile.set(n.file, fileChangedRanges(baseRef, n.file));
+      if (!rangesByFile.has(n.file)) rangesByFile.set(n.file, fileChangedRanges(baseRef, n.file, root));
       const ranges = rangesByFile.get(n.file);
       if (ranges && ranges.length > 0 && !rangesOverlap(ranges, n.startLine, n.endLine)) cs = "unchanged";
     }
@@ -59,7 +61,7 @@ export function createSessionsRoute(ctx: AppContext) {
     const body = await c.req.json<{ branch: string; baseRef: string }>();
     const session = createSession(ctx.db, body.branch, body.baseRef);
     const subgraph = await ctx.graphProvider.getChangeSubgraph(body.branch, body.baseRef);
-    const { nodes: keptNodes, status } = reconcileSubgraph(subgraph, body.baseRef);
+    const { nodes: keptNodes, status } = reconcileSubgraph(subgraph, body.baseRef, ctx.repoRoot!);
 
     for (const gnode of keptNodes) {
       createNode(ctx.db, {
@@ -67,6 +69,23 @@ export function createSessionsRoute(ctx: AppContext) {
         label: gnode.label, file: gnode.file, startLine: gnode.startLine, endLine: gnode.endLine,
         changeStatus: status.get(gnode.stableId)!, reviewStatus: "unreviewed", reviewedInUnit: null,
         isTest: gnode.isTest,
+      });
+    }
+
+    // Residual coverage: changed lines outside every node span become one
+    // pseudo-node per file, so types/imports/configs still enter the universe.
+    const spansByFile = new Map<string, LineRange[]>();
+    for (const n of keptNodes) {
+      const spans = spansByFile.get(n.file) ?? [];
+      spans.push({ start: n.startLine, end: n.endLine });
+      spansByFile.set(n.file, spans);
+    }
+    for (const r of computeResiduals(body.baseRef, spansByFile, ctx.repoRoot!)) {
+      createNode(ctx.db, {
+        sessionId: session.id, stableId: r.stableId,
+        label: r.label, file: r.file, startLine: r.startLine, endLine: r.endLine,
+        changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null,
+        isTest: r.isTest,
       });
     }
     const dbNodes = getNodesBySession(ctx.db, session.id);
