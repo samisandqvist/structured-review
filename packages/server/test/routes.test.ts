@@ -79,6 +79,22 @@ describe("PUT /api/sessions/:id/plan", () => {
     expect(body.units[1].kind).toBe("orphans");
     expect(body.units[1].memberStableIds).toEqual(["fn:validateOrder"]);
   });
+
+  it("stores multi-entry flow-units with deduped members", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const res = await app.request(`/api/sessions/${session.id}/plan`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        units: [{ kind: "flow", flowEntryStableIds: ["fn:a", "fn:b", "fn:a"], label: "merged" }],
+      }),
+    });
+    const body = await res.json();
+    expect(body.units[0].memberStableIds).toEqual(["fn:a", "fn:b"]);
+  });
 });
 
 describe("GET /api/sessions/:id/nodes", () => {
