@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useFlows, useNodes, useSession } from "../api/hooks.js";
 import type { Flow, FlowStep, Node, Unit } from "../api/client.js";
 
@@ -118,6 +119,26 @@ function UnitBlock({
   );
 }
 
+type TrackRow =
+  | { kind: "step"; step: FlowStep; index: number }
+  | { kind: "run"; steps: FlowStep[]; index: number };
+
+/** Group consecutive off-path context steps into one collapsible run. */
+function trackRows(steps: FlowStep[]): TrackRow[] {
+  const rows: TrackRow[] = [];
+  for (let i = 0; i < steps.length; i++) {
+    const s = steps[i];
+    if (!s.offPath) {
+      rows.push({ kind: "step", step: s, index: i });
+      continue;
+    }
+    const run: FlowStep[] = [s];
+    while (i + 1 < steps.length && steps[i + 1].offPath) run.push(steps[++i]);
+    rows.push({ kind: "run", steps: run, index: i - run.length + 1 });
+  }
+  return rows;
+}
+
 function FlowTrack({
   flow, currentNodeId, onSelectNode,
 }: {
@@ -125,14 +146,31 @@ function FlowTrack({
   currentNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
 }) {
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+
+  const renderStep = (s: FlowStep, key: string) => (
+    <div key={key} className="flow__row" style={{ paddingLeft: s.depth * 22 }}>
+      {s.depth > 0 && <span className="flow__branch">└</span>}
+      <StepChip step={s} current={!!s.nodeId && s.nodeId === currentNodeId} onSelect={onSelectNode} />
+    </div>
+  );
+
   return (
     <div className="flow__tree">
-      {flow.steps.map((s, i) => (
-        <div key={i} className="flow__row" style={{ paddingLeft: s.depth * 22 }}>
-          {s.depth > 0 && <span className="flow__branch">└</span>}
-          <StepChip step={s} current={!!s.nodeId && s.nodeId === currentNodeId} onSelect={onSelectNode} />
-        </div>
-      ))}
+      {trackRows(flow.steps).map((row) => {
+        if (row.kind === "step") return renderStep(row.step, `s-${row.index}`);
+        if (expanded.has(row.index)) return row.steps.map((s, j) => renderStep(s, `s-${row.index}-${j}`));
+        return (
+          <div key={`run-${row.index}`} className="flow__row" style={{ paddingLeft: row.steps[0].depth * 22 }}>
+            <button
+              className="flow__collapsed"
+              onClick={() => setExpanded((e) => new Set(e).add(row.index))}
+            >
+              ⋯ {row.steps.length} unchanged call{row.steps.length === 1 ? "" : "s"}
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }
