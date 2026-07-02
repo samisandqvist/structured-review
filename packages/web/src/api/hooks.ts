@@ -33,6 +33,16 @@ export function useUpdateNodeStatus(sessionId: string) {
     },
   });
 }
+export function useUpdateUnit(sessionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ unitId, ...patch }: { unitId: string; label?: string; position?: number }) =>
+      api.updateUnit(sessionId, unitId, patch),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["session", sessionId] });
+    },
+  });
+}
 export function useCreateComment(sessionId: string) {
   const qc = useQueryClient();
   return useMutation({

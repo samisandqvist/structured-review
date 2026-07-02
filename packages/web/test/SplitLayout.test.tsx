@@ -20,6 +20,7 @@ vi.mock("../src/api/hooks.js", () => ({
     data: nodeId ? { node: nodes.find((n) => n.id === nodeId), callers: [], callees: [], diff: { oldText: "", newText: "" } } : undefined,
   }),
   useUpdateNodeStatus: () => ({ mutate: mockMutate }),
+  useUpdateUnit: () => ({ mutate: vi.fn() }),
   useComments: () => ({ data: { comments: [] } }),
   useCreateComment: () => ({ mutate: vi.fn() }),
 }));

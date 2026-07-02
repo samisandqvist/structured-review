@@ -4,9 +4,11 @@ import { PlanView } from "../src/components/PlanView.js";
 import { useUIStore } from "../src/store/ui.js";
 
 const mockUpdateStatus = vi.fn();
+const mockUpdateUnit = vi.fn();
 
 vi.mock("../src/api/hooks.js", () => ({
   useUpdateNodeStatus: () => ({ mutate: mockUpdateStatus }),
+  useUpdateUnit: () => ({ mutate: mockUpdateUnit }),
   useSession: () => ({ data: { units: [
     { id: "u1", position: 0, kind: "flow", label: "Order handling", rationale: "the order path", memberStableIds: ["fn:handleOrder"], auto: false },
     { id: "u2", position: 1, kind: "orphans", label: "Validation helpers", rationale: "", memberStableIds: ["fn:validateOrder"], auto: false },
@@ -43,6 +45,7 @@ vi.mock("../src/api/hooks.js", () => ({
 
 beforeEach(() => {
   mockUpdateStatus.mockClear();
+  mockUpdateUnit.mockClear();
   useUIStore.setState({ collapsedUnits: [], expandedUnits: [] });
 });
 
@@ -63,6 +66,21 @@ describe("PlanView", () => {
     const progress = orderUnit.querySelector(".unit__progress");
     expect(progress).not.toBeNull();
     expect(progress!.textContent).toBe("1/2");
+  });
+
+  it("renames a unit inline on double-click", () => {
+    render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={() => {}} />);
+    fireEvent.doubleClick(screen.getByText("Order handling"));
+    const input = screen.getByDisplayValue("Order handling");
+    fireEvent.change(input, { target: { value: "Orders end-to-end" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(mockUpdateUnit).toHaveBeenCalledWith({ unitId: "u1", label: "Orders end-to-end" });
+  });
+
+  it("does not allow renaming the auto unit", () => {
+    render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={() => {}} />);
+    fireEvent.doubleClick(screen.getByText("Unassigned changes"));
+    expect(screen.queryByDisplayValue("Unassigned changes")).not.toBeInTheDocument();
   });
 
   it("collapses and expands a unit via the header chevron", () => {

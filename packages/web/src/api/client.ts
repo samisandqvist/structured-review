@@ -100,6 +100,10 @@ export const api = {
     fetchJson<{ comment: Comment }>(`/sessions/${id}/comments`, {
       method: "POST", body: JSON.stringify({ nodeId, hunkSnippet, text, structuralContext }),
     }),
+  updateUnit: (sessionId: string, unitId: string, patch: { label?: string; position?: number }) =>
+    fetchJson<{ units: Unit[] }>(`/sessions/${sessionId}/units/${unitId}`, {
+      method: "PATCH", body: JSON.stringify(patch),
+    }),
   getFlows: (id: string) => fetchJson<{ flows: Flow[]; orphans: Node[] }>(`/sessions/${id}/flows`),
   exportComments: (id: string) =>
     fetchJson<Record<string, unknown>>(`/sessions/${id}/export`),
