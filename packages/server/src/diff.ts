@@ -55,6 +55,25 @@ export function rangesOverlap(ranges: LineRange[], startLine: number, endLine: n
   return ranges.some((r) => overlaps(r.start, r.end, startLine, endLine));
 }
 
+/** Parts of `ranges` not covered by any of `spans`. */
+export function subtractRanges(ranges: LineRange[], spans: LineRange[]): LineRange[] {
+  const out: LineRange[] = [];
+  for (const range of ranges) {
+    let pieces: LineRange[] = [range];
+    for (const s of spans) {
+      const next: LineRange[] = [];
+      for (const p of pieces) {
+        if (s.end < p.start || s.start > p.end) { next.push(p); continue; }
+        if (s.start > p.start) next.push({ start: p.start, end: s.start - 1 });
+        if (s.end < p.end) next.push({ start: s.end + 1, end: p.end });
+      }
+      pieces = next;
+    }
+    out.push(...pieces);
+  }
+  return out;
+}
+
 let cachedRoot: string | undefined;
 export function repoRoot(): string {
   if (cachedRoot) return cachedRoot;
