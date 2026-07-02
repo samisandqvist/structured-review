@@ -27,7 +27,7 @@ export function createNodesRoute(ctx: AppContext) {
     const { callers, callees } = getNodeNeighbors(ctx.db, node.id);
     const session = getSession(ctx.db, sessionId);
     const diff = session
-      ? getNodeDiff(session.baseRef, node.file, node.startLine, node.endLine, node.changeStatus)
+      ? getNodeDiff(session.baseRef, node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot)
       : { oldText: "", newText: "" };
     return c.json({ node, callers, callees, diff });
   });

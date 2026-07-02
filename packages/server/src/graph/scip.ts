@@ -8,7 +8,8 @@ import protobuf from "protobufjs";
 import type { GraphProvider, GraphNode, GraphEdge, ChangeSubgraph, Flow } from "./provider.js";
 import type { ChangeStatus, EdgeType } from "../types.js";
 import { fileChangedRanges, rangesOverlap, repoRoot, type LineRange } from "../diff.js";
-import { buildFlowTree, makeFlow } from "./flow-tree.js";
+import { isTestFile } from "../util.js";
+import { buildFlowTree, makeFlow, reachesChanged } from "./flow-tree.js";
 
 /**
  * Graph provider backed by SCIP (Sourcegraph Code Intelligence Protocol).
@@ -30,9 +31,6 @@ import { buildFlowTree, makeFlow } from "./flow-tree.js";
 const require = createRequire(import.meta.url);
 const SCIP_PROTO = fileURLToPath(new URL("./scip.proto", import.meta.url));
 
-const isTestFile = (p: string) =>
-  /\.(test|spec)\.[cm]?[jt]sx?$/.test(p) || /(^|\/)(test|tests|__tests__)\//.test(p);
-
 interface RawNode {
   label: string;
   file: string;
@@ -40,7 +38,7 @@ interface RawNode {
   endLine: number;
   isTest: boolean;
 }
-interface BuiltGraph {
+export interface BuiltGraph {
   nodes: Map<string, RawNode>; // symbol -> node
   callAdj: Map<string, string[]>; // caller -> callees (deduped)
   callRev: Map<string, string[]>; // callee -> callers
@@ -56,6 +54,7 @@ export class ScipGraphProvider implements GraphProvider {
   private repoRoot: string;
   private contextDepth: number;
   private proto?: protobuf.Root;
+  private cache?: { key: string; graph: Promise<BuiltGraph> };
 
   constructor(opts: ScipOptions = {}) {
     this.repoRoot = opts.repoRoot ?? process.env.SCIP_REPO_ROOT ?? repoRoot();
@@ -164,8 +163,9 @@ export class ScipGraphProvider implements GraphProvider {
     return { callers, callees };
   }
 
-  async getFlows(): Promise<Flow[]> {
+  async getFlows(changedStableIds?: Set<string>): Promise<Flow[]> {
     const g = await this.buildGraph();
+    const relevant = changedStableIds ? reachesChanged(changedStableIds, g.callAdj) : undefined;
     const resolve = (sym: string) => {
       const n = g.nodes.get(sym);
       return n ? { label: n.label, file: n.file, startLine: n.startLine, endLine: n.endLine, isTest: n.isTest } : undefined;
@@ -175,13 +175,38 @@ export class ScipGraphProvider implements GraphProvider {
       ([sym, n]) => !n.isTest && (g.callAdj.get(sym)?.length ?? 0) > 0 && (g.callRev.get(sym)?.length ?? 0) === 0
     );
     return entries
-      .map(([sym, n], i) => makeFlow(i + 1, n.label, buildFlowTree(sym, g.callAdj, resolve)))
+      .map(([sym, n], i) => makeFlow(i + 1, n.label, buildFlowTree(sym, g.callAdj, resolve, relevant)))
       .filter((f) => f.steps.length > 1)
       .sort((a, b) => b.criticality - a.criticality);
   }
 
+  /** Repo-state fingerprint: HEAD + working-tree status. Any failure = unique key (cache miss). */
+  protected repoStateKey(): string {
+    try {
+      const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: this.repoRoot, encoding: "utf8" });
+      const status = execFileSync("git", ["status", "--porcelain"], { cwd: this.repoRoot, encoding: "utf8" });
+      return `${head.trim()}\n${status}`;
+    } catch {
+      return `no-git:${Math.random()}`;
+    }
+  }
+
+  /** Index at most once per repo state; concurrent callers share the in-flight build. */
+  private buildGraph(): Promise<BuiltGraph> {
+    if (process.env.SCIP_NO_CACHE === "1") return this.indexAndBuild();
+    const key = this.repoStateKey();
+    if (this.cache?.key === key) return this.cache.graph;
+    const entry = { key, graph: this.indexAndBuild() };
+    this.cache = entry;
+    // Drop a failed build so the next call retries; callers still see the rejection.
+    entry.graph.catch(() => {
+      if (this.cache === entry) this.cache = undefined;
+    });
+    return entry.graph;
+  }
+
   /** Index the repo with the SCIP indexer and derive the call graph. */
-  private async buildGraph(): Promise<BuiltGraph> {
+  protected async indexAndBuild(): Promise<BuiltGraph> {
     const dir = mkdtempSync(join(tmpdir(), "scip-crw-"));
     const indexPath = join(dir, "index.scip");
     // --infer-tsconfig writes a tsconfig.json into the repo if none exists; clean

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractHunkDiff, nodeChangeStats } from "../src/diff.js";
+import { extractHunkDiff, nodeChangeStats, subtractRanges } from "../src/diff.js";
 
 const RAW = `diff --git a/src/f.ts b/src/f.ts
 index abc1234..def5678 100644
@@ -53,5 +53,24 @@ describe("nodeChangeStats", () => {
   });
   it("ignores changes outside the span", () => {
     expect(nodeChangeStats(raw, 10, 10)).toEqual({ added: 0, removed: 0 });
+  });
+});
+
+describe("subtractRanges", () => {
+  const r = (start: number, end: number) => ({ start, end });
+  it("returns ranges untouched when spans are disjoint", () => {
+    expect(subtractRanges([r(1, 5)], [r(10, 20)])).toEqual([r(1, 5)]);
+  });
+  it("removes a fully covered range", () => {
+    expect(subtractRanges([r(12, 15)], [r(10, 20)])).toEqual([]);
+  });
+  it("trims overlap at both ends", () => {
+    expect(subtractRanges([r(5, 25)], [r(10, 20)])).toEqual([r(5, 9), r(21, 25)]);
+  });
+  it("subtracts multiple spans from one range", () => {
+    expect(subtractRanges([r(1, 30)], [r(5, 10), r(20, 25)])).toEqual([r(1, 4), r(11, 19), r(26, 30)]);
+  });
+  it("handles multiple input ranges", () => {
+    expect(subtractRanges([r(1, 3), r(8, 12)], [r(2, 9)])).toEqual([r(1, 1), r(10, 12)]);
   });
 });

@@ -1,12 +1,13 @@
 import { Hono } from "hono";
 import type { AppContext } from "../app.js";
 import { createSession, getSession, updateSessionStatus } from "../repo/sessions.js";
-import { createUnit, getUnitsBySession, deleteUnit } from "../repo/units.js";
+import { createUnit, getUnitsBySession, deleteUnit, updateUnitLabel, setUnitPositions } from "../repo/units.js";
 import { createNode, getNodesBySession } from "../repo/nodes.js";
-import { fileChangedRanges, rangesOverlap, type LineRange } from "../diff.js";
+import { fileChangedRanges, gitHeadSha, rangesOverlap, type LineRange } from "../diff.js";
+import { computeResiduals } from "../residuals.js";
 import type { ChangeSubgraph, GraphNode } from "../graph/provider.js";
 import type { ChangeStatus } from "../types.js";
-import { computeCoverage, type PlanUnitInput } from "../coverage.js";
+import { computeCoverage, flowEntries, type PlanUnitInput } from "../coverage.js";
 import { randomId } from "../util.js";
 
 /**
@@ -19,14 +20,15 @@ import { randomId } from "../util.js";
  */
 function reconcileSubgraph(
   subgraph: ChangeSubgraph,
-  baseRef: string
+  baseRef: string,
+  root: string
 ): { nodes: GraphNode[]; status: Map<string, ChangeStatus> } {
   const rangesByFile = new Map<string, LineRange[] | null>();
   const status = new Map<string, ChangeStatus>();
   for (const n of subgraph.nodes) {
     let cs = n.changeStatus;
     if (cs === "changed") {
-      if (!rangesByFile.has(n.file)) rangesByFile.set(n.file, fileChangedRanges(baseRef, n.file));
+      if (!rangesByFile.has(n.file)) rangesByFile.set(n.file, fileChangedRanges(baseRef, n.file, root));
       const ranges = rangesByFile.get(n.file);
       if (ranges && ranges.length > 0 && !rangesOverlap(ranges, n.startLine, n.endLine)) cs = "unchanged";
     }
@@ -57,9 +59,9 @@ export function createSessionsRoute(ctx: AppContext) {
 
   router.post("/", async (c) => {
     const body = await c.req.json<{ branch: string; baseRef: string }>();
-    const session = createSession(ctx.db, body.branch, body.baseRef);
+    const session = createSession(ctx.db, body.branch, body.baseRef, gitHeadSha(ctx.repoRoot) ?? "");
     const subgraph = await ctx.graphProvider.getChangeSubgraph(body.branch, body.baseRef);
-    const { nodes: keptNodes, status } = reconcileSubgraph(subgraph, body.baseRef);
+    const { nodes: keptNodes, status } = reconcileSubgraph(subgraph, body.baseRef, ctx.repoRoot!);
 
     for (const gnode of keptNodes) {
       createNode(ctx.db, {
@@ -67,6 +69,23 @@ export function createSessionsRoute(ctx: AppContext) {
         label: gnode.label, file: gnode.file, startLine: gnode.startLine, endLine: gnode.endLine,
         changeStatus: status.get(gnode.stableId)!, reviewStatus: "unreviewed", reviewedInUnit: null,
         isTest: gnode.isTest,
+      });
+    }
+
+    // Residual coverage: changed lines outside every node span become one
+    // pseudo-node per file, so types/imports/configs still enter the universe.
+    const spansByFile = new Map<string, LineRange[]>();
+    for (const n of keptNodes) {
+      const spans = spansByFile.get(n.file) ?? [];
+      spans.push({ start: n.startLine, end: n.endLine });
+      spansByFile.set(n.file, spans);
+    }
+    for (const r of computeResiduals(body.baseRef, spansByFile, ctx.repoRoot!)) {
+      createNode(ctx.db, {
+        sessionId: session.id, stableId: r.stableId,
+        label: r.label, file: r.file, startLine: r.startLine, endLine: r.endLine,
+        changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null,
+        isTest: r.isTest,
       });
     }
     const dbNodes = getNodesBySession(ctx.db, session.id);
@@ -89,10 +108,15 @@ export function createSessionsRoute(ctx: AppContext) {
     const changed = getNodesBySession(ctx.db, session.id).filter((n) => n.changeStatus === "changed");
     const autoMembers = new Set(units.filter((u) => u.auto).flatMap((u) => u.memberStableIds));
     const unassigned = changed.filter((n) => autoMembers.has(n.stableId)).length;
+    // Stale = repo HEAD moved past the session snapshot; omitted when git (or
+    // the recorded sha) is unavailable — degrade silently.
+    const currentHead = gitHeadSha(ctx.repoRoot);
+    const stale = currentHead && session.headSha ? currentHead !== session.headSha : undefined;
     return c.json({
       session,
       units,
       coverage: { changedTotal: changed.length, covered: changed.length - unassigned, unassigned },
+      ...(stale === undefined ? {} : { stale }),
     });
   });
 
@@ -102,16 +126,16 @@ export function createSessionsRoute(ctx: AppContext) {
     if (!session) return c.json({ error: "not found" }, 404);
     const body = await c.req.json<{ units: PlanUnitInput[] }>();
 
-    const flows = await ctx.graphProvider.getFlows();
     const changedStableIds = getNodesBySession(ctx.db, sessionId)
       .filter((n) => n.changeStatus === "changed")
       .map((n) => n.stableId);
+    const flows = await ctx.graphProvider.getFlows(new Set(changedStableIds));
     const { unassigned } = computeCoverage(body.units, flows, changedStableIds);
 
     for (const u of getUnitsBySession(ctx.db, sessionId)) deleteUnit(ctx.db, u.id);
     let pos = 0;
     for (const u of body.units) {
-      const members = u.kind === "flow" ? [u.flowEntryStableId!] : (u.orphanStableIds ?? []);
+      const members = u.kind === "flow" ? flowEntries(u) : (u.orphanStableIds ?? []);
       createUnit(ctx.db, sessionId, pos++, u.label, u.rationale ?? "", u.kind, members, false);
     }
     if (unassigned.length > 0) {
@@ -126,6 +150,23 @@ export function createSessionsRoute(ctx: AppContext) {
       unassigned: unassigned.length,
     };
     return c.json({ units: getUnitsBySession(ctx.db, sessionId), coverage });
+  });
+
+  router.patch("/:id/units/:unitId", async (c) => {
+    const sessionId = c.req.param("id");
+    if (!getSession(ctx.db, sessionId)) return c.json({ error: "not found" }, 404);
+    const units = getUnitsBySession(ctx.db, sessionId);
+    const unit = units.find((u) => u.id === c.req.param("unitId"));
+    if (!unit) return c.json({ error: "not found" }, 404);
+    if (unit.auto) return c.json({ error: "auto unit is not editable" }, 400);
+    const body = await c.req.json<{ label?: string; position?: number }>();
+    if (typeof body.label === "string" && body.label.trim()) updateUnitLabel(ctx.db, unit.id, body.label.trim());
+    if (typeof body.position === "number") {
+      const ids = units.map((u) => u.id).filter((id) => id !== unit.id);
+      ids.splice(Math.max(0, Math.min(body.position, ids.length)), 0, unit.id);
+      setUnitPositions(ctx.db, ids);
+    }
+    return c.json({ units: getUnitsBySession(ctx.db, sessionId) });
   });
 
   return router;

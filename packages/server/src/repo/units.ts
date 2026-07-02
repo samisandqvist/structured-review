@@ -34,3 +34,13 @@ export function getUnitsBySession(db: DB, sessionId: string): Unit[] {
 export function deleteUnit(db: DB, id: string): void {
   db.prepare("DELETE FROM units WHERE id = ?").run(id);
 }
+
+export function updateUnitLabel(db: DB, id: string, label: string): void {
+  db.prepare("UPDATE units SET label = ? WHERE id = ?").run(label, id);
+}
+
+/** Rewrite positions to match the given id order (dense 0..n-1). */
+export function setUnitPositions(db: DB, orderedIds: string[]): void {
+  const stmt = db.prepare("UPDATE units SET position = ? WHERE id = ?");
+  orderedIds.forEach((id, i) => stmt.run(i, id));
+}
