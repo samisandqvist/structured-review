@@ -17,7 +17,7 @@ export function createChangesRoute(ctx: AppContext) {
     const changed = getNodesBySession(ctx.db, sessionId).filter((n) => n.changeStatus === "changed");
     const rawByFile = new Map<string, string | null>();
     const rawFor = (file: string) => {
-      if (!rawByFile.has(file)) rawByFile.set(file, fileUnifiedDiff(session.baseRef, file));
+      if (!rawByFile.has(file)) rawByFile.set(file, fileUnifiedDiff(session.baseRef, file, ctx.repoRoot));
       return rawByFile.get(file) ?? null;
     };
 
@@ -26,14 +26,16 @@ export function createChangesRoute(ctx: AppContext) {
       const { added, removed } = raw ? nodeChangeStats(raw, n.startLine, n.endLine) : { added: 0, removed: 0 };
       const span = n.endLine - n.startLine + 1;
       const status = removed === 0 && added >= span ? "added" : "modified";
-      // Heuristic: SCIP sets no symbol kind, and only functions/methods reach this point
-      // (types/namespaces are filtered upstream when building graph nodes). So `kind` is
-      // limited to "function" | "method" | "test" in practice and will never emit "type"/"const".
-      const kind = n.isTest ? "test" : n.stableId.includes("#") ? "method" : "function";
+      // Heuristic: SCIP sets no symbol kind. Residual pseudo-nodes are tagged by their
+      // stableId scheme; beyond that only functions/methods reach this point (types/
+      // namespaces are filtered upstream when building graph nodes).
+      const kind = n.stableId.startsWith("file-residual:")
+        ? "file"
+        : n.isTest ? "test" : n.stableId.includes("#") ? "method" : "function";
       return {
         stableId: n.stableId, label: n.label, kind,
         file: n.file, startLine: n.startLine, endLine: n.endLine,
-        status, added, removed, signature: nodeSignature(n.file, n.startLine),
+        status, added, removed, signature: nodeSignature(n.file, n.startLine, ctx.repoRoot),
       };
     });
     return c.json({ changes });

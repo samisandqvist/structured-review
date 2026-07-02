@@ -245,6 +245,14 @@ describe("residual pseudo-nodes", () => {
     const { coverage } = await sres.json();
     expect(coverage.changedTotal).toBe(3); // 2 stub changed nodes + 1 residual
   });
+
+  it("reports kind 'file' in the change summary", async () => {
+    const session = await makeResidualSession();
+    const res = await app.request(`/api/sessions/${session.id}/changes`);
+    const { changes } = await res.json();
+    const residual = changes.find((ch: any) => ch.stableId === "file-residual:config.json");
+    expect(residual.kind).toBe("file");
+  });
 });
 
 describe("GET /api/sessions/:id/changes", () => {
