@@ -726,4 +726,5 @@ textarea:focus {
 .unit__progress { margin-left: auto; font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
 .unit__rationale { margin: 2px 0 8px; font-size: 12px; color: var(--dim); line-height: 1.5; }
 .unit__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.unit__track-caption { font-size: 11px; color: var(--dim); font-family: var(--mono); letter-spacing: 0.05em; margin: 6px 0 2px; }
 .unit--auto { background: color-mix(in srgb, var(--warn, #d98a2b) 8%, transparent); border-radius: 6px; padding-left: 8px; padding-right: 8px; }

@@ -8,11 +8,11 @@ export interface GraphNode { stableId: string; label: string; file: string; star
 export interface GraphEdge { sourceStableId: string; targetStableId: string; edgeType: string; }
 export interface ChangeSubgraph { nodes: GraphNode[]; edges: GraphEdge[]; }
 
-export interface FlowDTO { id: number; name: string; affected: boolean; entryStableId: string; steps: unknown[]; }
+export interface FlowDTO { id: number; name: string; affected: boolean; entryStableId: string; changedStableIds: string[]; steps: unknown[]; }
 export interface OrphanDTO { stableId: string; label: string; file: string; }
 
 export type UnitInput =
-  | { kind: "flow"; flowEntryStableId: string; label: string; rationale?: string }
+  | { kind: "flow"; flowEntryStableId?: string; flowEntryStableIds?: string[]; label: string; rationale?: string }
   | { kind: "orphans"; orphanStableIds: string[]; label: string; rationale?: string };
 
 async function fetchJson(url: string, init?: RequestInit) {
