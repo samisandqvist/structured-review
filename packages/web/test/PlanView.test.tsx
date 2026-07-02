@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { vi } from "vitest";
 import { PlanView } from "../src/components/PlanView.js";
 
@@ -14,6 +14,8 @@ vi.mock("../src/api/hooks.js", () => ({
       changedStableIds: ["fn:handleOrder", "fn:processOrder"],
       steps: [
         { stableId: "fn:handleOrder", label: "handleOrder", file: "o.ts", startLine: 1, endLine: 2, isTest: false, depth: 0, nodeId: "n1", changeStatus: "changed", reviewStatus: "unreviewed" },
+        { stableId: "fn:ctx1", label: "ctxHelperOne", file: "c.ts", startLine: 1, endLine: 2, isTest: false, depth: 1, offPath: true, nodeId: null, changeStatus: null, reviewStatus: null },
+        { stableId: "fn:ctx2", label: "ctxHelperTwo", file: "c.ts", startLine: 5, endLine: 6, isTest: false, depth: 1, offPath: true, nodeId: null, changeStatus: null, reviewStatus: null },
         { stableId: "fn:processOrder", label: "processOrder", file: "o.ts", startLine: 10, endLine: 20, isTest: false, depth: 1, nodeId: "n4", changeStatus: "changed", reviewStatus: "reviewed-clean" },
       ] },
     { id: 2, name: "flow A", criticality: 0.5, depth: 1, affected: true, entryStableId: "fn:entryA",
@@ -52,6 +54,15 @@ describe("PlanView", () => {
     const progress = orderUnit.querySelector(".unit__progress");
     expect(progress).not.toBeNull();
     expect(progress!.textContent).toBe("1/2");
+  });
+
+  it("collapses consecutive off-path steps into an expandable run", () => {
+    render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={() => {}} />);
+    expect(screen.getByText("⋯ 2 unchanged calls")).toBeInTheDocument();
+    expect(screen.queryByText("ctxHelperOne")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("⋯ 2 unchanged calls"));
+    expect(screen.getByText("ctxHelperOne")).toBeInTheDocument();
+    expect(screen.getByText("ctxHelperTwo")).toBeInTheDocument();
   });
 
   it("renders one track per entry of a multi-entry flow-unit and dedupes progress", () => {

@@ -30,6 +30,8 @@ export interface FlowStep {
   endLine: number;
   isTest: boolean;
   depth: number;
+  /** One-hop context on a pruned tree, not on a path to a change. */
+  offPath?: boolean;
   nodeId: string | null;
   changeStatus: "changed" | "unchanged" | null;
   reviewStatus: Node["reviewStatus"] | null;
