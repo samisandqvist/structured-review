@@ -1,4 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { DB } from "../src/db/connection.js";
 import { createMemoryDatabase } from "../src/db/connection.js";
 import { createApp } from "../src/app.js";
@@ -6,11 +10,17 @@ import { StubGraphProvider } from "../src/graph/stub.js";
 
 let db: DB;
 let app: ReturnType<typeof createApp>;
+let fixtureRoot: string;
 beforeEach(() => {
   db = createMemoryDatabase();
-  app = createApp({ db, graphProvider: new StubGraphProvider() });
+  // Not a git repo → diff helpers see no changes; sessions behave as before.
+  fixtureRoot = mkdtempSync(join(tmpdir(), "crw-routes-"));
+  app = createApp({ db, graphProvider: new StubGraphProvider(), repoRoot: fixtureRoot });
 });
-afterEach(() => { db.close(); });
+afterEach(() => {
+  db.close();
+  rmSync(fixtureRoot, { recursive: true, force: true });
+});
 
 describe("POST /api/sessions", () => {
   it("creates a session and returns it with the change subgraph", async () => {
@@ -198,6 +208,42 @@ describe("GET /api/sessions/:id/flows", () => {
     expect(Array.isArray(body.flows)).toBe(true);
     // stub has no flows → both changed nodes are orphans
     expect(body.orphans.map((n: any) => n.stableId).sort()).toEqual(["fn:handleOrder", "fn:validateOrder"]);
+  });
+});
+
+describe("residual pseudo-nodes", () => {
+  function gitInFixture(...a: string[]) {
+    return execFileSync("git", a, { cwd: fixtureRoot, encoding: "utf8" });
+  }
+  async function makeResidualSession() {
+    gitInFixture("init", "-b", "main");
+    gitInFixture("config", "user.email", "t@t");
+    gitInFixture("config", "user.name", "t");
+    writeFileSync(join(fixtureRoot, "config.json"), '{\n  "a": 1\n}\n');
+    gitInFixture("add", ".");
+    gitInFixture("commit", "-m", "base");
+    writeFileSync(join(fixtureRoot, "config.json"), '{\n  "a": 2\n}\n');
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    return session as { id: string };
+  }
+
+  it("stores a file-residual node for changed lines outside any graph node", async () => {
+    const session = await makeResidualSession();
+    const nr = await app.request(`/api/sessions/${session.id}/nodes`);
+    const { nodes } = await nr.json();
+    const residual = nodes.find((n: any) => n.stableId === "file-residual:config.json");
+    expect(residual).toBeDefined();
+    expect(residual.changeStatus).toBe("changed");
+    expect(residual.label).toBe("config.json");
+
+    // and it participates in coverage
+    const sres = await app.request(`/api/sessions/${session.id}`);
+    const { coverage } = await sres.json();
+    expect(coverage.changedTotal).toBe(3); // 2 stub changed nodes + 1 residual
   });
 });
 
