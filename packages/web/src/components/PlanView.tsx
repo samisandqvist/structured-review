@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useFlows, useNodes, useSession, useUpdateNodeStatus, useUpdateUnit } from "../api/hooks.js";
 import { useUIStore } from "../store/ui.js";
-import type { Flow, FlowStep, Node, Unit } from "../api/client.js";
+import type { Flow, FlowStep, GraphEdgeDTO, Node, Unit } from "../api/client.js";
 
 export function PlanView({
   sessionId, currentNodeId, onSelectNode,
@@ -17,6 +17,8 @@ export function PlanView({
   const units = (sessionData?.units ?? []).slice().sort((a, b) => a.position - b.position);
   const flowByEntry = new Map((flowsData?.flows ?? []).map((f) => [f.entryStableId, f]));
   const nodeByStable = new Map((nodesData?.nodes ?? []).map((n) => [n.stableId, n]));
+  const nodeById = new Map((nodesData?.nodes ?? []).map((n) => [n.id, n]));
+  const edges = nodesData?.edges ?? [];
 
   if (units.length === 0) {
     return (
@@ -48,6 +50,8 @@ export function PlanView({
               ? u.memberStableIds.map((id) => flowByEntry.get(id)).filter((f): f is Flow => !!f)
               : []}
             nodeByStable={nodeByStable}
+            nodeById={nodeById}
+            edges={edges}
             currentNodeId={currentNodeId}
             onSelectNode={onSelectNode}
           />
@@ -57,13 +61,32 @@ export function PlanView({
   );
 }
 
+/** Tests linked to a unit's production nodes via TESTED_BY edges: how many
+ *  exist, how many changed with this diff, and one to jump to. */
+function unitTestStats(
+  unitNodeIds: Set<string>,
+  edges: GraphEdgeDTO[],
+  nodeById: Map<string, Node>
+): { total: number; changed: number; firstTestNodeId: string | null } {
+  const testIds: string[] = [];
+  for (const e of edges) {
+    if (e.edgeType === "test" && unitNodeIds.has(e.sourceNodeId) && !testIds.includes(e.targetNodeId)) {
+      testIds.push(e.targetNodeId);
+    }
+  }
+  const changed = testIds.filter((id) => nodeById.get(id)?.changeStatus === "changed").length;
+  return { total: testIds.length, changed, firstTestNodeId: testIds[0] ?? null };
+}
+
 function UnitBlock({
-  sessionId, unit, flows, nodeByStable, currentNodeId, onSelectNode,
+  sessionId, unit, flows, nodeByStable, nodeById, edges, currentNodeId, onSelectNode,
 }: {
   sessionId: string;
   unit: Unit;
   flows: Flow[];
   nodeByStable: Map<string, Node>;
+  nodeById: Map<string, Node>;
+  edges: GraphEdgeDTO[];
   currentNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
 }) {
@@ -110,6 +133,14 @@ function UnitBlock({
     for (const nodeId of remaining) updateStatus.mutate({ nodeId, reviewStatus: "reviewed-clean" });
   };
 
+  // Production nodes of this unit, for test linkage.
+  const unitNodeIds = new Set<string>(
+    useFlowProgress
+      ? flows.flatMap((f) => f.steps).map((s) => s.nodeId).filter((id): id is string => !!id)
+      : memberNodes.map((n) => n.id)
+  );
+  const testStats = unitTestStats(unitNodeIds, edges, nodeById);
+
   return (
     <div
       className={`unit${unit.auto ? " unit--auto" : ""}`}
@@ -154,6 +185,16 @@ function UnitBlock({
           <h3 className="unit__name" onDoubleClick={() => !unit.auto && setEditing(true)}>{unit.label}</h3>
         )}
         {unit.auto && <span className="unit__badge">unassigned</span>}
+        {testStats.total > 0 && (
+          <button
+            data-testid={`test-chip-${unit.id}`}
+            className={`unit__tests${testStats.changed === 0 ? " unit__tests--warn" : ""}`}
+            title="Tests linked to this unit (changed/total)"
+            onClick={() => testStats.firstTestNodeId && onSelectNode(testStats.firstTestNodeId)}
+          >
+            tests {testStats.changed}/{testStats.total}
+          </button>
+        )}
         {remaining.length > 0 && (
           <button
             data-testid="mark-remaining"
