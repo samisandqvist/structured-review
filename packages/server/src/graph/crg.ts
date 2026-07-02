@@ -179,9 +179,9 @@ export class CrgGraphProvider implements GraphProvider {
     return { nodes: [...byId.values()], edges };
   }
 
-  async getFlows() {
+  async getFlows(changedStableIds?: Set<string>) {
     const { readFlows } = await import("../flows.js");
-    return readFlows(this.repoRoot);
+    return readFlows(this.repoRoot, changedStableIds);
   }
 
   async getNeighbors(stableId: string): Promise<{ callers: GraphNode[]; callees: GraphNode[] }> {

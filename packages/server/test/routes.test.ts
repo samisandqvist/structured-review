@@ -1,16 +1,27 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { DB } from "../src/db/connection.js";
 import { createMemoryDatabase } from "../src/db/connection.js";
 import { createApp } from "../src/app.js";
 import { StubGraphProvider } from "../src/graph/stub.js";
+import type { Flow } from "../src/graph/provider.js";
 
 let db: DB;
 let app: ReturnType<typeof createApp>;
+let fixtureRoot: string;
 beforeEach(() => {
   db = createMemoryDatabase();
-  app = createApp({ db, graphProvider: new StubGraphProvider() });
+  // Not a git repo → diff helpers see no changes; sessions behave as before.
+  fixtureRoot = mkdtempSync(join(tmpdir(), "crw-routes-"));
+  app = createApp({ db, graphProvider: new StubGraphProvider(), repoRoot: fixtureRoot });
 });
-afterEach(() => { db.close(); });
+afterEach(() => {
+  db.close();
+  rmSync(fixtureRoot, { recursive: true, force: true });
+});
 
 describe("POST /api/sessions", () => {
   it("creates a session and returns it with the change subgraph", async () => {
@@ -68,6 +79,22 @@ describe("PUT /api/sessions/:id/plan", () => {
     expect(body.units[0].memberStableIds).toEqual(["fn:handleOrder"]);
     expect(body.units[1].kind).toBe("orphans");
     expect(body.units[1].memberStableIds).toEqual(["fn:validateOrder"]);
+  });
+
+  it("stores multi-entry flow-units with deduped members", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const res = await app.request(`/api/sessions/${session.id}/plan`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        units: [{ kind: "flow", flowEntryStableIds: ["fn:a", "fn:b", "fn:a"], label: "merged" }],
+      }),
+    });
+    const body = await res.json();
+    expect(body.units[0].memberStableIds).toEqual(["fn:a", "fn:b"]);
   });
 });
 
@@ -198,6 +225,203 @@ describe("GET /api/sessions/:id/flows", () => {
     expect(Array.isArray(body.flows)).toBe(true);
     // stub has no flows → both changed nodes are orphans
     expect(body.orphans.map((n: any) => n.stableId).sort()).toEqual(["fn:handleOrder", "fn:validateOrder"]);
+  });
+});
+
+class FlowStub extends StubGraphProvider {
+  override async getFlows(): Promise<Flow[]> {
+    return [{
+      id: 1, name: "handleOrder", criticality: 1, depth: 1,
+      steps: [
+        { stableId: "fn:handleOrder", label: "handleOrder", file: "src/orders.ts", startLine: 10, endLine: 30, isTest: false, depth: 0 },
+        { stableId: "fn:validateOrder", label: "validateOrder", file: "src/orders.ts", startLine: 35, endLine: 50, isTest: false, depth: 1 },
+        { stableId: "fn:saveOrder", label: "saveOrder", file: "src/db.ts", startLine: 100, endLine: 120, isTest: false, depth: 1 },
+      ],
+    }];
+  }
+}
+
+describe("flows route step identity", () => {
+  it("exposes stableId per step and changedStableIds per flow", async () => {
+    const app2 = createApp({ db, graphProvider: new FlowStub(), repoRoot: fixtureRoot });
+    const cr = await app2.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const res = await app2.request(`/api/sessions/${session.id}/flows`);
+    const { flows } = await res.json();
+    expect(flows[0].steps.map((s: any) => s.stableId)).toEqual(["fn:handleOrder", "fn:validateOrder", "fn:saveOrder"]);
+    expect(flows[0].changedStableIds.sort()).toEqual(["fn:handleOrder", "fn:validateOrder"]);
+  });
+});
+
+class RecordingFlowStub extends FlowStub {
+  received: Set<string> | undefined;
+  override async getFlows(changedStableIds?: Set<string>): Promise<Flow[]> {
+    this.received = changedStableIds;
+    return super.getFlows();
+  }
+}
+
+describe("flows route passes the changed set to the provider", () => {
+  it("provides changed session stableIds to getFlows", async () => {
+    const provider = new RecordingFlowStub();
+    const app2 = createApp({ db, graphProvider: provider, repoRoot: fixtureRoot });
+    const cr = await app2.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    await app2.request(`/api/sessions/${session.id}/flows`);
+    expect([...(provider.received ?? [])].sort()).toEqual(["fn:handleOrder", "fn:validateOrder"]);
+  });
+});
+
+describe("residual pseudo-nodes", () => {
+  function gitInFixture(...a: string[]) {
+    return execFileSync("git", a, { cwd: fixtureRoot, encoding: "utf8" });
+  }
+  async function makeResidualSession() {
+    gitInFixture("init", "-b", "main");
+    gitInFixture("config", "user.email", "t@t");
+    gitInFixture("config", "user.name", "t");
+    writeFileSync(join(fixtureRoot, "config.json"), '{\n  "a": 1\n}\n');
+    gitInFixture("add", ".");
+    gitInFixture("commit", "-m", "base");
+    writeFileSync(join(fixtureRoot, "config.json"), '{\n  "a": 2\n}\n');
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    return session as { id: string };
+  }
+
+  it("stores a file-residual node for changed lines outside any graph node", async () => {
+    const session = await makeResidualSession();
+    const nr = await app.request(`/api/sessions/${session.id}/nodes`);
+    const { nodes } = await nr.json();
+    const residual = nodes.find((n: any) => n.stableId === "file-residual:config.json");
+    expect(residual).toBeDefined();
+    expect(residual.changeStatus).toBe("changed");
+    expect(residual.label).toBe("config.json");
+
+    // and it participates in coverage
+    const sres = await app.request(`/api/sessions/${session.id}`);
+    const { coverage } = await sres.json();
+    expect(coverage.changedTotal).toBe(3); // 2 stub changed nodes + 1 residual
+  });
+
+  it("reports kind 'file' in the change summary", async () => {
+    const session = await makeResidualSession();
+    const res = await app.request(`/api/sessions/${session.id}/changes`);
+    const { changes } = await res.json();
+    const residual = changes.find((ch: any) => ch.stableId === "file-residual:config.json");
+    expect(residual.kind).toBe("file");
+  });
+});
+
+describe("PATCH /api/sessions/:id/units/:unitId", () => {
+  async function makePlan() {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const pr = await app.request(`/api/sessions/${session.id}/plan`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ units: [
+        { kind: "orphans", orphanStableIds: ["fn:handleOrder"], label: "A" },
+        { kind: "orphans", orphanStableIds: ["fn:validateOrder"], label: "B" },
+      ] }),
+    });
+    const { units } = await pr.json();
+    return { session, units };
+  }
+
+  it("renames a unit", async () => {
+    const { session, units } = await makePlan();
+    const res = await app.request(`/api/sessions/${session.id}/units/${units[0].id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label: "Renamed" }),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).units[0].label).toBe("Renamed");
+  });
+
+  it("moves a unit and reindexes positions densely", async () => {
+    const { session, units } = await makePlan();
+    const res = await app.request(`/api/sessions/${session.id}/units/${units[1].id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ position: 0 }),
+    });
+    const body = await res.json();
+    expect(body.units.map((u: any) => u.label)).toEqual(["B", "A"]);
+    expect(body.units.map((u: any) => u.position)).toEqual([0, 1]);
+  });
+
+  it("rejects edits to the auto unit and 404s unknown units", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    // empty plan → both stub changed nodes swept into the auto unit
+    await app.request(`/api/sessions/${session.id}/plan`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ units: [] }),
+    });
+    const ur = await app.request(`/api/sessions/${session.id}`);
+    const autoUnit = (await ur.json()).units.find((u: any) => u.auto);
+    const res = await app.request(`/api/sessions/${session.id}/units/${autoUnit.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label: "nope" }),
+    });
+    expect(res.status).toBe(400);
+    const missing = await app.request(`/api/sessions/${session.id}/units/unit_missing`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label: "x" }),
+    });
+    expect(missing.status).toBe(404);
+  });
+});
+
+describe("stale session indicator", () => {
+  it("reports stale=false right after creation and true after HEAD moves", async () => {
+    const g = (...a: string[]) => execFileSync("git", a, { cwd: fixtureRoot, encoding: "utf8" });
+    g("init", "-b", "main");
+    g("config", "user.email", "t@t");
+    g("config", "user.name", "t");
+    writeFileSync(join(fixtureRoot, "a.txt"), "1\n");
+    g("add", ".");
+    g("commit", "-m", "one");
+
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+
+    let res = await app.request(`/api/sessions/${session.id}`);
+    expect((await res.json()).stale).toBe(false);
+
+    writeFileSync(join(fixtureRoot, "a.txt"), "2\n");
+    g("add", ".");
+    g("commit", "-m", "two");
+    res = await app.request(`/api/sessions/${session.id}`);
+    expect((await res.json()).stale).toBe(true);
+  });
+
+  it("omits stale when the repo has no git", async () => {
+    // default beforeEach fixtureRoot is not a git repo
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const res = await app.request(`/api/sessions/${session.id}`);
+    expect((await res.json()).stale).toBeUndefined();
   });
 });
 

@@ -15,7 +15,7 @@ export class StubGraphProvider implements GraphProvider {
   async getChangeSubgraph(_branch: string, _baseRef: string): Promise<ChangeSubgraph> {
     return { nodes: STUB_NODES, edges: STUB_EDGES };
   }
-  async getFlows() {
+  async getFlows(_changedStableIds?: Set<string>) {
     return [];
   }
 

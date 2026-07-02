@@ -23,12 +23,15 @@ export interface Comment {
 }
 export interface NodeDiff { oldText: string; newText: string; }
 export interface FlowStep {
+  stableId: string;
   label: string;
   file: string;
   startLine: number;
   endLine: number;
   isTest: boolean;
   depth: number;
+  /** One-hop context on a pruned tree, not on a path to a change. */
+  offPath?: boolean;
   nodeId: string | null;
   changeStatus: "changed" | "unchanged" | null;
   reviewStatus: Node["reviewStatus"] | null;
@@ -39,6 +42,7 @@ export interface Flow {
   criticality: number;
   depth: number;
   affected: boolean;
+  changedStableIds: string[];
   steps: FlowStep[];
   entryStableId: string;
 }
@@ -56,7 +60,7 @@ export interface ChangeSubgraph { nodes: GraphNode[]; edges: GraphEdge[]; }
 
 export interface Coverage { changedTotal: number; covered: number; unassigned: number; }
 export type UnitInput =
-  | { kind: "flow"; flowEntryStableId: string; label: string; rationale?: string }
+  | { kind: "flow"; flowEntryStableId?: string; flowEntryStableIds?: string[]; label: string; rationale?: string }
   | { kind: "orphans"; orphanStableIds: string[]; label: string; rationale?: string };
 
 const API_BASE = "/api";
@@ -75,7 +79,7 @@ export const api = {
       method: "POST", body: JSON.stringify({ branch, baseRef }),
     }),
   getSession: (id: string) =>
-    fetchJson<{ session: ReviewSession; units: Unit[]; coverage: Coverage }>(`/sessions/${id}`),
+    fetchJson<{ session: ReviewSession; units: Unit[]; coverage: Coverage; stale?: boolean }>(`/sessions/${id}`),
   updatePlan: (id: string, units: UnitInput[]) =>
     fetchJson<{ units: Unit[]; coverage: Coverage }>(`/sessions/${id}/plan`, {
       method: "PUT", body: JSON.stringify({ units }),
@@ -95,6 +99,10 @@ export const api = {
   createComment: (id: string, nodeId: string, hunkSnippet: string, text: string, structuralContext: string) =>
     fetchJson<{ comment: Comment }>(`/sessions/${id}/comments`, {
       method: "POST", body: JSON.stringify({ nodeId, hunkSnippet, text, structuralContext }),
+    }),
+  updateUnit: (sessionId: string, unitId: string, patch: { label?: string; position?: number }) =>
+    fetchJson<{ units: Unit[] }>(`/sessions/${sessionId}/units/${unitId}`, {
+      method: "PATCH", body: JSON.stringify(patch),
     }),
   getFlows: (id: string) => fetchJson<{ flows: Flow[]; orphans: Node[] }>(`/sessions/${id}/flows`),
   exportComments: (id: string) =>

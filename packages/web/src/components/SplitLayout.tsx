@@ -1,6 +1,7 @@
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useEffect, useMemo, useState } from "react";
 import { useUIStore } from "../store/ui.js";
-import { useNode, useUpdateNodeStatus } from "../api/hooks.js";
+import { useFlows, useNode, useNodes, useSession, useUpdateNodeStatus } from "../api/hooks.js";
+import { buildWalkOrder, nextInWalk, nextUnreviewed } from "../walk-order.js";
 import { PlanView } from "./PlanView.js";
 import { DiffView } from "./DiffView.js";
 import { CommentBox } from "./CommentBox.js";
@@ -18,6 +19,47 @@ export function SplitLayout({
   const containerRef = useRef<HTMLDivElement>(null);
   const { data: nodeData } = useNode(sessionId, currentNodeId);
   const updateStatus = useUpdateNodeStatus(sessionId);
+  const [showKeys, setShowKeys] = useState(false);
+
+  const { data: sessionData } = useSession(sessionId);
+  const { data: flowsData } = useFlows(sessionId);
+  const { data: nodesData } = useNodes(sessionId);
+  const nodes = useMemo(() => nodesData?.nodes ?? [], [nodesData]);
+  const order = useMemo(
+    () => buildWalkOrder(sessionData?.units ?? [], flowsData?.flows ?? [], nodes),
+    [sessionData, flowsData, nodes]
+  );
+
+  const goNextUnreviewed = useCallback(() => {
+    const id = nextUnreviewed(order, nodes, useUIStore.getState().currentNodeId);
+    if (id) setCurrentNode(id);
+  }, [order, nodes, setCurrentNode]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      const cur = useUIStore.getState().currentNodeId;
+      if (e.key === "j") {
+        const id = nextInWalk(order, cur, 1);
+        if (id) setCurrentNode(id);
+      } else if (e.key === "k") {
+        const id = nextInWalk(order, cur, -1);
+        if (id) setCurrentNode(id);
+      } else if (e.key === "n") {
+        goNextUnreviewed();
+      } else if (e.key === "r" && cur) {
+        updateStatus.mutate({ nodeId: cur, reviewStatus: "reviewed-clean" }, { onSuccess: goNextUnreviewed });
+      } else if (e.key === "c") {
+        document.querySelector<HTMLTextAreaElement>("[data-testid=comment-input]")?.focus();
+        e.preventDefault();
+      } else if (e.key === "?") {
+        setShowKeys((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [order, goNextUnreviewed, setCurrentNode, updateStatus]);
 
   const handleMouseDown = useCallback(() => {
     document.body.style.cursor = "col-resize";
@@ -85,6 +127,9 @@ export function SplitLayout({
                 >
                   ✓ Mark reviewed
                 </button>
+                <button className="btn btn--lg" data-testid="next-unreviewed" onClick={goNextUnreviewed}>
+                  Next unreviewed →
+                </button>
               </div>
               <CommentBox sessionId={sessionId} nodeId={currentNode.id} />
             </>
@@ -93,6 +138,17 @@ export function SplitLayout({
           )}
         </div>
       </div>
+      {showKeys && (
+        <div className="keys-overlay" onClick={() => setShowKeys(false)}>
+          <dl>
+            <dt>j / k</dt><dd>next / previous change</dd>
+            <dt>n</dt><dd>next unreviewed</dd>
+            <dt>r</dt><dd>mark reviewed &amp; advance</dd>
+            <dt>c</dt><dd>comment</dd>
+            <dt>?</dt><dd>toggle this overlay</dd>
+          </dl>
+        </div>
+      )}
     </div>
   );
 }
