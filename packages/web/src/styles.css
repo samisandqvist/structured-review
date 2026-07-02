@@ -732,4 +732,16 @@ textarea:focus {
   color: var(--dim); font-size: 12px; padding: 1px 8px; cursor: pointer;
 }
 .flow__collapsed:hover { color: var(--text); border-color: var(--text); }
+
+.keys-overlay {
+  position: fixed; inset: 0; display: grid; place-items: center;
+  background: rgba(8, 11, 17, 0.6); z-index: 50; cursor: pointer;
+}
+.keys-overlay dl {
+  display: grid; grid-template-columns: auto 1fr; gap: 8px 18px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  padding: 20px 26px; font-size: 14px;
+}
+.keys-overlay dt { font-family: var(--mono); color: var(--trace, #4fd6ff); }
+.keys-overlay dd { margin: 0; color: var(--text); }
 .unit--auto { background: color-mix(in srgb, var(--warn, #d98a2b) 8%, transparent); border-radius: 6px; padding-left: 8px; padding-right: 8px; }
