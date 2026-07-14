@@ -77,6 +77,15 @@ export function gitHeadSha(root: string = repoRoot()): string | null {
   }
 }
 
+/** The currently checked-out branch name ("HEAD" when detached), or null on git failure. */
+export function currentBranch(root: string = repoRoot()): string | null {
+  try {
+    return execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: root, encoding: "utf8", ...QUIET }).trim();
+  } catch {
+    return null;
+  }
+}
+
 /** Repo-relative paths changed vs baseRef ([] on git failure). */
 export function changedFiles(baseRef: string, root: string = repoRoot()): string[] {
   try {

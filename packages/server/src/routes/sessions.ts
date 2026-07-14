@@ -3,7 +3,7 @@ import type { AppContext } from "../app.js";
 import { createSession, getSession, updateSessionStatus } from "../repo/sessions.js";
 import { createUnit, getUnitsBySession, deleteUnit, updateUnitLabel, setUnitPositions } from "../repo/units.js";
 import { createNode, getNodesBySession } from "../repo/nodes.js";
-import { fileChangedRanges, gitHeadSha, resolveRef, rangesOverlap, GitError, type LineRange } from "../diff.js";
+import { fileChangedRanges, gitHeadSha, resolveRef, rangesOverlap, currentBranch, GitError, type LineRange } from "../diff.js";
 import { computeResiduals } from "../residuals.js";
 import type { ChangeSubgraph, GraphNode } from "../graph/provider.js";
 import type { ChangeStatus } from "../types.js";
@@ -66,6 +66,18 @@ export function createSessionsRoute(ctx: AppContext) {
     if (!headSha) return c.json({ error: "not a git repository (or git unavailable)", phase: "resolve-ref" }, 400);
     if (!resolveRef(body.baseRef, ctx.repoRoot)) {
       return c.json({ error: `cannot resolve base ref '${body.baseRef}'`, phase: "resolve-ref" }, 400);
+    }
+
+    // The tool reviews the current working tree (SCIP indexes it directly),
+    // so `branch` must name what's actually checked out — otherwise the
+    // session would silently review the wrong tree.
+    const checkedOut = currentBranch(ctx.repoRoot);
+    if (body.branch !== "HEAD" && body.branch !== checkedOut) {
+      return c.json({
+        error: `session branch '${body.branch}' is not checked out (current: '${checkedOut ?? "unknown"}'); ` +
+          `this tool reviews the current working tree — check the branch out or pass HEAD`,
+        phase: "resolve-ref",
+      }, 400);
     }
 
     // All git-dependent work happens before any row is written, so a GitError

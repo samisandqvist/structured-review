@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { extractHunkDiff, nodeChangeStats, subtractRanges, resolveRef, changedFilesStrict, GitError } from "../src/diff.js";
+import { extractHunkDiff, nodeChangeStats, subtractRanges, resolveRef, changedFilesStrict, currentBranch, GitError } from "../src/diff.js";
 
 let fixtureRepo: string;
 let emptyTmpDir: string;
@@ -37,6 +37,15 @@ describe("changedFilesStrict", () => {
   });
   it("returns [] for a clean repo", () => {
     expect(changedFilesStrict("HEAD", fixtureRepo)).toEqual([]);
+  });
+});
+
+describe("currentBranch", () => {
+  it("returns the checked-out branch", () => {
+    expect(currentBranch(fixtureRepo)).toBe("main"); // fixture created with git init -b main
+  });
+  it("returns null outside a repo", () => {
+    expect(currentBranch(emptyTmpDir)).toBeNull();
   });
 });
 
