@@ -103,6 +103,27 @@ describe("repoStateKey", () => {
     }
   });
 
+  it("re-indexes after editing an already-dirty file (content-sensitive key)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "crw-key-dirty-"));
+    try {
+      const git = (...a: string[]) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
+      git("init");
+      git("config", "user.email", "t@t");
+      git("config", "user.name", "t");
+      writeFileSync(join(dir, "a.txt"), "one\n");
+      git("add", ".");
+      git("commit", "-m", "init");
+
+      const p = new KeyProbe({ repoRoot: dir });
+      writeFileSync(join(dir, "a.txt"), "dirty1\n");
+      const k1 = p.publicKey();
+      writeFileSync(join(dir, "a.txt"), "dirty2\n"); // porcelain unchanged, content differs
+      expect(p.publicKey()).not.toBe(k1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("returns a unique key when git is unavailable (cache miss, no throw)", () => {
     const dir = mkdtempSync(join(tmpdir(), "crw-nogit-"));
     try {

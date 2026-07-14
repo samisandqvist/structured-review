@@ -3,7 +3,7 @@ import type { AppContext } from "../app.js";
 import { createSession, getSession, updateSessionStatus } from "../repo/sessions.js";
 import { createUnit, getUnitsBySession, deleteUnit, updateUnitLabel, setUnitPositions } from "../repo/units.js";
 import { createNode, getNodesBySession } from "../repo/nodes.js";
-import { fileChangedRanges, gitHeadSha, resolveRef, rangesOverlap, currentBranch, GitError, type LineRange } from "../diff.js";
+import { fileChangedRanges, gitHeadSha, repoFingerprint, resolveRef, rangesOverlap, currentBranch, GitError, type LineRange } from "../diff.js";
 import { computeResiduals } from "../residuals.js";
 import type { ChangeSubgraph, GraphNode } from "../graph/provider.js";
 import type { ChangeStatus } from "../types.js";
@@ -104,7 +104,7 @@ export function createSessionsRoute(ctx: AppContext) {
       throw e;
     }
 
-    const session = createSession(ctx.db, body.branch, body.baseRef, headSha);
+    const session = createSession(ctx.db, body.branch, body.baseRef, headSha, repoFingerprint(ctx.repoRoot) ?? "");
     for (const gnode of keptNodes) {
       createNode(ctx.db, {
         sessionId: session.id, stableId: gnode.stableId,
@@ -141,15 +141,26 @@ export function createSessionsRoute(ctx: AppContext) {
     const changed = getNodesBySession(ctx.db, session.id).filter((n) => n.changeStatus === "changed");
     const autoMembers = new Set(units.filter((u) => u.auto).flatMap((u) => u.memberStableIds));
     const unassigned = changed.filter((n) => autoMembers.has(n.stableId)).length;
-    // Stale = repo HEAD moved past the session snapshot; omitted when git (or
-    // the recorded sha) is unavailable — degrade silently.
+    // Stale = the session snapshot no longer matches the working tree, either
+    // because HEAD moved or a tracked/untracked file changed content (the
+    // fingerprint catches edits that leave HEAD untouched). Omitted when git
+    // (or the recorded state) is unavailable — degrade silently.
     const currentHead = gitHeadSha(ctx.repoRoot);
-    const stale = currentHead && session.headSha ? currentHead !== session.headSha : undefined;
+    const currentFp = repoFingerprint(ctx.repoRoot);
+    let stale: boolean | undefined;
+    let staleReason: "head-moved" | "working-tree-changed" | undefined;
+    if (currentHead && session.headSha) {
+      if (currentHead !== session.headSha) { stale = true; staleReason = "head-moved"; }
+      else if (currentFp && session.repoFingerprint && currentFp !== session.repoFingerprint) {
+        stale = true; staleReason = "working-tree-changed";
+      } else stale = false;
+    }
     return c.json({
       session,
       units,
       coverage: { changedTotal: changed.length, covered: changed.length - unassigned, unassigned },
       ...(stale === undefined ? {} : { stale }),
+      ...(staleReason ? { staleReason } : {}),
     });
   });
 

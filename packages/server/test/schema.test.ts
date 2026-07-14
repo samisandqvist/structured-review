@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import Database from "better-sqlite3";
 import { createMemoryDatabase, migrate } from "../src/db/connection.js";
-import { SCHEMA_VERSION } from "../src/db/schema.js";
+import { SCHEMA_VERSION, MIGRATIONS } from "../src/db/schema.js";
 
 describe("schema", () => {
   it("creates all tables", () => {
@@ -43,6 +43,25 @@ describe("schema", () => {
     expect(() => migrate(db)).not.toThrow();
     expect(db.pragma("user_version", { simple: true })).toBe(SCHEMA_VERSION);
     db.close();
+  });
+
+  it("adds repo_fingerprint via the v2 migration", () => {
+    const db = createMemoryDatabase();
+    const cols = (db.pragma("table_info(review_sessions)") as { name: string }[]).map((c) => c.name);
+    expect(cols).toContain("repo_fingerprint");
+    db.close();
+  });
+
+  it("throws a clear error when a migration in the upgrade path is missing", () => {
+    const saved = MIGRATIONS[SCHEMA_VERSION];
+    delete MIGRATIONS[SCHEMA_VERSION];
+    try {
+      const db = new Database(":memory:");
+      expect(() => migrate(db)).toThrow(new RegExp(`migration.*${SCHEMA_VERSION}`, "i"));
+      db.close();
+    } finally {
+      MIGRATIONS[SCHEMA_VERSION] = saved;
+    }
   });
 
   it("rejects a database newer than the application", () => {

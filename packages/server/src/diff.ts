@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -72,6 +73,29 @@ export function rangesOverlap(ranges: LineRange[], startLine: number, endLine: n
 export function gitHeadSha(root: string = repoRoot()): string | null {
   try {
     return execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8", ...QUIET }).trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Content-sensitive repo state fingerprint, or null when git is unavailable.
+ * sha256 over HEAD + `git diff HEAD` (staged + unstaged tracked changes) + each
+ * untracked file's path and content — so editing an already-dirty file (which
+ * leaves `git status --porcelain` unchanged) still moves the fingerprint.
+ */
+export function repoFingerprint(root: string = repoRoot()): string | null {
+  try {
+    const h = createHash("sha256");
+    h.update(execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8", ...QUIET }));
+    h.update(execFileSync("git", ["diff", "HEAD"], { cwd: root, maxBuffer: 256 * 1024 * 1024, ...QUIET }));
+    const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard"], { cwd: root, encoding: "utf8", ...QUIET })
+      .split("\n").filter(Boolean);
+    for (const f of untracked) {
+      h.update(f);
+      try { h.update(readFileSync(join(root, f))); } catch { h.update("<unreadable>"); }
+    }
+    return h.digest("hex");
   } catch {
     return null;
   }

@@ -12,8 +12,10 @@ export function migrate(db: DB): void {
     );
   }
   for (let v = current + 1; v <= SCHEMA_VERSION; v++) {
+    const sql = MIGRATIONS[v];
+    if (sql === undefined) throw new Error(`missing migration for schema version ${v}`);
     db.transaction(() => {
-      db.exec(MIGRATIONS[v]);
+      db.exec(sql);
       db.pragma(`user_version = ${v}`);
     })();
   }
