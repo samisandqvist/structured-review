@@ -3,6 +3,7 @@ import type { AppContext } from "../app.js";
 import type { ReviewStatus } from "../types.js";
 import { getNodesBySession, getNode, getNodeNeighbors, updateNodeReviewStatus } from "../repo/nodes.js";
 import { getSession } from "../repo/sessions.js";
+import { nodeHasComments } from "../repo/comments.js";
 import { getNodeDiff } from "../diff.js";
 
 export function createNodesRoute(ctx: AppContext) {
@@ -37,7 +38,10 @@ export function createNodesRoute(ctx: AppContext) {
     const nodeId = c.req.param("nodeId");
     const existing = getNode(ctx.db, nodeId);
     if (!existing || existing.sessionId !== c.req.param("id")) return c.json({ error: "not found" }, 404);
-    updateNodeReviewStatus(ctx.db, nodeId, body.reviewStatus, body.reviewedInUnit);
+    const status = body.reviewStatus === "reviewed-clean" && nodeHasComments(ctx.db, nodeId)
+      ? "reviewed-commented"
+      : body.reviewStatus;
+    updateNodeReviewStatus(ctx.db, nodeId, status, body.reviewedInUnit);
     const node = getNode(ctx.db, nodeId);
     if (!node) return c.json({ error: "not found" }, 404);
     return c.json({ node });

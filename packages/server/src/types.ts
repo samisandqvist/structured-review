@@ -15,6 +15,7 @@ export interface ReviewSession {
   status: SessionStatus;
   createdAt: number;
   headSha: string;
+  repoFingerprint: string;
 }
 
 export interface Unit {
@@ -61,6 +62,7 @@ export interface Comment {
 }
 
 export interface ExportedComment {
+  id: string;
   nodeId: string;
   stableId: string;
   label: string;

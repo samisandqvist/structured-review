@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -27,6 +28,18 @@ export interface LineRange {
   end: number;
 }
 
+export class GitError extends Error {
+  constructor(readonly phase: "resolve-ref" | "list-files" | "read-diff", message: string) {
+    super(message);
+    this.name = "GitError";
+  }
+}
+
+// Suppress inherited stderr on execFileSync calls: expected-failure paths
+// (bad refs, non-repo dirs) would otherwise flood test/CLI output with raw
+// git usage/error text. stdout still comes back as a string via `encoding`.
+const QUIET: { stdio: ["ignore", "pipe", "pipe"] } = { stdio: ["ignore", "pipe", "pipe"] };
+
 /**
  * The new-file line ranges actually touched by `git diff` for a file, or null
  * if there is no diff (or git errored) — meaning "unknown, don't reclassify".
@@ -39,6 +52,7 @@ export function fileChangedRanges(baseRef: string, file: string, root: string = 
       cwd: root,
       encoding: "utf8",
       maxBuffer: 32 * 1024 * 1024,
+      ...QUIET,
     });
   } catch {
     return null;
@@ -58,7 +72,39 @@ export function rangesOverlap(ranges: LineRange[], startLine: number, endLine: n
 /** Current HEAD sha, or null when git is unavailable. */
 export function gitHeadSha(root: string = repoRoot()): string | null {
   try {
-    return execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+    return execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8", ...QUIET }).trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Content-sensitive repo state fingerprint, or null when git is unavailable.
+ * sha256 over HEAD + `git diff HEAD` (staged + unstaged tracked changes) + each
+ * untracked file's path and content — so editing an already-dirty file (which
+ * leaves `git status --porcelain` unchanged) still moves the fingerprint.
+ */
+export function repoFingerprint(root: string = repoRoot()): string | null {
+  try {
+    const h = createHash("sha256");
+    h.update(execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8", ...QUIET }));
+    h.update(execFileSync("git", ["diff", "HEAD"], { cwd: root, maxBuffer: 256 * 1024 * 1024, ...QUIET }));
+    const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard"], { cwd: root, encoding: "utf8", ...QUIET })
+      .split("\n").filter(Boolean);
+    for (const f of untracked) {
+      h.update(f);
+      try { h.update(readFileSync(join(root, f))); } catch { h.update("<unreadable>"); }
+    }
+    return h.digest("hex");
+  } catch {
+    return null;
+  }
+}
+
+/** The currently checked-out branch name ("HEAD" when detached), or null on git failure. */
+export function currentBranch(root: string = repoRoot()): string | null {
+  try {
+    return execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: root, encoding: "utf8", ...QUIET }).trim();
   } catch {
     return null;
   }
@@ -71,10 +117,40 @@ export function changedFiles(baseRef: string, root: string = repoRoot()): string
       cwd: root,
       encoding: "utf8",
       maxBuffer: 32 * 1024 * 1024,
+      ...QUIET,
     });
     return raw.split("\n").map((l) => l.trim()).filter(Boolean);
   } catch {
     return [];
+  }
+}
+
+/** Resolves `ref` to a full commit sha, or null if it doesn't exist in `root`. */
+export function resolveRef(ref: string, root: string = repoRoot()): string | null {
+  try {
+    return execFileSync("git", ["rev-parse", "--verify", `${ref}^{commit}`], { cwd: root, encoding: "utf8", ...QUIET }).trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Repo-relative paths changed vs baseRef. Unlike `changedFiles`, git failure
+ * throws `GitError` instead of returning `[]` — for callers (session
+ * creation) where an empty-but-broken result would be indistinguishable from
+ * "genuinely no changes" and silently violate the coverage guarantee.
+ */
+export function changedFilesStrict(baseRef: string, root: string = repoRoot()): string[] {
+  try {
+    const raw = execFileSync("git", ["diff", "--name-only", baseRef], {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+      ...QUIET,
+    });
+    return raw.split("\n").map((l) => l.trim()).filter(Boolean);
+  } catch (e) {
+    throw new GitError("list-files", `git diff --name-only ${baseRef} failed: ${(e as Error).message}`);
   }
 }
 
@@ -106,6 +182,7 @@ export function repoRoot(): string {
       try {
         return execFileSync("git", ["rev-parse", "--show-toplevel"], {
           encoding: "utf8",
+          ...QUIET,
         }).trim();
       } catch {
         return process.cwd();
@@ -134,6 +211,7 @@ export function getNodeDiff(
       cwd: root,
       encoding: "utf8",
       maxBuffer: 32 * 1024 * 1024,
+      ...QUIET,
     });
   } catch {
     const slice = readSlice(root, file, startLine, endLine);
@@ -197,6 +275,7 @@ export function fileUnifiedDiff(baseRef: string, file: string, root: string = re
       cwd: root,
       encoding: "utf8",
       maxBuffer: 32 * 1024 * 1024,
+      ...QUIET,
     });
     return raw.trim() ? raw : null;
   } catch {

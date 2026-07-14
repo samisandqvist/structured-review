@@ -1,5 +1,53 @@
-import { describe, it, expect } from "vitest";
-import { extractHunkDiff, nodeChangeStats, subtractRanges } from "../src/diff.js";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { extractHunkDiff, nodeChangeStats, subtractRanges, resolveRef, changedFilesStrict, currentBranch, repoFingerprint, GitError } from "../src/diff.js";
+
+let fixtureRepo: string;
+let emptyTmpDir: string;
+beforeAll(() => {
+  fixtureRepo = mkdtempSync(join(tmpdir(), "crw-diff-fixture-"));
+  const git = (...a: string[]) => execFileSync("git", a, { cwd: fixtureRepo, encoding: "utf8" });
+  git("init", "-b", "main");
+  git("config", "user.email", "t@t");
+  git("config", "user.name", "t");
+  writeFileSync(join(fixtureRepo, "a.txt"), "one\n");
+  git("add", ".");
+  git("commit", "-m", "init");
+
+  emptyTmpDir = mkdtempSync(join(tmpdir(), "crw-diff-empty-"));
+});
+afterAll(() => {
+  rmSync(fixtureRepo, { recursive: true, force: true });
+  rmSync(emptyTmpDir, { recursive: true, force: true });
+});
+
+describe("resolveRef", () => {
+  it("resolves HEAD and returns null for unknown refs", () => {
+    expect(resolveRef("HEAD", fixtureRepo)).toMatch(/^[0-9a-f]{40}$/);
+    expect(resolveRef("no-such-ref", fixtureRepo)).toBeNull();
+  });
+});
+
+describe("changedFilesStrict", () => {
+  it("throws GitError outside a repo", () => {
+    expect(() => changedFilesStrict("HEAD", emptyTmpDir)).toThrow(GitError);
+  });
+  it("returns [] for a clean repo", () => {
+    expect(changedFilesStrict("HEAD", fixtureRepo)).toEqual([]);
+  });
+});
+
+describe("currentBranch", () => {
+  it("returns the checked-out branch", () => {
+    expect(currentBranch(fixtureRepo)).toBe("main"); // fixture created with git init -b main
+  });
+  it("returns null outside a repo", () => {
+    expect(currentBranch(emptyTmpDir)).toBeNull();
+  });
+});
 
 const RAW = `diff --git a/src/f.ts b/src/f.ts
 index abc1234..def5678 100644
@@ -53,6 +101,45 @@ describe("nodeChangeStats", () => {
   });
   it("ignores changes outside the span", () => {
     expect(nodeChangeStats(raw, 10, 10)).toEqual({ added: 0, removed: 0 });
+  });
+});
+
+describe("repoFingerprint", () => {
+  let dir: string;
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), "crw-fp-"));
+    const git = (...a: string[]) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
+    git("init", "-b", "main");
+    git("config", "user.email", "t@t");
+    git("config", "user.name", "t");
+    writeFileSync(join(dir, "a.txt"), "one\n");
+    git("add", ".");
+    git("commit", "-m", "init");
+  });
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("is stable when nothing changed", () => {
+    expect(repoFingerprint(dir)).toBe(repoFingerprint(dir));
+  });
+
+  it("changes when an already-dirty file is edited again", () => {
+    writeFileSync(join(dir, "a.txt"), "dirty1\n");
+    const f1 = repoFingerprint(dir);
+    writeFileSync(join(dir, "a.txt"), "dirty2\n"); // porcelain status unchanged: still " M a.txt"
+    const f2 = repoFingerprint(dir);
+    expect(f2).not.toBe(f1);
+  });
+
+  it("changes when an untracked file's content changes", () => {
+    writeFileSync(join(dir, "u.txt"), "u1\n");
+    const f1 = repoFingerprint(dir);
+    writeFileSync(join(dir, "u.txt"), "u2\n");
+    const f2 = repoFingerprint(dir);
+    expect(f2).not.toBe(f1);
+  });
+
+  it("returns null when git is unavailable", () => {
+    expect(repoFingerprint(emptyTmpDir)).toBeNull();
   });
 });
 

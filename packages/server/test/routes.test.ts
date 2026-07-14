@@ -14,8 +14,16 @@ let app: ReturnType<typeof createApp>;
 let fixtureRoot: string;
 beforeEach(() => {
   db = createMemoryDatabase();
-  // Not a git repo → diff helpers see no changes; sessions behave as before.
+  // A minimal git repo on "main" so baseRef resolution succeeds by default;
+  // tests that need real diffs add commits/changes on top of this.
   fixtureRoot = mkdtempSync(join(tmpdir(), "crw-routes-"));
+  const g = (...a: string[]) => execFileSync("git", a, { cwd: fixtureRoot, encoding: "utf8" });
+  g("init", "-b", "main");
+  g("config", "user.email", "t@t");
+  g("config", "user.name", "t");
+  writeFileSync(join(fixtureRoot, ".gitkeep"), "");
+  g("add", ".");
+  g("commit", "-m", "init");
   app = createApp({ db, graphProvider: new StubGraphProvider(), repoRoot: fixtureRoot });
 });
 afterEach(() => {
@@ -27,13 +35,88 @@ describe("POST /api/sessions", () => {
   it("creates a session and returns it with the change subgraph", async () => {
     const res = await app.request("/api/sessions", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.session.id).toBeDefined();
-    expect(body.session.branch).toBe("feat");
+    expect(body.session.branch).toBe("HEAD");
     expect(body.subgraph.nodes.length).toBeGreaterThan(0);
+  });
+
+  it("accepts branch HEAD and the checked-out branch", async () => {
+    const resHead = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    expect(resHead.status).toBe(200);
+    const resMain = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "main", baseRef: "main" }),
+    });
+    expect(resMain.status).toBe(200);
+  });
+
+  it("rejects a branch that is not checked out", async () => {
+    const res = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "some-other-branch", baseRef: "HEAD" }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toMatch(/some-other-branch/);
+    expect(body.error).toMatch(/main/);
+    expect(body.phase).toBe("resolve-ref");
+  });
+
+  it("fails with 400 when the repo is unusable", async () => {
+    const badRoot = mkdtempSync(join(tmpdir(), "crw-routes-nogit-"));
+    const badApp = createApp({ db, graphProvider: new StubGraphProvider(), repoRoot: badRoot });
+    try {
+      const res = await badApp.request("/api/sessions", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toMatch(/git|ref/i);
+      expect(body.phase).toBe("resolve-ref");
+    } finally {
+      rmSync(badRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("fails with 400 for an unresolvable baseRef", async () => {
+    const res = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "does-not-exist" }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toMatch(/git|ref/i);
+    expect(body.phase).toBe("resolve-ref");
+  });
+
+  it("fails with 400 and persists no session row when git breaks mid-creation", async () => {
+    // Validation passes, then git disappears before residuals run — the
+    // GitError path must 400 without leaving an orphaned session row behind.
+    class GitBreakingStub extends StubGraphProvider {
+      override async getChangeSubgraph(branch: string, baseRef: string) {
+        rmSync(join(fixtureRoot, ".git"), { recursive: true, force: true });
+        return super.getChangeSubgraph(branch, baseRef);
+      }
+    }
+    const app2 = createApp({ db, graphProvider: new GitBreakingStub(), repoRoot: fixtureRoot });
+    const res = await app2.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toMatch(/git|ref/i);
+    expect(body.phase).toBe("list-files");
+    const { n } = db.prepare("SELECT COUNT(*) AS n FROM review_sessions").get() as { n: number };
+    expect(n).toBe(0);
   });
 });
 
@@ -41,7 +124,7 @@ describe("GET /api/sessions/:id", () => {
   it("returns session with units", async () => {
     const cr = await app.request("/api/sessions", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     const res = await app.request(`/api/sessions/${session.id}`);
@@ -60,7 +143,7 @@ describe("PUT /api/sessions/:id/plan", () => {
   it("replaces the plan with kind-tagged units", async () => {
     const cr = await app.request("/api/sessions", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     const res = await app.request(`/api/sessions/${session.id}/plan`, {
@@ -84,7 +167,7 @@ describe("PUT /api/sessions/:id/plan", () => {
   it("stores multi-entry flow-units with deduped members", async () => {
     const cr = await app.request("/api/sessions", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     const res = await app.request(`/api/sessions/${session.id}/plan`, {
@@ -102,7 +185,7 @@ describe("GET /api/sessions/:id/nodes", () => {
   it("lists all nodes in a session", async () => {
     const cr = await app.request("/api/sessions", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     const res = await app.request(`/api/sessions/${session.id}/nodes`);
@@ -115,7 +198,7 @@ describe("PATCH /api/sessions/:id/nodes/:nodeId", () => {
   it("updates node review status", async () => {
     const cr = await app.request("/api/sessions", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     const nr = await app.request(`/api/sessions/${session.id}/nodes`);
@@ -127,13 +210,35 @@ describe("PATCH /api/sessions/:id/nodes/:nodeId", () => {
     expect(res.status).toBe(200);
     expect((await res.json()).node.reviewStatus).toBe("reviewed-clean");
   });
+
+  it("normalizes reviewed-clean to reviewed-commented when the node has comments", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const sid = session.id;
+    const nr = await app.request(`/api/sessions/${sid}/nodes`);
+    const { nodes } = await nr.json();
+    const nid = nodes[0].id;
+    await app.request(`/api/sessions/${sid}/comments`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nodeId: nid, hunkSnippet: "const x = 1", text: "this looks wrong", structuralContext: "callers: routeHandler" }),
+    });
+    const res = await app.request(`/api/sessions/${sid}/nodes/${nid}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reviewStatus: "reviewed-clean" }),
+    });
+    const { node } = await res.json();
+    expect(node.reviewStatus).toBe("reviewed-commented");
+  });
 });
 
 describe("POST /api/sessions/:id/comments", () => {
   it("creates a comment on a node", async () => {
     const cr = await app.request("/api/sessions", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     const nr = await app.request(`/api/sessions/${session.id}/nodes`);
@@ -151,7 +256,7 @@ describe("GET /api/sessions/:id/comments", () => {
   it("lists comments in a session", async () => {
     const cr = await app.request("/api/sessions", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     const nr = await app.request(`/api/sessions/${session.id}/nodes`);
@@ -170,7 +275,7 @@ describe("coverage reconciliation", () => {
   it("sweeps uncovered changed nodes into an auto Unassigned unit and reports coverage", async () => {
     const cr = await app.request("/api/sessions", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     // Stub flows = [], so an orphan-unit covering one changed node leaves the rest unassigned.
@@ -192,10 +297,10 @@ describe("coverage reconciliation", () => {
 });
 
 describe("GET /api/sessions/:id/export", () => {
-  it("exports comments keyed by node id with structural context", async () => {
+  it("exports comments as an ordered array with structural context", async () => {
     const cr = await app.request("/api/sessions", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     const nr = await app.request(`/api/sessions/${session.id}/nodes`);
@@ -207,8 +312,32 @@ describe("GET /api/sessions/:id/export", () => {
     const res = await app.request(`/api/sessions/${session.id}/export`);
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(Object.keys(body).length).toBe(1);
-    expect(body[nodes[0].id].text).toBe("fix this");
+    expect(body.comments).toHaveLength(1);
+    expect(body.comments[0].nodeId).toBe(nodes[0].id);
+    expect(body.comments[0].text).toBe("fix this");
+  });
+
+  it("preserves multiple comments on the same node in creation order", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const nr = await app.request(`/api/sessions/${session.id}/nodes`);
+    const { nodes } = await nr.json();
+    await app.request(`/api/sessions/${session.id}/comments`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nodeId: nodes[0].id, hunkSnippet: "s1", text: "first", structuralContext: "ctxA" }),
+    });
+    await app.request(`/api/sessions/${session.id}/comments`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nodeId: nodes[0].id, hunkSnippet: "s2", text: "second", structuralContext: "ctxB" }),
+    });
+    const res = await app.request(`/api/sessions/${session.id}/export`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.comments).toHaveLength(2);
+    expect(body.comments.map((c: any) => c.text)).toEqual(["first", "second"]);
   });
 });
 
@@ -216,7 +345,7 @@ describe("GET /api/sessions/:id/flows", () => {
   it("returns flows and the orphan set (changed nodes in no flow)", async () => {
     const cr = await app.request("/api/sessions", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     const res = await app.request(`/api/sessions/${session.id}/flows`);
@@ -246,7 +375,7 @@ describe("flows route step identity", () => {
     const app2 = createApp({ db, graphProvider: new FlowStub(), repoRoot: fixtureRoot });
     const cr = await app2.request("/api/sessions", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     const res = await app2.request(`/api/sessions/${session.id}/flows`);
@@ -270,7 +399,7 @@ describe("flows route passes the changed set to the provider", () => {
     const app2 = createApp({ db, graphProvider: provider, repoRoot: fixtureRoot });
     const cr = await app2.request("/api/sessions", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     await app2.request(`/api/sessions/${session.id}/flows`);
@@ -283,16 +412,13 @@ describe("residual pseudo-nodes", () => {
     return execFileSync("git", a, { cwd: fixtureRoot, encoding: "utf8" });
   }
   async function makeResidualSession() {
-    gitInFixture("init", "-b", "main");
-    gitInFixture("config", "user.email", "t@t");
-    gitInFixture("config", "user.name", "t");
     writeFileSync(join(fixtureRoot, "config.json"), '{\n  "a": 1\n}\n');
     gitInFixture("add", ".");
     gitInFixture("commit", "-m", "base");
     writeFileSync(join(fixtureRoot, "config.json"), '{\n  "a": 2\n}\n');
     const cr = await app.request("/api/sessions", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     return session as { id: string };
@@ -326,7 +452,7 @@ describe("PATCH /api/sessions/:id/units/:unitId", () => {
   async function makePlan() {
     const cr = await app.request("/api/sessions", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     const pr = await app.request(`/api/sessions/${session.id}/plan`, {
@@ -364,7 +490,7 @@ describe("PATCH /api/sessions/:id/units/:unitId", () => {
   it("rejects edits to the auto unit and 404s unknown units", async () => {
     const cr = await app.request("/api/sessions", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     // empty plan → both stub changed nodes swept into the auto unit
@@ -390,16 +516,13 @@ describe("PATCH /api/sessions/:id/units/:unitId", () => {
 describe("stale session indicator", () => {
   it("reports stale=false right after creation and true after HEAD moves", async () => {
     const g = (...a: string[]) => execFileSync("git", a, { cwd: fixtureRoot, encoding: "utf8" });
-    g("init", "-b", "main");
-    g("config", "user.email", "t@t");
-    g("config", "user.name", "t");
     writeFileSync(join(fixtureRoot, "a.txt"), "1\n");
     g("add", ".");
     g("commit", "-m", "one");
 
     const cr = await app.request("/api/sessions", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
 
@@ -410,18 +533,56 @@ describe("stale session indicator", () => {
     g("add", ".");
     g("commit", "-m", "two");
     res = await app.request(`/api/sessions/${session.id}`);
-    expect((await res.json()).stale).toBe(true);
+    const body = await res.json();
+    expect(body.stale).toBe(true);
+    expect(body.staleReason).toBe("head-moved");
   });
 
-  it("omits stale when the repo has no git", async () => {
-    // default beforeEach fixtureRoot is not a git repo
+  it("reports staleReason working-tree-changed after editing a tracked file", async () => {
+    const g = (...a: string[]) => execFileSync("git", a, { cwd: fixtureRoot, encoding: "utf8" });
+    writeFileSync(join(fixtureRoot, "a.txt"), "1\n");
+    g("add", ".");
+    g("commit", "-m", "one");
+
     const cr = await app.request("/api/sessions", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
+
+    // HEAD unchanged, working tree edited → stale by fingerprint.
+    writeFileSync(join(fixtureRoot, "a.txt"), "edited\n");
+    const res = await app.request(`/api/sessions/${session.id}`);
+    const body = await res.json();
+    expect(body.stale).toBe(true);
+    expect(body.staleReason).toBe("working-tree-changed");
+  });
+
+  it("omits stale when git becomes unavailable after session creation", async () => {
+    // Session creation requires a working repo; simulate git disappearing
+    // afterward (e.g. a broken checkout) and confirm GET still degrades softly.
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    rmSync(join(fixtureRoot, ".git"), { recursive: true, force: true });
     const res = await app.request(`/api/sessions/${session.id}`);
     expect((await res.json()).stale).toBeUndefined();
+  });
+
+  it("omits stale (not false) when HEAD matches but the stored fingerprint could not be verified", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+
+    db.prepare("UPDATE review_sessions SET repo_fingerprint = '' WHERE id = ?").run(session.id);
+
+    const res = await app.request(`/api/sessions/${session.id}`);
+    const body = await res.json();
+    expect(body).not.toHaveProperty("stale");
   });
 });
 
@@ -429,7 +590,7 @@ describe("GET /api/sessions/:id/changes", () => {
   it("returns one compact summary per changed node, no diff bodies", async () => {
     const cr = await app.request("/api/sessions", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     const res = await app.request(`/api/sessions/${session.id}/changes`);

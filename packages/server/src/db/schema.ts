@@ -57,3 +57,15 @@ CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_node_id);
 CREATE INDEX IF NOT EXISTS idx_comments_session ON comments(session_id);
 CREATE INDEX IF NOT EXISTS idx_comments_node ON comments(node_id);
 `;
+
+export const SCHEMA_VERSION = 2;
+/**
+ * SQL applied when upgrading TO each version. Version 1 = baseline tables.
+ * `repo_fingerprint` is deliberately NOT in the baseline SCHEMA_SQL: v2 adds it
+ * via ALTER TABLE, and fresh DBs run 0→1→2. Keeping the column out of baseline
+ * is what lets the same v2 ALTER run cleanly on both fresh and existing DBs.
+ */
+export const MIGRATIONS: Record<number, string> = {
+  1: SCHEMA_SQL,
+  2: `ALTER TABLE review_sessions ADD COLUMN repo_fingerprint TEXT NOT NULL DEFAULT '';`,
+};

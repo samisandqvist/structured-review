@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { createMemoryDatabase } from "../src/db/connection.js";
+import Database from "better-sqlite3";
+import { createMemoryDatabase, migrate } from "../src/db/connection.js";
+import { SCHEMA_VERSION, MIGRATIONS } from "../src/db/schema.js";
 
 describe("schema", () => {
   it("creates all tables", () => {
@@ -23,6 +25,49 @@ describe("schema", () => {
         "INSERT INTO units (id, session_id, position, label, rationale) VALUES (?, ?, ?, ?, ?)"
       ).run("u1", "nonexistent", 0, "test", "test")
     ).toThrow();
+    db.close();
+  });
+
+  it("stamps a fresh database with SCHEMA_VERSION", () => {
+    const db = createMemoryDatabase();
+    expect(db.pragma("user_version", { simple: true })).toBe(SCHEMA_VERSION);
+    db.close();
+  });
+
+  it("migrates a version-0 database with existing tables to current", () => {
+    const db = new Database(":memory:");
+    db.exec(
+      "CREATE TABLE IF NOT EXISTS review_sessions (id TEXT PRIMARY KEY, branch TEXT NOT NULL, base_ref TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'planning', created_at INTEGER NOT NULL, head_sha TEXT NOT NULL DEFAULT '')"
+    );
+    expect(db.pragma("user_version", { simple: true })).toBe(0);
+    expect(() => migrate(db)).not.toThrow();
+    expect(db.pragma("user_version", { simple: true })).toBe(SCHEMA_VERSION);
+    db.close();
+  });
+
+  it("adds repo_fingerprint via the v2 migration", () => {
+    const db = createMemoryDatabase();
+    const cols = (db.pragma("table_info(review_sessions)") as { name: string }[]).map((c) => c.name);
+    expect(cols).toContain("repo_fingerprint");
+    db.close();
+  });
+
+  it("throws a clear error when a migration in the upgrade path is missing", () => {
+    const saved = MIGRATIONS[SCHEMA_VERSION];
+    delete MIGRATIONS[SCHEMA_VERSION];
+    try {
+      const db = new Database(":memory:");
+      expect(() => migrate(db)).toThrow(new RegExp(`migration.*${SCHEMA_VERSION}`, "i"));
+      db.close();
+    } finally {
+      MIGRATIONS[SCHEMA_VERSION] = saved;
+    }
+  });
+
+  it("rejects a database newer than the application", () => {
+    const db = new Database(":memory:");
+    db.pragma(`user_version = ${SCHEMA_VERSION + 1}`);
+    expect(() => migrate(db)).toThrow(/newer/i);
     db.close();
   });
 });
