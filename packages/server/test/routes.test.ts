@@ -14,8 +14,16 @@ let app: ReturnType<typeof createApp>;
 let fixtureRoot: string;
 beforeEach(() => {
   db = createMemoryDatabase();
-  // Not a git repo → diff helpers see no changes; sessions behave as before.
+  // A minimal git repo on "main" so baseRef resolution succeeds by default;
+  // tests that need real diffs add commits/changes on top of this.
   fixtureRoot = mkdtempSync(join(tmpdir(), "crw-routes-"));
+  const g = (...a: string[]) => execFileSync("git", a, { cwd: fixtureRoot, encoding: "utf8" });
+  g("init", "-b", "main");
+  g("config", "user.email", "t@t");
+  g("config", "user.name", "t");
+  writeFileSync(join(fixtureRoot, ".gitkeep"), "");
+  g("add", ".");
+  g("commit", "-m", "init");
   app = createApp({ db, graphProvider: new StubGraphProvider(), repoRoot: fixtureRoot });
 });
 afterEach(() => {
@@ -34,6 +42,34 @@ describe("POST /api/sessions", () => {
     expect(body.session.id).toBeDefined();
     expect(body.session.branch).toBe("feat");
     expect(body.subgraph.nodes.length).toBeGreaterThan(0);
+  });
+
+  it("fails with 400 when the repo is unusable", async () => {
+    const badRoot = mkdtempSync(join(tmpdir(), "crw-routes-nogit-"));
+    const badApp = createApp({ db, graphProvider: new StubGraphProvider(), repoRoot: badRoot });
+    try {
+      const res = await badApp.request("/api/sessions", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toMatch(/git|ref/i);
+      expect(body.phase).toBe("resolve-ref");
+    } finally {
+      rmSync(badRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("fails with 400 for an unresolvable baseRef", async () => {
+    const res = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "does-not-exist" }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toMatch(/git|ref/i);
+    expect(body.phase).toBe("resolve-ref");
   });
 });
 
@@ -307,9 +343,6 @@ describe("residual pseudo-nodes", () => {
     return execFileSync("git", a, { cwd: fixtureRoot, encoding: "utf8" });
   }
   async function makeResidualSession() {
-    gitInFixture("init", "-b", "main");
-    gitInFixture("config", "user.email", "t@t");
-    gitInFixture("config", "user.name", "t");
     writeFileSync(join(fixtureRoot, "config.json"), '{\n  "a": 1\n}\n');
     gitInFixture("add", ".");
     gitInFixture("commit", "-m", "base");
@@ -414,9 +447,6 @@ describe("PATCH /api/sessions/:id/units/:unitId", () => {
 describe("stale session indicator", () => {
   it("reports stale=false right after creation and true after HEAD moves", async () => {
     const g = (...a: string[]) => execFileSync("git", a, { cwd: fixtureRoot, encoding: "utf8" });
-    g("init", "-b", "main");
-    g("config", "user.email", "t@t");
-    g("config", "user.name", "t");
     writeFileSync(join(fixtureRoot, "a.txt"), "1\n");
     g("add", ".");
     g("commit", "-m", "one");
@@ -437,13 +467,15 @@ describe("stale session indicator", () => {
     expect((await res.json()).stale).toBe(true);
   });
 
-  it("omits stale when the repo has no git", async () => {
-    // default beforeEach fixtureRoot is not a git repo
+  it("omits stale when git becomes unavailable after session creation", async () => {
+    // Session creation requires a working repo; simulate git disappearing
+    // afterward (e.g. a broken checkout) and confirm GET still degrades softly.
     const cr = await app.request("/api/sessions", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "feat", baseRef: "main" }),
     });
     const { session } = await cr.json();
+    rmSync(join(fixtureRoot, ".git"), { recursive: true, force: true });
     const res = await app.request(`/api/sessions/${session.id}`);
     expect((await res.json()).stale).toBeUndefined();
   });

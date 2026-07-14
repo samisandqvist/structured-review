@@ -3,7 +3,7 @@ import type { AppContext } from "../app.js";
 import { createSession, getSession, updateSessionStatus } from "../repo/sessions.js";
 import { createUnit, getUnitsBySession, deleteUnit, updateUnitLabel, setUnitPositions } from "../repo/units.js";
 import { createNode, getNodesBySession } from "../repo/nodes.js";
-import { fileChangedRanges, gitHeadSha, rangesOverlap, type LineRange } from "../diff.js";
+import { fileChangedRanges, gitHeadSha, resolveRef, rangesOverlap, GitError, type LineRange } from "../diff.js";
 import { computeResiduals } from "../residuals.js";
 import type { ChangeSubgraph, GraphNode } from "../graph/provider.js";
 import type { ChangeStatus } from "../types.js";
@@ -59,44 +59,59 @@ export function createSessionsRoute(ctx: AppContext) {
 
   router.post("/", async (c) => {
     const body = await c.req.json<{ branch: string; baseRef: string }>();
-    const session = createSession(ctx.db, body.branch, body.baseRef, gitHeadSha(ctx.repoRoot) ?? "");
+
+    // Fail loudly here: an unusable repo/baseRef must not silently produce an
+    // empty-but-complete-looking session (see diff.ts changedFilesStrict).
+    const headSha = gitHeadSha(ctx.repoRoot);
+    if (!headSha) return c.json({ error: "not a git repository (or git unavailable)", phase: "resolve-ref" }, 400);
+    if (!resolveRef(body.baseRef, ctx.repoRoot)) {
+      return c.json({ error: `cannot resolve base ref '${body.baseRef}'`, phase: "resolve-ref" }, 400);
+    }
+
+    const session = createSession(ctx.db, body.branch, body.baseRef, headSha);
     const subgraph = await ctx.graphProvider.getChangeSubgraph(body.branch, body.baseRef);
-    const { nodes: keptNodes, status } = reconcileSubgraph(subgraph, body.baseRef, ctx.repoRoot!);
 
-    for (const gnode of keptNodes) {
-      createNode(ctx.db, {
-        sessionId: session.id, stableId: gnode.stableId,
-        label: gnode.label, file: gnode.file, startLine: gnode.startLine, endLine: gnode.endLine,
-        changeStatus: status.get(gnode.stableId)!, reviewStatus: "unreviewed", reviewedInUnit: null,
-        isTest: gnode.isTest,
-      });
-    }
+    try {
+      const { nodes: keptNodes, status } = reconcileSubgraph(subgraph, body.baseRef, ctx.repoRoot!);
 
-    // Residual coverage: changed lines outside every node span become one
-    // pseudo-node per file, so types/imports/configs still enter the universe.
-    const spansByFile = new Map<string, LineRange[]>();
-    for (const n of keptNodes) {
-      const spans = spansByFile.get(n.file) ?? [];
-      spans.push({ start: n.startLine, end: n.endLine });
-      spansByFile.set(n.file, spans);
-    }
-    for (const r of computeResiduals(body.baseRef, spansByFile, ctx.repoRoot!)) {
-      createNode(ctx.db, {
-        sessionId: session.id, stableId: r.stableId,
-        label: r.label, file: r.file, startLine: r.startLine, endLine: r.endLine,
-        changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null,
-        isTest: r.isTest,
-      });
-    }
-    const dbNodes = getNodesBySession(ctx.db, session.id);
-    for (const gedge of subgraph.edges) {
-      const source = dbNodes.find(n => n.stableId === gedge.sourceStableId);
-      const target = dbNodes.find(n => n.stableId === gedge.targetStableId);
-      if (source && target) {
-        ctx.db.prepare(
-          "INSERT INTO edges (id, session_id, source_node_id, target_node_id, edge_type) VALUES (?, ?, ?, ?, ?)"
-        ).run(randomId("edge"), session.id, source.id, target.id, gedge.edgeType);
+      for (const gnode of keptNodes) {
+        createNode(ctx.db, {
+          sessionId: session.id, stableId: gnode.stableId,
+          label: gnode.label, file: gnode.file, startLine: gnode.startLine, endLine: gnode.endLine,
+          changeStatus: status.get(gnode.stableId)!, reviewStatus: "unreviewed", reviewedInUnit: null,
+          isTest: gnode.isTest,
+        });
       }
+
+      // Residual coverage: changed lines outside every node span become one
+      // pseudo-node per file, so types/imports/configs still enter the universe.
+      const spansByFile = new Map<string, LineRange[]>();
+      for (const n of keptNodes) {
+        const spans = spansByFile.get(n.file) ?? [];
+        spans.push({ start: n.startLine, end: n.endLine });
+        spansByFile.set(n.file, spans);
+      }
+      for (const r of computeResiduals(body.baseRef, spansByFile, ctx.repoRoot!)) {
+        createNode(ctx.db, {
+          sessionId: session.id, stableId: r.stableId,
+          label: r.label, file: r.file, startLine: r.startLine, endLine: r.endLine,
+          changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null,
+          isTest: r.isTest,
+        });
+      }
+      const dbNodes = getNodesBySession(ctx.db, session.id);
+      for (const gedge of subgraph.edges) {
+        const source = dbNodes.find(n => n.stableId === gedge.sourceStableId);
+        const target = dbNodes.find(n => n.stableId === gedge.targetStableId);
+        if (source && target) {
+          ctx.db.prepare(
+            "INSERT INTO edges (id, session_id, source_node_id, target_node_id, edge_type) VALUES (?, ?, ?, ?, ?)"
+          ).run(randomId("edge"), session.id, source.id, target.id, gedge.edgeType);
+        }
+      }
+    } catch (e) {
+      if (e instanceof GitError) return c.json({ error: e.message, phase: e.phase }, 400);
+      throw e;
     }
     return c.json({ session, subgraph });
   });
