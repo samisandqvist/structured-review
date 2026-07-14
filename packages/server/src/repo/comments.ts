@@ -28,7 +28,8 @@ export function createComment(
 }
 
 export function getCommentsBySession(db: DB, sessionId: string): Comment[] {
-  return (db.prepare("SELECT * FROM comments WHERE session_id = ? ORDER BY created_at").all(sessionId) as CommentRow[]).map(rowToComment);
+  // rowid tie-break: same-millisecond comments still come back in insertion order.
+  return (db.prepare("SELECT * FROM comments WHERE session_id = ? ORDER BY created_at, rowid").all(sessionId) as CommentRow[]).map(rowToComment);
 }
 
 export function nodeHasComments(db: DB, nodeId: string): boolean {
@@ -39,7 +40,7 @@ export function nodeHasComments(db: DB, nodeId: string): boolean {
 export function exportComments(db: DB, sessionId: string): ExportedComment[] {
   const rows = db.prepare(
     `SELECT c.id, c.node_id, n.stable_id, n.label, n.file, c.hunk_snippet, c.text, c.structural_context, c.created_at
-     FROM comments c JOIN nodes n ON c.node_id = n.id WHERE c.session_id = ? ORDER BY c.created_at`
+     FROM comments c JOIN nodes n ON c.node_id = n.id WHERE c.session_id = ? ORDER BY c.created_at, c.rowid`
   ).all(sessionId) as {
     id: string; node_id: string; stable_id: string; label: string; file: string;
     hunk_snippet: string; text: string; structural_context: string; created_at: number;

@@ -31,6 +31,8 @@ function git(root: string, ...args: string[]): string {
  */
 function makeFixture(): string {
   const root = mkdtempSync(join(tmpdir(), "crw-e2e-"));
+  dir = root; // assign before any git/fs step so afterEach cleans up a partial fixture
+
   git(root, "init", "-b", "main");
   git(root, "config", "user.email", "t@t");
   git(root, "config", "user.name", "t");
