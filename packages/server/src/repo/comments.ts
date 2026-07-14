@@ -31,6 +31,11 @@ export function getCommentsBySession(db: DB, sessionId: string): Comment[] {
   return (db.prepare("SELECT * FROM comments WHERE session_id = ? ORDER BY created_at").all(sessionId) as CommentRow[]).map(rowToComment);
 }
 
+export function nodeHasComments(db: DB, nodeId: string): boolean {
+  const row = db.prepare("SELECT 1 FROM comments WHERE node_id = ? LIMIT 1").get(nodeId);
+  return row !== undefined;
+}
+
 export function exportComments(db: DB, sessionId: string): ExportedComment[] {
   const rows = db.prepare(
     `SELECT c.id, c.node_id, n.stable_id, n.label, n.file, c.hunk_snippet, c.text, c.structural_context, c.created_at
