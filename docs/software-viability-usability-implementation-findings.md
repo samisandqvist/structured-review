@@ -2,7 +2,46 @@
 
 **Date:** 2026-07-12  
 **Scope:** Repository Markdown, current implementation, and automated verification  
-**Status:** Assessment and recommendations
+**Status:** Assessment and recommendations — P0 items implemented 2026-07-14 (see below)
+
+## Implementation status (2026-07-14, branch `fix/viability-p0`)
+
+The full P0 roadmap and the trust-critical P1 items were implemented and merged.
+Each task passed an independent spec+quality review; the suite grew from 105 to
+142 tests (including a real-SCIP fixture-repository end-to-end test), all green.
+
+**Resolved:**
+
+- Built application launch path (Critical) — server serves `packages/web/dist`
+  with SPA fallback and traversal guard, binds `127.0.0.1` by default,
+  `pnpm start` added; unregistered `/api/*` returns JSON 404 (`07253f4`, `ebbbcb0`).
+- `branch` not the review target (Critical) — short-term contract enforced:
+  branch must be `HEAD` or the checked-out branch, else 400 (`575300f`).
+- Comment export data loss (Critical) — flat creation-ordered
+  `{ comments: [...] }` array with deterministic rowid tiebreak (`97906b1`, `aef0149`).
+- Silent git failures (High) — `GitError` with phase; session creation returns
+  400 `{ error, phase }` and writes no rows on failure (`3d5e5ad`, `9d4858d`).
+- SCIP cache key not content-sensitive + stale detection (High) — shared
+  content-sensitive `repoFingerprint`; sessions report `staleReason`
+  (`head-moved` / `working-tree-changed`), and the flag is omitted rather than
+  claimed `false` when verification is impossible (`deecc13`, `ebbbcb0`).
+- No schema migration path (High) — `PRAGMA user_version` ordered transactional
+  migrations; newer-than-app databases refuse clearly (`e6c37dc`).
+- Review state overwrite after commenting (Medium) — server normalizes
+  `reviewed-clean` to `reviewed-commented` when comments exist (`2ae50fe`).
+- Local-only deployment (Medium) — loopback default with non-loopback warning (`07253f4`).
+- No user-facing README (Medium) — root `README.md` with verified quick start (`019714a`).
+- Fixture-repository end-to-end test (P0 test item) — implemented at the API
+  level with the real SCIP provider rather than Playwright (`886cedb`).
+- Bonus fix found by the E2E test: `getFlows` counted test callers when picking
+  flow entries, so tested production functions never headed flows (`208dae5`).
+
+**Still open (unchanged findings below remain accurate):** comment hunk/structural
+context; structural exploration (Relations drawer); diff line coordinates;
+residual bounding boxes; entry-point provenance/confidence; SCIP edge semantics;
+runtime API validation (partial — git/branch inputs only); bulk mutations;
+error/loading/empty states; lint no-op; SSE cleanup. Deferred review triage
+lives in `.superpowers/sdd/progress.md` on the implementation branch.
 
 ## Executive summary
 
