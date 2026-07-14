@@ -18,7 +18,7 @@ export function createCommentsRoute(ctx: AppContext) {
   });
 
   router.get("/:id/export", (c) => {
-    return c.json(exportComments(ctx.db, c.req.param("id")));
+    return c.json({ comments: exportComments(ctx.db, c.req.param("id")) });
   });
 
   return router;
