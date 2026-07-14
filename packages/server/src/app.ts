@@ -1,7 +1,10 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { Hono } from "hono";
 import type { DB } from "./db/connection.js";
 import type { GraphProvider } from "./graph/provider.js";
 import { repoRoot as defaultRepoRoot } from "./diff.js";
+import { createStaticRoute } from "./static.js";
 import { createSessionsRoute } from "./routes/sessions.js";
 import { createNodesRoute } from "./routes/nodes.js";
 import { createCommentsRoute } from "./routes/comments.js";
@@ -14,6 +17,8 @@ export interface AppContext {
   graphProvider: GraphProvider;
   /** Git root the hub reads diffs from. Defaults to the ambient repo; tests pin a fixture. */
   repoRoot?: string;
+  /** Built web SPA dir. When set and it contains index.html, the app serves it after the API. */
+  webDistPath?: string;
 }
 
 export function createApp(ctx: AppContext) {
@@ -26,5 +31,9 @@ export function createApp(ctx: AppContext) {
   app.route("/api/sessions", createEventsRoute(resolved));
   app.route("/api/sessions", createFlowsRoute(resolved));
   app.route("/api/sessions", createChangesRoute(resolved));
+  // Static SPA is mounted LAST so its /* catch-all never shadows /health or /api/*.
+  if (resolved.webDistPath && existsSync(join(resolved.webDistPath, "index.html"))) {
+    app.route("/", createStaticRoute(resolved.webDistPath));
+  }
   return app;
 }

@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { createApp } from "./app.js";
 import { createDatabase } from "./db/connection.js";
@@ -23,8 +26,18 @@ switch (which) {
     graphProvider = new StubGraphProvider();
 }
 
-const app = createApp({ db, graphProvider });
+const here = dirname(fileURLToPath(import.meta.url));
+// dist/index.js -> ../../web/dist ; src/index.ts (dev) resolves the same way.
+const webDistPath = process.env.CRW_WEB_DIST ?? join(here, "..", "..", "web", "dist");
+const webBuilt = existsSync(join(webDistPath, "index.html"));
+
+const hostname = process.env.CRW_HOST || "127.0.0.1";
+if (hostname !== "127.0.0.1" && hostname !== "localhost") {
+  console.warn(`WARNING: binding to ${hostname} — the review API is unauthenticated; keep it loopback-only unless you know why`);
+}
+
+const app = createApp({ db, graphProvider, webDistPath: webBuilt ? webDistPath : undefined });
 const port = Number(process.env.PORT) || 3456;
-serve({ fetch: app.fetch, port }, (info) => {
-  console.log(`review hub on http://localhost:${info.port} (graph provider: ${which})`);
+serve({ fetch: app.fetch, port, hostname }, (info) => {
+  console.log(`review hub on http://localhost:${info.port} (graph provider: ${which}${webBuilt ? "" : "; web UI not built — run pnpm build"})`);
 });
