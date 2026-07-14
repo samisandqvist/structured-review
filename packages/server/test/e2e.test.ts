@@ -95,14 +95,19 @@ describe("fixture-repo end-to-end review", () => {
     expect(changedLabels.has("helper")).toBe(true);
     expect(changedLabels.has("handler")).toBe(true);
 
-    // 2. GET /flows -> either a traced flow through the changed nodes, or both
-    //    changed nodes surface as orphans (assert coverage, not exact shape):
-    //    every changed stableId must appear on a flow step or in the orphan set.
+    // 2. GET /flows -> SCIP traces the handler -> helper call as a flow. The
+    //    handler's only caller is a test, which must not disqualify it as an
+    //    entry point. Secondary invariant: every changed node appears on a
+    //    flow step or in the orphan set.
     const flowsRes = await app.request(`/api/sessions/${sid}/flows`);
     expect(flowsRes.status).toBe(200);
     const { flows, orphans } = await flowsRes.json();
-    expect(Array.isArray(flows)).toBe(true);
-    expect(flows.length >= 1 || orphans.length >= 2).toBe(true);
+    const handlerFlow = flows.find((f: any) => {
+      const labels = new Set(f.steps.map((s: any) => s.label));
+      return labels.has("handler") && labels.has("helper");
+    });
+    expect(handlerFlow).toBeDefined();
+    expect(handlerFlow.affected).toBe(true);
     const inFlowsOrOrphans = new Set<string>([
       ...flows.flatMap((f: any) => f.steps.map((s: any) => s.stableId)),
       ...orphans.map((o: any) => o.stableId),
