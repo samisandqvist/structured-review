@@ -151,9 +151,10 @@ export function createSessionsRoute(ctx: AppContext) {
     let staleReason: "head-moved" | "working-tree-changed" | undefined;
     if (currentHead && session.headSha) {
       if (currentHead !== session.headSha) { stale = true; staleReason = "head-moved"; }
-      else if (currentFp && session.repoFingerprint && currentFp !== session.repoFingerprint) {
-        stale = true; staleReason = "working-tree-changed";
-      } else stale = false;
+      else if (currentFp && session.repoFingerprint) {
+        stale = currentFp !== session.repoFingerprint;
+        if (stale) staleReason = "working-tree-changed";
+      }
     }
     return c.json({
       session,

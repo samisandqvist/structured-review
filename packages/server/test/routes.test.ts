@@ -570,6 +570,20 @@ describe("stale session indicator", () => {
     const res = await app.request(`/api/sessions/${session.id}`);
     expect((await res.json()).stale).toBeUndefined();
   });
+
+  it("omits stale (not false) when HEAD matches but the stored fingerprint could not be verified", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+
+    db.prepare("UPDATE review_sessions SET repo_fingerprint = '' WHERE id = ?").run(session.id);
+
+    const res = await app.request(`/api/sessions/${session.id}`);
+    const body = await res.json();
+    expect(body).not.toHaveProperty("stale");
+  });
 });
 
 describe("GET /api/sessions/:id/changes", () => {
