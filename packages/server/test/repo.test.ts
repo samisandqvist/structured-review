@@ -91,7 +91,7 @@ describe("comments repo", () => {
     createComment(db, session.id, node.id, "snippet", "needs fix", "callers: A");
     expect(getCommentsBySession(db, session.id)).toHaveLength(1);
   });
-  it("exports comments keyed by node id", () => {
+  it("exports comments as an ordered array", () => {
     const session = createSession(db, "feat", "main");
     const node = createNode(db, {
       sessionId: session.id, stableId: "fn:handleOrder", label: "handleOrder",
@@ -99,9 +99,23 @@ describe("comments repo", () => {
     });
     createComment(db, session.id, node.id, "old", "bug here", "callers: routeHandler");
     const exported = exportComments(db, session.id);
-    expect(Object.keys(exported)).toHaveLength(1);
-    expect(exported[node.id].stableId).toBe("fn:handleOrder");
-    expect(exported[node.id].structuralContext).toBe("callers: routeHandler");
+    expect(exported).toHaveLength(1);
+    expect(exported[0].stableId).toBe("fn:handleOrder");
+    expect(exported[0].structuralContext).toBe("callers: routeHandler");
+  });
+  it("preserves multiple comments on one node in creation order", () => {
+    const session = createSession(db, "feat", "main");
+    const node = createNode(db, {
+      sessionId: session.id, stableId: "fn:handleOrder", label: "handleOrder",
+      file: "src/orders.ts", startLine: 10, endLine: 30, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false,
+    });
+    createComment(db, session.id, node.id, "snippetA", "first", "ctxA");
+    createComment(db, session.id, node.id, "snippetB", "second", "ctxB");
+    const exported = exportComments(db, session.id);
+    expect(exported).toHaveLength(2);
+    expect(exported.map((c) => c.text)).toEqual(["first", "second"]);
+    expect(exported[0].nodeId).toBe(node.id);
+    expect(exported[0].stableId).toBe(node.stableId);
   });
 });
 

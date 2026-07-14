@@ -192,7 +192,7 @@ describe("coverage reconciliation", () => {
 });
 
 describe("GET /api/sessions/:id/export", () => {
-  it("exports comments keyed by node id with structural context", async () => {
+  it("exports comments as an ordered array with structural context", async () => {
     const cr = await app.request("/api/sessions", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "feat", baseRef: "main" }),
@@ -207,8 +207,32 @@ describe("GET /api/sessions/:id/export", () => {
     const res = await app.request(`/api/sessions/${session.id}/export`);
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(Object.keys(body).length).toBe(1);
-    expect(body[nodes[0].id].text).toBe("fix this");
+    expect(body.comments).toHaveLength(1);
+    expect(body.comments[0].nodeId).toBe(nodes[0].id);
+    expect(body.comments[0].text).toBe("fix this");
+  });
+
+  it("preserves multiple comments on the same node in creation order", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const nr = await app.request(`/api/sessions/${session.id}/nodes`);
+    const { nodes } = await nr.json();
+    await app.request(`/api/sessions/${session.id}/comments`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nodeId: nodes[0].id, hunkSnippet: "s1", text: "first", structuralContext: "ctxA" }),
+    });
+    await app.request(`/api/sessions/${session.id}/comments`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nodeId: nodes[0].id, hunkSnippet: "s2", text: "second", structuralContext: "ctxB" }),
+    });
+    const res = await app.request(`/api/sessions/${session.id}/export`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.comments).toHaveLength(2);
+    expect(body.comments.map((c: any) => c.text)).toEqual(["first", "second"]);
   });
 });
 

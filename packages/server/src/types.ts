@@ -61,6 +61,7 @@ export interface Comment {
 }
 
 export interface ExportedComment {
+  id: string;
   nodeId: string;
   stableId: string;
   label: string;
