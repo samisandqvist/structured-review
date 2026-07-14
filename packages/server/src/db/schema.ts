@@ -57,3 +57,9 @@ CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_node_id);
 CREATE INDEX IF NOT EXISTS idx_comments_session ON comments(session_id);
 CREATE INDEX IF NOT EXISTS idx_comments_node ON comments(node_id);
 `;
+
+export const SCHEMA_VERSION = 1;
+/** SQL applied when upgrading TO each version. Version 1 = baseline tables. */
+export const MIGRATIONS: Record<number, string> = {
+  1: SCHEMA_SQL,
+};
