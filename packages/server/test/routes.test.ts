@@ -210,6 +210,28 @@ describe("PATCH /api/sessions/:id/nodes/:nodeId", () => {
     expect(res.status).toBe(200);
     expect((await res.json()).node.reviewStatus).toBe("reviewed-clean");
   });
+
+  it("normalizes reviewed-clean to reviewed-commented when the node has comments", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const sid = session.id;
+    const nr = await app.request(`/api/sessions/${sid}/nodes`);
+    const { nodes } = await nr.json();
+    const nid = nodes[0].id;
+    await app.request(`/api/sessions/${sid}/comments`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nodeId: nid, hunkSnippet: "const x = 1", text: "this looks wrong", structuralContext: "callers: routeHandler" }),
+    });
+    const res = await app.request(`/api/sessions/${sid}/nodes/${nid}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reviewStatus: "reviewed-clean" }),
+    });
+    const { node } = await res.json();
+    expect(node.reviewStatus).toBe("reviewed-commented");
+  });
 });
 
 describe("POST /api/sessions/:id/comments", () => {
