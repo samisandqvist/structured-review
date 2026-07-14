@@ -63,6 +63,13 @@ describe("static SPA route", () => {
     expect(body).not.toContain("id=root");
   });
 
+  it("returns a JSON 404 for unregistered /api/* paths instead of index.html", async () => {
+    const res = await withDist().request("/api/definitely-not-registered");
+    expect(res.status).toBe(404);
+    expect(res.headers.get("content-type")).toContain("application/json");
+    expect(await res.json()).toEqual({ error: "not found" });
+  });
+
   it("rejects path traversal", async () => {
     const res = await withDist().request("/..%2f..%2f..%2fetc%2fpasswd");
     // must not leak files outside dist: either 404 or index.html fallback,

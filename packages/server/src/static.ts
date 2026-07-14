@@ -19,6 +19,9 @@ export function createStaticRoute(webDistPath: string) {
     if (rel && file.startsWith(webDistPath) && existsSync(file) && statSync(file).isFile()) {
       return c.body(new Uint8Array(readFileSync(file)), 200, { "Content-Type": TYPES[extname(file)] ?? "application/octet-stream" });
     }
+    if (rel === "api" || rel.startsWith("api/") || rel.startsWith("api\\")) {
+      return c.json({ error: "not found" }, 404);
+    }
     return c.html(indexHtml());
   });
   return router;
