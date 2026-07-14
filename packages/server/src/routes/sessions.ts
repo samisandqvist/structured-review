@@ -3,7 +3,7 @@ import type { AppContext } from "../app.js";
 import { createSession, getSession, updateSessionStatus } from "../repo/sessions.js";
 import { createUnit, getUnitsBySession, deleteUnit, updateUnitLabel, setUnitPositions } from "../repo/units.js";
 import { createNode, getNodesBySession } from "../repo/nodes.js";
-import { fileChangedRanges, gitHeadSha, rangesOverlap, type LineRange } from "../diff.js";
+import { fileChangedRanges, gitHeadSha, repoFingerprint, resolveRef, rangesOverlap, currentBranch, GitError, type LineRange } from "../diff.js";
 import { computeResiduals } from "../residuals.js";
 import type { ChangeSubgraph, GraphNode } from "../graph/provider.js";
 import type { ChangeStatus } from "../types.js";
@@ -59,10 +59,52 @@ export function createSessionsRoute(ctx: AppContext) {
 
   router.post("/", async (c) => {
     const body = await c.req.json<{ branch: string; baseRef: string }>();
-    const session = createSession(ctx.db, body.branch, body.baseRef, gitHeadSha(ctx.repoRoot) ?? "");
-    const subgraph = await ctx.graphProvider.getChangeSubgraph(body.branch, body.baseRef);
-    const { nodes: keptNodes, status } = reconcileSubgraph(subgraph, body.baseRef, ctx.repoRoot!);
 
+    // Fail loudly here: an unusable repo/baseRef must not silently produce an
+    // empty-but-complete-looking session (see diff.ts changedFilesStrict).
+    const headSha = gitHeadSha(ctx.repoRoot);
+    if (!headSha) return c.json({ error: "not a git repository (or git unavailable)", phase: "resolve-ref" }, 400);
+    if (!resolveRef(body.baseRef, ctx.repoRoot)) {
+      return c.json({ error: `cannot resolve base ref '${body.baseRef}'`, phase: "resolve-ref" }, 400);
+    }
+
+    // The tool reviews the current working tree (SCIP indexes it directly),
+    // so `branch` must name what's actually checked out — otherwise the
+    // session would silently review the wrong tree.
+    const checkedOut = currentBranch(ctx.repoRoot);
+    if (body.branch !== "HEAD" && body.branch !== checkedOut) {
+      return c.json({
+        error: `session branch '${body.branch}' is not checked out (current: '${checkedOut ?? "unknown"}'); ` +
+          `this tool reviews the current working tree — check the branch out or pass HEAD`,
+        phase: "resolve-ref",
+      }, 400);
+    }
+
+    // All git-dependent work happens before any row is written, so a GitError
+    // mid-creation cannot leave an orphaned zero-node session behind.
+    let subgraph: ChangeSubgraph;
+    let keptNodes: GraphNode[];
+    let status: Map<string, ChangeStatus>;
+    let residuals: ReturnType<typeof computeResiduals>;
+    try {
+      subgraph = await ctx.graphProvider.getChangeSubgraph(body.branch, body.baseRef);
+      ({ nodes: keptNodes, status } = reconcileSubgraph(subgraph, body.baseRef, ctx.repoRoot!));
+
+      // Residual coverage: changed lines outside every node span become one
+      // pseudo-node per file, so types/imports/configs still enter the universe.
+      const spansByFile = new Map<string, LineRange[]>();
+      for (const n of keptNodes) {
+        const spans = spansByFile.get(n.file) ?? [];
+        spans.push({ start: n.startLine, end: n.endLine });
+        spansByFile.set(n.file, spans);
+      }
+      residuals = computeResiduals(body.baseRef, spansByFile, ctx.repoRoot!);
+    } catch (e) {
+      if (e instanceof GitError) return c.json({ error: e.message, phase: e.phase }, 400);
+      throw e;
+    }
+
+    const session = createSession(ctx.db, body.branch, body.baseRef, headSha, repoFingerprint(ctx.repoRoot) ?? "");
     for (const gnode of keptNodes) {
       createNode(ctx.db, {
         sessionId: session.id, stableId: gnode.stableId,
@@ -71,16 +113,7 @@ export function createSessionsRoute(ctx: AppContext) {
         isTest: gnode.isTest,
       });
     }
-
-    // Residual coverage: changed lines outside every node span become one
-    // pseudo-node per file, so types/imports/configs still enter the universe.
-    const spansByFile = new Map<string, LineRange[]>();
-    for (const n of keptNodes) {
-      const spans = spansByFile.get(n.file) ?? [];
-      spans.push({ start: n.startLine, end: n.endLine });
-      spansByFile.set(n.file, spans);
-    }
-    for (const r of computeResiduals(body.baseRef, spansByFile, ctx.repoRoot!)) {
+    for (const r of residuals) {
       createNode(ctx.db, {
         sessionId: session.id, stableId: r.stableId,
         label: r.label, file: r.file, startLine: r.startLine, endLine: r.endLine,
@@ -108,15 +141,27 @@ export function createSessionsRoute(ctx: AppContext) {
     const changed = getNodesBySession(ctx.db, session.id).filter((n) => n.changeStatus === "changed");
     const autoMembers = new Set(units.filter((u) => u.auto).flatMap((u) => u.memberStableIds));
     const unassigned = changed.filter((n) => autoMembers.has(n.stableId)).length;
-    // Stale = repo HEAD moved past the session snapshot; omitted when git (or
-    // the recorded sha) is unavailable — degrade silently.
+    // Stale = the session snapshot no longer matches the working tree, either
+    // because HEAD moved or a tracked/untracked file changed content (the
+    // fingerprint catches edits that leave HEAD untouched). Omitted when git
+    // (or the recorded state) is unavailable — degrade silently.
     const currentHead = gitHeadSha(ctx.repoRoot);
-    const stale = currentHead && session.headSha ? currentHead !== session.headSha : undefined;
+    const currentFp = repoFingerprint(ctx.repoRoot);
+    let stale: boolean | undefined;
+    let staleReason: "head-moved" | "working-tree-changed" | undefined;
+    if (currentHead && session.headSha) {
+      if (currentHead !== session.headSha) { stale = true; staleReason = "head-moved"; }
+      else if (currentFp && session.repoFingerprint) {
+        stale = currentFp !== session.repoFingerprint;
+        if (stale) staleReason = "working-tree-changed";
+      }
+    }
     return c.json({
       session,
       units,
       coverage: { changedTotal: changed.length, covered: changed.length - unassigned, unassigned },
       ...(stale === undefined ? {} : { stale }),
+      ...(staleReason ? { staleReason } : {}),
     });
   });
 

@@ -106,5 +106,5 @@ export const api = {
     }),
   getFlows: (id: string) => fetchJson<{ flows: Flow[]; orphans: Node[] }>(`/sessions/${id}/flows`),
   exportComments: (id: string) =>
-    fetchJson<Record<string, unknown>>(`/sessions/${id}/export`),
+    fetchJson<{ comments: Record<string, unknown>[] }>(`/sessions/${id}/export`),
 };

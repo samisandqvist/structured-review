@@ -49,7 +49,7 @@ export async function writePlan(
   return fetchJson(`${SERVER_URL}/api/sessions/${sessionId}/plan`, { method: "PUT", body: JSON.stringify({ units }) });
 }
 
-export async function exportComments(sessionId: string): Promise<Record<string, unknown>> {
+export async function exportComments(sessionId: string): Promise<{ comments: Record<string, unknown>[] }> {
   return fetchJson(`${SERVER_URL}/api/sessions/${sessionId}/export`);
 }
 

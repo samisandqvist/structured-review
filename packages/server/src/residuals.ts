@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import { changedFiles, fileChangedRanges, subtractRanges, type LineRange } from "./diff.js";
+import { changedFilesStrict, fileChangedRanges, subtractRanges, type LineRange } from "./diff.js";
 import { isTestFile } from "./util.js";
 
 export interface ResidualNode {
@@ -22,7 +22,7 @@ export function computeResiduals(
   root: string
 ): ResidualNode[] {
   const out: ResidualNode[] = [];
-  for (const file of changedFiles(baseRef, root)) {
+  for (const file of changedFilesStrict(baseRef, root)) {
     const ranges = fileChangedRanges(baseRef, file, root);
     if (!ranges || ranges.length === 0) continue;
     const spans = nodeSpans.get(file) ?? [];

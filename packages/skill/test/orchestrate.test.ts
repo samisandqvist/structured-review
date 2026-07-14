@@ -25,10 +25,15 @@ describe("orchestrate", () => {
     expect(mockFetch).toHaveBeenCalledWith("http://localhost:3456/api/sessions", expect.objectContaining({ method: "POST" }));
   });
 
-  it("exports comments", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse({ node1: { text: "fix" } }));
+  it("exports comments as an ordered array envelope", async () => {
+    const comments = [
+      { id: "cmt1", nodeId: "node1", stableId: "fn:handleOrder", label: "handleOrder", file: "src/orders.ts", hunkSnippet: "s1", text: "first", structuralContext: "ctxA", createdAt: 1 },
+      { id: "cmt2", nodeId: "node1", stableId: "fn:handleOrder", label: "handleOrder", file: "src/orders.ts", hunkSnippet: "s2", text: "second", structuralContext: "ctxB", createdAt: 2 },
+    ];
+    mockFetch.mockResolvedValueOnce(mockResponse({ comments }));
     const result = await exportComments("s1");
-    expect(result).toEqual({ node1: { text: "fix" } });
+    expect(result.comments).toHaveLength(2);
+    expect(result.comments.map((c) => c.text)).toEqual(["first", "second"]);
   });
 });
 
