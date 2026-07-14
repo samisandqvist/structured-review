@@ -15,6 +15,7 @@ export interface ReviewSession {
   status: SessionStatus;
   createdAt: number;
   headSha: string;
+  repoFingerprint: string;
 }
 
 export interface Unit {

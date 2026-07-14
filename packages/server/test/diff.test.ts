@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { extractHunkDiff, nodeChangeStats, subtractRanges, resolveRef, changedFilesStrict, currentBranch, GitError } from "../src/diff.js";
+import { extractHunkDiff, nodeChangeStats, subtractRanges, resolveRef, changedFilesStrict, currentBranch, repoFingerprint, GitError } from "../src/diff.js";
 
 let fixtureRepo: string;
 let emptyTmpDir: string;
@@ -101,6 +101,45 @@ describe("nodeChangeStats", () => {
   });
   it("ignores changes outside the span", () => {
     expect(nodeChangeStats(raw, 10, 10)).toEqual({ added: 0, removed: 0 });
+  });
+});
+
+describe("repoFingerprint", () => {
+  let dir: string;
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), "crw-fp-"));
+    const git = (...a: string[]) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
+    git("init", "-b", "main");
+    git("config", "user.email", "t@t");
+    git("config", "user.name", "t");
+    writeFileSync(join(dir, "a.txt"), "one\n");
+    git("add", ".");
+    git("commit", "-m", "init");
+  });
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("is stable when nothing changed", () => {
+    expect(repoFingerprint(dir)).toBe(repoFingerprint(dir));
+  });
+
+  it("changes when an already-dirty file is edited again", () => {
+    writeFileSync(join(dir, "a.txt"), "dirty1\n");
+    const f1 = repoFingerprint(dir);
+    writeFileSync(join(dir, "a.txt"), "dirty2\n"); // porcelain status unchanged: still " M a.txt"
+    const f2 = repoFingerprint(dir);
+    expect(f2).not.toBe(f1);
+  });
+
+  it("changes when an untracked file's content changes", () => {
+    writeFileSync(join(dir, "u.txt"), "u1\n");
+    const f1 = repoFingerprint(dir);
+    writeFileSync(join(dir, "u.txt"), "u2\n");
+    const f2 = repoFingerprint(dir);
+    expect(f2).not.toBe(f1);
+  });
+
+  it("returns null when git is unavailable", () => {
+    expect(repoFingerprint(emptyTmpDir)).toBeNull();
   });
 });
 

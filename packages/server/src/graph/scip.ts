@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import protobuf from "protobufjs";
 import type { GraphProvider, GraphNode, GraphEdge, ChangeSubgraph, Flow } from "./provider.js";
 import type { ChangeStatus, EdgeType } from "../types.js";
-import { fileChangedRanges, rangesOverlap, repoRoot, type LineRange } from "../diff.js";
+import { fileChangedRanges, rangesOverlap, repoFingerprint, repoRoot, type LineRange } from "../diff.js";
 import { isTestFile } from "../util.js";
 import { buildFlowTree, makeFlow, reachesChanged } from "./flow-tree.js";
 
@@ -180,15 +180,14 @@ export class ScipGraphProvider implements GraphProvider {
       .sort((a, b) => b.criticality - a.criticality);
   }
 
-  /** Repo-state fingerprint: HEAD + working-tree status. Any failure = unique key (cache miss). */
+  /**
+   * Content-sensitive repo-state fingerprint. Any git failure yields a unique
+   * key so the cache misses (never a stale hit). Content-sensitive so that
+   * re-editing an already-dirty file — which leaves `git status --porcelain`
+   * unchanged — still invalidates the cached index.
+   */
   protected repoStateKey(): string {
-    try {
-      const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: this.repoRoot, encoding: "utf8" });
-      const status = execFileSync("git", ["status", "--porcelain"], { cwd: this.repoRoot, encoding: "utf8" });
-      return `${head.trim()}\n${status}`;
-    } catch {
-      return `no-git:${Math.random()}`;
-    }
+    return repoFingerprint(this.repoRoot) ?? `no-git:${Math.random()}`;
   }
 
   /** Index at most once per repo state; concurrent callers share the in-flight build. */

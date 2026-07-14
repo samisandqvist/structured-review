@@ -511,7 +511,29 @@ describe("stale session indicator", () => {
     g("add", ".");
     g("commit", "-m", "two");
     res = await app.request(`/api/sessions/${session.id}`);
-    expect((await res.json()).stale).toBe(true);
+    const body = await res.json();
+    expect(body.stale).toBe(true);
+    expect(body.staleReason).toBe("head-moved");
+  });
+
+  it("reports staleReason working-tree-changed after editing a tracked file", async () => {
+    const g = (...a: string[]) => execFileSync("git", a, { cwd: fixtureRoot, encoding: "utf8" });
+    writeFileSync(join(fixtureRoot, "a.txt"), "1\n");
+    g("add", ".");
+    g("commit", "-m", "one");
+
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+
+    // HEAD unchanged, working tree edited → stale by fingerprint.
+    writeFileSync(join(fixtureRoot, "a.txt"), "edited\n");
+    const res = await app.request(`/api/sessions/${session.id}`);
+    const body = await res.json();
+    expect(body.stale).toBe(true);
+    expect(body.staleReason).toBe("working-tree-changed");
   });
 
   it("omits stale when git becomes unavailable after session creation", async () => {
