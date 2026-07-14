@@ -71,6 +71,28 @@ describe("POST /api/sessions", () => {
     expect(body.error).toMatch(/git|ref/i);
     expect(body.phase).toBe("resolve-ref");
   });
+
+  it("fails with 400 and persists no session row when git breaks mid-creation", async () => {
+    // Validation passes, then git disappears before residuals run — the
+    // GitError path must 400 without leaving an orphaned session row behind.
+    class GitBreakingStub extends StubGraphProvider {
+      override async getChangeSubgraph(branch: string, baseRef: string) {
+        rmSync(join(fixtureRoot, ".git"), { recursive: true, force: true });
+        return super.getChangeSubgraph(branch, baseRef);
+      }
+    }
+    const app2 = createApp({ db, graphProvider: new GitBreakingStub(), repoRoot: fixtureRoot });
+    const res = await app2.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "feat", baseRef: "main" }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toMatch(/git|ref/i);
+    expect(body.phase).toBe("list-files");
+    const { n } = db.prepare("SELECT COUNT(*) AS n FROM review_sessions").get() as { n: number };
+    expect(n).toBe(0);
+  });
 });
 
 describe("GET /api/sessions/:id", () => {

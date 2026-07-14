@@ -68,20 +68,15 @@ export function createSessionsRoute(ctx: AppContext) {
       return c.json({ error: `cannot resolve base ref '${body.baseRef}'`, phase: "resolve-ref" }, 400);
     }
 
-    const session = createSession(ctx.db, body.branch, body.baseRef, headSha);
-    const subgraph = await ctx.graphProvider.getChangeSubgraph(body.branch, body.baseRef);
-
+    // All git-dependent work happens before any row is written, so a GitError
+    // mid-creation cannot leave an orphaned zero-node session behind.
+    let subgraph: ChangeSubgraph;
+    let keptNodes: GraphNode[];
+    let status: Map<string, ChangeStatus>;
+    let residuals: ReturnType<typeof computeResiduals>;
     try {
-      const { nodes: keptNodes, status } = reconcileSubgraph(subgraph, body.baseRef, ctx.repoRoot!);
-
-      for (const gnode of keptNodes) {
-        createNode(ctx.db, {
-          sessionId: session.id, stableId: gnode.stableId,
-          label: gnode.label, file: gnode.file, startLine: gnode.startLine, endLine: gnode.endLine,
-          changeStatus: status.get(gnode.stableId)!, reviewStatus: "unreviewed", reviewedInUnit: null,
-          isTest: gnode.isTest,
-        });
-      }
+      subgraph = await ctx.graphProvider.getChangeSubgraph(body.branch, body.baseRef);
+      ({ nodes: keptNodes, status } = reconcileSubgraph(subgraph, body.baseRef, ctx.repoRoot!));
 
       // Residual coverage: changed lines outside every node span become one
       // pseudo-node per file, so types/imports/configs still enter the universe.
@@ -91,27 +86,38 @@ export function createSessionsRoute(ctx: AppContext) {
         spans.push({ start: n.startLine, end: n.endLine });
         spansByFile.set(n.file, spans);
       }
-      for (const r of computeResiduals(body.baseRef, spansByFile, ctx.repoRoot!)) {
-        createNode(ctx.db, {
-          sessionId: session.id, stableId: r.stableId,
-          label: r.label, file: r.file, startLine: r.startLine, endLine: r.endLine,
-          changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null,
-          isTest: r.isTest,
-        });
-      }
-      const dbNodes = getNodesBySession(ctx.db, session.id);
-      for (const gedge of subgraph.edges) {
-        const source = dbNodes.find(n => n.stableId === gedge.sourceStableId);
-        const target = dbNodes.find(n => n.stableId === gedge.targetStableId);
-        if (source && target) {
-          ctx.db.prepare(
-            "INSERT INTO edges (id, session_id, source_node_id, target_node_id, edge_type) VALUES (?, ?, ?, ?, ?)"
-          ).run(randomId("edge"), session.id, source.id, target.id, gedge.edgeType);
-        }
-      }
+      residuals = computeResiduals(body.baseRef, spansByFile, ctx.repoRoot!);
     } catch (e) {
       if (e instanceof GitError) return c.json({ error: e.message, phase: e.phase }, 400);
       throw e;
+    }
+
+    const session = createSession(ctx.db, body.branch, body.baseRef, headSha);
+    for (const gnode of keptNodes) {
+      createNode(ctx.db, {
+        sessionId: session.id, stableId: gnode.stableId,
+        label: gnode.label, file: gnode.file, startLine: gnode.startLine, endLine: gnode.endLine,
+        changeStatus: status.get(gnode.stableId)!, reviewStatus: "unreviewed", reviewedInUnit: null,
+        isTest: gnode.isTest,
+      });
+    }
+    for (const r of residuals) {
+      createNode(ctx.db, {
+        sessionId: session.id, stableId: r.stableId,
+        label: r.label, file: r.file, startLine: r.startLine, endLine: r.endLine,
+        changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null,
+        isTest: r.isTest,
+      });
+    }
+    const dbNodes = getNodesBySession(ctx.db, session.id);
+    for (const gedge of subgraph.edges) {
+      const source = dbNodes.find(n => n.stableId === gedge.sourceStableId);
+      const target = dbNodes.find(n => n.stableId === gedge.targetStableId);
+      if (source && target) {
+        ctx.db.prepare(
+          "INSERT INTO edges (id, session_id, source_node_id, target_node_id, edge_type) VALUES (?, ?, ?, ?, ?)"
+        ).run(randomId("edge"), session.id, source.id, target.id, gedge.edgeType);
+      }
     }
     return c.json({ session, subgraph });
   });
