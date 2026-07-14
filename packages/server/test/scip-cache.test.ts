@@ -73,6 +73,36 @@ describe("ScipGraphProvider cache", () => {
   });
 });
 
+describe("getFlows entry selection", () => {
+  const raw = (label: string, file: string, isTest = false) => ({ label, file, startLine: 1, endLine: 10, isTest });
+  // test -> entry -> mid -> leaf: entry's only caller is a test, mid's is production.
+  const FLOW_GRAPH: BuiltGraph = {
+    nodes: new Map([
+      ["entry", raw("entry", "src/entry.ts")],
+      ["mid", raw("mid", "src/mid.ts")],
+      ["leaf", raw("leaf", "src/leaf.ts")],
+      ["test", raw("testEntry", "src/entry.test.ts", true)],
+    ]),
+    callAdj: new Map([["test", ["entry"]], ["entry", ["mid"]], ["mid", ["leaf"]]]),
+    callRev: new Map([["entry", ["test"]], ["mid", ["entry"]], ["leaf", ["mid"]]]),
+  };
+  class GraphStub extends ScipGraphProvider {
+    protected override repoStateKey(): string { return "k"; }
+    protected override indexAndBuild(): Promise<BuiltGraph> { return Promise.resolve(FLOW_GRAPH); }
+  }
+
+  it("a production function whose only caller is a test still heads a flow", async () => {
+    const flows = await new GraphStub({ repoRoot: "/tmp" }).getFlows();
+    expect(flows).toHaveLength(1);
+    expect(flows[0].steps.map((s) => s.stableId)).toEqual(["entry", "mid", "leaf"]);
+  });
+
+  it("a production function called by another production function does not", async () => {
+    const flows = await new GraphStub({ repoRoot: "/tmp" }).getFlows();
+    expect(flows.some((f) => f.steps[0]?.stableId === "mid")).toBe(false);
+  });
+});
+
 class KeyProbe extends ScipGraphProvider {
   publicKey(): string { return this.repoStateKey(); }
 }

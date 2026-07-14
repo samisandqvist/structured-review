@@ -170,9 +170,16 @@ export class ScipGraphProvider implements GraphProvider {
       const n = g.nodes.get(sym);
       return n ? { label: n.label, file: n.file, startLine: n.startLine, endLine: n.endLine, isTest: n.isTest } : undefined;
     };
-    // Entry points: non-test nodes that head a call tree (have callees, no callers).
+    // Entry points: non-test nodes that head a call tree (have callees, no
+    // NON-TEST callers). Test callers don't disqualify — a call from a test is
+    // a TESTED_BY relationship (see getChangeSubgraph), not evidence the node
+    // sits mid-flow; otherwise any tested production function could never head
+    // a flow and well-tested repos would degrade to all-orphan plans.
     const entries = [...g.nodes.entries()].filter(
-      ([sym, n]) => !n.isTest && (g.callAdj.get(sym)?.length ?? 0) > 0 && (g.callRev.get(sym)?.length ?? 0) === 0
+      ([sym, n]) =>
+        !n.isTest &&
+        (g.callAdj.get(sym)?.length ?? 0) > 0 &&
+        (g.callRev.get(sym) ?? []).filter((c) => !g.nodes.get(c)?.isTest).length === 0
     );
     return entries
       .map(([sym, n], i) => makeFlow(i + 1, n.label, buildFlowTree(sym, g.callAdj, resolve, relevant)))
