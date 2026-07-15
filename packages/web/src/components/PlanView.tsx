@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useFlows, useNodes, useSession, useUpdateNodeStatus, useUpdateUnit } from "../api/hooks.js";
+import { useBulkUpdateNodeStatus, useFlows, useNodes, useSession, useUpdateUnit } from "../api/hooks.js";
 import { useUIStore } from "../store/ui.js";
 import type { Flow, FlowStep, GraphEdgeDTO, Node, Unit } from "../api/client.js";
 
@@ -120,7 +120,7 @@ function UnitBlock({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(unit.label);
 
-  const updateStatus = useUpdateNodeStatus(sessionId);
+  const bulkStatus = useBulkUpdateNodeStatus(sessionId);
   // Unreviewed changed nodeIds of this unit: flow-units from their tracks'
   // steps, orphan-units (or unresolved flows) from memberNodes.
   const remaining: string[] = useFlowProgress
@@ -130,7 +130,7 @@ function UnitBlock({
     : memberNodes.filter((n) => n.reviewStatus === "unreviewed").map((n) => n.id);
   const markRemaining = () => {
     if (!window.confirm(`Mark ${remaining.length} node${remaining.length === 1 ? "" : "s"} reviewed?`)) return;
-    for (const nodeId of remaining) updateStatus.mutate({ nodeId, reviewStatus: "reviewed-clean" });
+    bulkStatus.mutate({ nodeIds: remaining, reviewStatus: "reviewed-clean" });
   };
 
   // Production nodes of this unit, for test linkage.

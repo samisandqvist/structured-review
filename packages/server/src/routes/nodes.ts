@@ -3,8 +3,9 @@ import type { AppContext } from "../app.js";
 import { getNodesBySession, getNode, getNodeNeighbors, updateNodeReviewStatus } from "../repo/nodes.js";
 import { getSession } from "../repo/sessions.js";
 import { nodeHasComments } from "../repo/comments.js";
+import { bulkUpdateNodeReviewStatus, BulkNodeError } from "../repo/bulk.js";
 import { getNodeDiff, getNodeDiffForRanges } from "../diff.js";
-import { parseBody, nodePatchSchema } from "../validate.js";
+import { parseBody, nodePatchSchema, bulkNodeStatusSchema } from "../validate.js";
 
 export function createNodesRoute(ctx: AppContext) {
   const router = new Hono();
@@ -34,6 +35,23 @@ export function createNodesRoute(ctx: AppContext) {
           : getNodeDiff(session.baseRef, node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot))
       : { oldText: "", newText: "", lines: [] };
     return c.json({ node, callers, callees, diff });
+  });
+
+  router.patch("/:id/nodes", async (c) => {
+    const parsed = await parseBody(c, bulkNodeStatusSchema);
+    if (!parsed.ok) return parsed.res;
+    const body = parsed.data;
+    try {
+      const nodes = bulkUpdateNodeReviewStatus(
+        ctx.db, c.req.param("id"), [...new Set(body.nodeIds)], body.reviewStatus, body.reviewedInUnit
+      );
+      return c.json({ nodes });
+    } catch (e) {
+      if (e instanceof BulkNodeError) {
+        return c.json({ error: "nodes not found in session", missingNodeIds: e.missingNodeIds }, 404);
+      }
+      throw e;
+    }
   });
 
   router.patch("/:id/nodes/:nodeId", async (c) => {
