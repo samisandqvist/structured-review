@@ -18,7 +18,7 @@ export function NodeBadge({ status }: { status: Node["reviewStatus"] }) {
         display: "inline-flex",
         alignItems: "center",
         gap: 6,
-        fontSize: 13,
+        fontSize: 14,
         letterSpacing: "0.03em",
         color: "var(--dim)",
         background: "var(--surface)",
