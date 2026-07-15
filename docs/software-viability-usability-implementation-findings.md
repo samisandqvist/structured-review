@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-12  
 **Scope:** Repository Markdown, current implementation, and automated verification  
-**Status:** Assessment and recommendations — P0 items implemented 2026-07-14; remaining P1 items implemented 2026-07-15 (see below)
+**Status:** Assessment and recommendations — P0 items implemented 2026-07-14; remaining P1 items implemented 2026-07-15 (see below); P2 items 1–3 implemented 2026-07-15
 
 ## Implementation status (2026-07-14, branch `fix/viability-p0`)
 
@@ -48,10 +48,21 @@ Each task passed an independent spec+quality review; the suite grew from 105 to
 - Runtime API validation insufficient (Medium) — zod schemas on all mutating
   routes with structured `{ error, issues }` 400s; comment creation enforces
   node/session ownership.
+- Entry-point inference too narrow / no confidence (Medium) — pluggable
+  evidence (`graph-root` / `exported` / `.crw-entry-points.json` configured
+  entries) with deterministic 0.4/0.7/1.0 confidence, exposed via the flows
+  API and a plan-view chip; configured entries head flows despite callers.
+- Residual bounding boxes (Medium) — residual pseudo-nodes store their exact
+  ranges (schema v3 `nodes.residual_ranges`); the diff pane renders only
+  those ranges, so hunks covered by function nodes are never shown twice.
+- Bulk mutations non-atomic (Medium) — `PATCH /api/sessions/:id/nodes`
+  applies a bulk status change in one SQLite transaction (all-or-nothing,
+  comment normalization preserved); session creation and plan replacement
+  are transactional; edge insertion uses a stableId map instead of repeated
+  scans; the web "mark remaining" sends one request and one invalidation.
 
-**Still open (unchanged findings below remain accurate):** entry-point
-provenance/confidence; residual bounding boxes; SCIP edge semantics; bulk
-mutations; error/loading/empty states; lint no-op; SSE cleanup. Deferred
+**Still open (unchanged findings below remain accurate):** SCIP edge
+semantics; error/loading/empty states; lint no-op; SSE cleanup. Deferred
 review triage lives in `.superpowers/sdd/progress.md` on the implementation
 branch.
 
