@@ -29,7 +29,7 @@ export function createNodesRoute(ctx: AppContext) {
     const session = getSession(ctx.db, sessionId);
     const diff = session
       ? getNodeDiff(session.baseRef, node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot)
-      : { oldText: "", newText: "" };
+      : { oldText: "", newText: "", lines: [] };
     return c.json({ node, callers, callees, diff });
   });
 
