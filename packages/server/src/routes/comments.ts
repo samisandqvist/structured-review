@@ -4,6 +4,7 @@ import { createComment, getCommentsBySession, exportComments } from "../repo/com
 import { getSession } from "../repo/sessions.js";
 import { getNode } from "../repo/nodes.js";
 import { getNodeDiff, formatHunkSnippet } from "../diff.js";
+import { parseBody, commentCreateSchema } from "../validate.js";
 
 export function createCommentsRoute(ctx: AppContext) {
   const router = new Hono();
@@ -14,7 +15,9 @@ export function createCommentsRoute(ctx: AppContext) {
 
   router.post("/:id/comments", async (c) => {
     const sessionId = c.req.param("id");
-    const body = await c.req.json<{ nodeId: string; text: string }>();
+    const parsed = await parseBody(c, commentCreateSchema);
+    if (!parsed.ok) return parsed.res;
+    const body = parsed.data;
     const session = getSession(ctx.db, sessionId);
     if (!session) return c.json({ error: "not found" }, 404);
     const node = getNode(ctx.db, body.nodeId);

@@ -1,10 +1,10 @@
 import { Hono } from "hono";
 import type { AppContext } from "../app.js";
-import type { ReviewStatus } from "../types.js";
 import { getNodesBySession, getNode, getNodeNeighbors, updateNodeReviewStatus } from "../repo/nodes.js";
 import { getSession } from "../repo/sessions.js";
 import { nodeHasComments } from "../repo/comments.js";
 import { getNodeDiff } from "../diff.js";
+import { parseBody, nodePatchSchema } from "../validate.js";
 
 export function createNodesRoute(ctx: AppContext) {
   const router = new Hono();
@@ -34,7 +34,9 @@ export function createNodesRoute(ctx: AppContext) {
   });
 
   router.patch("/:id/nodes/:nodeId", async (c) => {
-    const body = await c.req.json<{ reviewStatus: ReviewStatus; reviewedInUnit?: number }>();
+    const parsed = await parseBody(c, nodePatchSchema);
+    if (!parsed.ok) return parsed.res;
+    const body = parsed.data;
     const nodeId = c.req.param("nodeId");
     const existing = getNode(ctx.db, nodeId);
     if (!existing || existing.sessionId !== c.req.param("id")) return c.json({ error: "not found" }, 404);

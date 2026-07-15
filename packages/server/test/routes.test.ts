@@ -634,6 +634,102 @@ describe("stale session indicator", () => {
   });
 });
 
+describe("runtime validation", () => {
+  let sessionId: string;
+  let nodeId: string;
+  let unitId: string;
+  beforeEach(async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    sessionId = session.id;
+    const nr = await app.request(`/api/sessions/${sessionId}/nodes`);
+    const { nodes } = await nr.json();
+    nodeId = nodes[0].id;
+    const pr = await app.request(`/api/sessions/${sessionId}/plan`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ units: [{ kind: "orphans", orphanStableIds: ["fn:handleOrder"], label: "A" }] }),
+    });
+    const { units } = await pr.json();
+    unitId = units[0].id;
+  });
+
+  it("rejects session creation without branch/baseRef", async () => {
+    const res = await app.request("/api/sessions", {
+      method: "POST", body: JSON.stringify({}), headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("validation failed");
+    expect(body.issues.map((i: { path: string }) => i.path)).toContain("branch");
+  });
+
+  it("rejects invalid JSON bodies", async () => {
+    const res = await app.request("/api/sessions", {
+      method: "POST", body: "{not json", headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("invalid JSON body");
+  });
+
+  it("rejects a plan unit without a label", async () => {
+    const res = await app.request(`/api/sessions/${sessionId}/plan`, {
+      method: "PUT",
+      body: JSON.stringify({ units: [{ kind: "orphans", label: "  ", orphanStableIds: ["fn:validateOrder"] }] }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a flow unit with no entries", async () => {
+    const res = await app.request(`/api/sessions/${sessionId}/plan`, {
+      method: "PUT",
+      body: JSON.stringify({ units: [{ kind: "flow", label: "Order flow" }] }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects the same stableId claimed by two units", async () => {
+    const res = await app.request(`/api/sessions/${sessionId}/plan`, {
+      method: "PUT",
+      body: JSON.stringify({ units: [
+        { kind: "orphans", label: "One", orphanStableIds: ["fn:validateOrder"] },
+        { kind: "orphans", label: "Two", orphanStableIds: ["fn:validateOrder"] },
+      ] }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects an unknown review status", async () => {
+    const res = await app.request(`/api/sessions/${sessionId}/nodes/${nodeId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ reviewStatus: "looks-fine" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects an empty unit patch", async () => {
+    const res = await app.request(`/api/sessions/${sessionId}/units/${unitId}`, {
+      method: "PATCH", body: JSON.stringify({}), headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects an empty comment", async () => {
+    const res = await app.request(`/api/sessions/${sessionId}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ nodeId, text: "   " }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
 describe("GET /api/sessions/:id/changes", () => {
   it("returns one compact summary per changed node, no diff bodies", async () => {
     const cr = await app.request("/api/sessions", {
