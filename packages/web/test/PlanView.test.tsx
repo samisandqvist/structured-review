@@ -3,11 +3,11 @@ import { vi, beforeEach } from "vitest";
 import { PlanView } from "../src/components/PlanView.js";
 import { useUIStore } from "../src/store/ui.js";
 
-const mockUpdateStatus = vi.fn();
+const mockBulkMutate = vi.fn();
 const mockUpdateUnit = vi.fn();
 
 vi.mock("../src/api/hooks.js", () => ({
-  useUpdateNodeStatus: () => ({ mutate: mockUpdateStatus }),
+  useBulkUpdateNodeStatus: () => ({ mutate: mockBulkMutate }),
   useUpdateUnit: () => ({ mutate: mockUpdateUnit }),
   useSession: () => ({ data: { units: [
     { id: "u1", position: 0, kind: "flow", label: "Order handling", rationale: "the order path", memberStableIds: ["fn:handleOrder"], auto: false },
@@ -56,7 +56,7 @@ vi.mock("../src/api/hooks.js", () => ({
 }));
 
 beforeEach(() => {
-  mockUpdateStatus.mockClear();
+  mockBulkMutate.mockClear();
   mockUpdateUnit.mockClear();
   useUIStore.setState({ collapsedUnits: [], expandedUnits: [] });
 });
@@ -122,13 +122,16 @@ describe("PlanView", () => {
     expect(screen.getByText("handleOrder")).toBeInTheDocument();
   });
 
-  it("marks remaining nodes reviewed after confirm", () => {
+  it("marks remaining nodes reviewed after confirm, in one bulk call", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={() => {}} />);
     // First unit ("Order handling"): one unreviewed changed step (handleOrder)
     fireEvent.click(screen.getAllByTestId("mark-remaining")[0]);
-    expect(mockUpdateStatus).toHaveBeenCalledTimes(1);
-    expect(mockUpdateStatus).toHaveBeenCalledWith({ nodeId: "n1", reviewStatus: "reviewed-clean" });
+    expect(mockBulkMutate).toHaveBeenCalledTimes(1);
+    expect(mockBulkMutate).toHaveBeenCalledWith({
+      nodeIds: expect.arrayContaining(["n1"]),
+      reviewStatus: "reviewed-clean",
+    });
   });
 
   it("collapses consecutive off-path steps into an expandable run", () => {

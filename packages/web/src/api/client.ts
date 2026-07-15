@@ -104,6 +104,10 @@ export const api = {
     fetchJson<{ node: Node }>(`/sessions/${sessionId}/nodes/${nodeId}`, {
       method: "PATCH", body: JSON.stringify({ reviewStatus, reviewedInUnit }),
     }),
+  bulkUpdateNodeStatus: (sessionId: string, nodeIds: string[], reviewStatus: Node["reviewStatus"]) =>
+    fetchJson<{ nodes: Node[] }>(`/sessions/${sessionId}/nodes`, {
+      method: "PATCH", body: JSON.stringify({ nodeIds, reviewStatus }),
+    }),
   getComments: (id: string) =>
     fetchJson<{ comments: Comment[] }>(`/sessions/${id}/comments`),
   createComment: (id: string, nodeId: string, text: string) =>

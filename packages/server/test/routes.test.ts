@@ -234,6 +234,56 @@ describe("PATCH /api/sessions/:id/nodes/:nodeId", () => {
   });
 });
 
+describe("bulk node status", () => {
+  async function makeSessionWithTwoNodes() {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const nr = await app.request(`/api/sessions/${session.id}/nodes`);
+    const { nodes } = await nr.json();
+    return { sessionId: session.id as string, id1: nodes[0].id as string, id2: nodes[1].id as string };
+  }
+
+  it("PATCH /nodes updates several nodes atomically", async () => {
+    const { sessionId, id1, id2 } = await makeSessionWithTwoNodes();
+    const res = await app.request(`/api/sessions/${sessionId}/nodes`, {
+      method: "PATCH",
+      body: JSON.stringify({ nodeIds: [id1, id2], reviewStatus: "reviewed-clean" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.nodes).toHaveLength(2);
+    expect(body.nodes.every((n: { reviewStatus: string }) => n.reviewStatus === "reviewed-clean")).toBe(true);
+  });
+
+  it("404s with the missing ids and writes nothing on a bad id", async () => {
+    const { sessionId, id1 } = await makeSessionWithTwoNodes();
+    const res = await app.request(`/api/sessions/${sessionId}/nodes`, {
+      method: "PATCH",
+      body: JSON.stringify({ nodeIds: [id1, "node_nope"], reviewStatus: "reviewed-clean" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status).toBe(404);
+    expect((await res.json()).missingNodeIds).toEqual(["node_nope"]);
+    const after = await (await app.request(`/api/sessions/${sessionId}/nodes`)).json();
+    expect(after.nodes.find((n: { id: string }) => n.id === id1).reviewStatus).toBe("unreviewed");
+  });
+
+  it("rejects an empty nodeIds array", async () => {
+    const { sessionId } = await makeSessionWithTwoNodes();
+    const res = await app.request(`/api/sessions/${sessionId}/nodes`, {
+      method: "PATCH",
+      body: JSON.stringify({ nodeIds: [], reviewStatus: "reviewed-clean" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("validation failed");
+  });
+});
+
 describe("POST /api/sessions/:id/comments", () => {
   it("creates a comment on a node", async () => {
     const cr = await app.request("/api/sessions", {

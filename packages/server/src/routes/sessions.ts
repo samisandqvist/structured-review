@@ -107,34 +107,35 @@ export function createSessionsRoute(ctx: AppContext) {
       throw e;
     }
 
-    const session = createSession(ctx.db, body.branch, body.baseRef, headSha, repoFingerprint(ctx.repoRoot) ?? "");
-    for (const gnode of keptNodes) {
-      createNode(ctx.db, {
-        sessionId: session.id, stableId: gnode.stableId,
-        label: gnode.label, file: gnode.file, startLine: gnode.startLine, endLine: gnode.endLine,
-        changeStatus: status.get(gnode.stableId)!, reviewStatus: "unreviewed", reviewedInUnit: null,
-        isTest: gnode.isTest,
-      });
-    }
-    for (const r of residuals) {
-      createNode(ctx.db, {
-        sessionId: session.id, stableId: r.stableId,
-        label: r.label, file: r.file, startLine: r.startLine, endLine: r.endLine,
-        changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null,
-        isTest: r.isTest,
-        residualRanges: r.ranges,
-      });
-    }
-    const dbNodes = getNodesBySession(ctx.db, session.id);
-    for (const gedge of subgraph.edges) {
-      const source = dbNodes.find(n => n.stableId === gedge.sourceStableId);
-      const target = dbNodes.find(n => n.stableId === gedge.targetStableId);
-      if (source && target) {
-        ctx.db.prepare(
-          "INSERT INTO edges (id, session_id, source_node_id, target_node_id, edge_type) VALUES (?, ?, ?, ?, ?)"
-        ).run(randomId("edge"), session.id, source.id, target.id, gedge.edgeType);
+    const session = ctx.db.transaction(() => {
+      const session = createSession(ctx.db, body.branch, body.baseRef, headSha, repoFingerprint(ctx.repoRoot) ?? "");
+      for (const gnode of keptNodes) {
+        createNode(ctx.db, {
+          sessionId: session.id, stableId: gnode.stableId,
+          label: gnode.label, file: gnode.file, startLine: gnode.startLine, endLine: gnode.endLine,
+          changeStatus: status.get(gnode.stableId)!, reviewStatus: "unreviewed", reviewedInUnit: null,
+          isTest: gnode.isTest,
+        });
       }
-    }
+      for (const r of residuals) {
+        createNode(ctx.db, {
+          sessionId: session.id, stableId: r.stableId,
+          label: r.label, file: r.file, startLine: r.startLine, endLine: r.endLine,
+          changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null,
+          isTest: r.isTest, residualRanges: r.ranges,
+        });
+      }
+      const idByStable = new Map(getNodesBySession(ctx.db, session.id).map((n) => [n.stableId, n.id]));
+      const insertEdge = ctx.db.prepare(
+        "INSERT INTO edges (id, session_id, source_node_id, target_node_id, edge_type) VALUES (?, ?, ?, ?, ?)"
+      );
+      for (const gedge of subgraph.edges) {
+        const source = idByStable.get(gedge.sourceStableId);
+        const target = idByStable.get(gedge.targetStableId);
+        if (source && target) insertEdge.run(randomId("edge"), session.id, source, target, gedge.edgeType);
+      }
+      return session;
+    })();
     return c.json({ session, subgraph });
   });
 
@@ -183,17 +184,19 @@ export function createSessionsRoute(ctx: AppContext) {
     const flows = await ctx.graphProvider.getFlows(new Set(changedStableIds));
     const { unassigned } = computeCoverage(body.units, flows, changedStableIds);
 
-    for (const u of getUnitsBySession(ctx.db, sessionId)) deleteUnit(ctx.db, u.id);
-    let pos = 0;
-    for (const u of body.units) {
-      const members = u.kind === "flow" ? flowEntries(u) : (u.orphanStableIds ?? []);
-      createUnit(ctx.db, sessionId, pos++, u.label, u.rationale ?? "", u.kind, members, false);
-    }
-    if (unassigned.length > 0) {
-      createUnit(ctx.db, sessionId, pos++, "Unassigned changes",
-        "Changes not covered by any chosen unit.", "orphans", unassigned, true);
-    }
-    updateSessionStatus(ctx.db, sessionId, "walking");
+    ctx.db.transaction(() => {
+      for (const u of getUnitsBySession(ctx.db, sessionId)) deleteUnit(ctx.db, u.id);
+      let pos = 0;
+      for (const u of body.units) {
+        const members = u.kind === "flow" ? flowEntries(u) : (u.orphanStableIds ?? []);
+        createUnit(ctx.db, sessionId, pos++, u.label, u.rationale ?? "", u.kind, members, false);
+      }
+      if (unassigned.length > 0) {
+        createUnit(ctx.db, sessionId, pos++, "Unassigned changes",
+          "Changes not covered by any chosen unit.", "orphans", unassigned, true);
+      }
+      updateSessionStatus(ctx.db, sessionId, "walking");
+    })();
 
     const coverage = {
       changedTotal: changedStableIds.length,
