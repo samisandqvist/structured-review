@@ -43,7 +43,7 @@ export function isExportedAt(
       lines = readFileSync(join(root, file), "utf8").split("\n");
       cache?.set(file, lines);
     }
-    return (lines[startLine - 1] ?? "").trimStart().startsWith("export");
+    return /^export\b/.test((lines[startLine - 1] ?? "").trimStart());
   } catch {
     return false;
   }

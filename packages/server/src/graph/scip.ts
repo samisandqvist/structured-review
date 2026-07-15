@@ -189,7 +189,7 @@ export class ScipGraphProvider implements GraphProvider {
     const configuredSyms = new Set(
       [...g.nodes.entries()]
         .filter(([, n]) =>
-          configured.some((c) => c.label === n.label && (!c.file || n.file === c.file || n.file.endsWith(c.file)))
+          configured.some((c) => c.label === n.label && (!c.file || n.file === c.file || n.file.endsWith("/" + c.file)))
         )
         .filter(([sym]) => (g.callAdj.get(sym)?.length ?? 0) > 0)
         .map(([sym]) => sym)
