@@ -46,9 +46,8 @@ export function useUpdateUnit(sessionId: string) {
 export function useCreateComment(sessionId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ nodeId, hunkSnippet, text, structuralContext }: {
-      nodeId: string; hunkSnippet: string; text: string; structuralContext: string;
-    }) => api.createComment(sessionId, nodeId, hunkSnippet, text, structuralContext),
+    mutationFn: ({ nodeId, text }: { nodeId: string; text: string }) =>
+      api.createComment(sessionId, nodeId, text),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["comments", sessionId] });
       qc.invalidateQueries({ queryKey: ["nodes", sessionId] });

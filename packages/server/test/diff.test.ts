@@ -3,7 +3,8 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { extractHunkDiff, nodeChangeStats, subtractRanges, resolveRef, changedFilesStrict, currentBranch, repoFingerprint, GitError } from "../src/diff.js";
+import { extractHunkDiff, getNodeDiff, nodeChangeStats, subtractRanges, resolveRef, changedFilesStrict, currentBranch, repoFingerprint, formatHunkSnippet, GitError } from "../src/diff.js";
+import type { DiffLine } from "../src/diff.js";
 
 let fixtureRepo: string;
 let emptyTmpDir: string;
@@ -140,6 +141,107 @@ describe("repoFingerprint", () => {
 
   it("returns null when git is unavailable", () => {
     expect(repoFingerprint(emptyTmpDir)).toBeNull();
+  });
+});
+
+describe("extractHunkDiff line coordinates", () => {
+  const raw = [
+    "diff --git a/f.ts b/f.ts",
+    "--- a/f.ts",
+    "+++ b/f.ts",
+    "@@ -10,4 +10,4 @@",
+    " line ten",
+    "-old eleven",
+    "+new eleven",
+    " line twelve",
+    " line thirteen",
+  ].join("\n");
+
+  it("tracks both old and new file line numbers through a hunk", () => {
+    const d = extractHunkDiff(raw, 10, 13)!;
+    const expected: DiffLine[] = [
+      { type: "context", oldLine: 10, newLine: 10, text: "line ten" },
+      { type: "removed", oldLine: 11, newLine: null, text: "old eleven" },
+      { type: "added", oldLine: null, newLine: 11, text: "new eleven" },
+      { type: "context", oldLine: 12, newLine: 12, text: "line twelve" },
+      { type: "context", oldLine: 13, newLine: 13, text: "line thirteen" },
+    ];
+    expect(d.lines).toEqual(expected);
+  });
+
+  it("derives oldText/newText from the same lines", () => {
+    const d = extractHunkDiff(raw, 10, 13)!;
+    expect(d.oldText).toBe("line ten\nold eleven\nline twelve\nline thirteen");
+    expect(d.newText).toBe("line ten\nnew eleven\nline twelve\nline thirteen");
+  });
+
+  it("tracks old-line drift across earlier hunks", () => {
+    // An earlier hunk that adds 2 lines shifts the second hunk's old numbers.
+    const twoHunks = [
+      "@@ -1,1 +1,3 @@",
+      " top",
+      "+ins a",
+      "+ins b",
+      "@@ -20,2 +22,2 @@",
+      " ctx",
+      "-gone",
+      "+here",
+    ].join("\n");
+    const d = extractHunkDiff(twoHunks, 22, 23)!;
+    expect(d.lines).toEqual([
+      { type: "context", oldLine: 20, newLine: 22, text: "ctx" },
+      { type: "removed", oldLine: 21, newLine: null, text: "gone" },
+      { type: "added", oldLine: null, newLine: 23, text: "here" },
+    ]);
+  });
+});
+
+describe("getNodeDiff", () => {
+  // No test in this file previously exercised getNodeDiff directly; this
+  // covers its "unchanged" branch (a plain readSlice, no git hunk involved)
+  // using the fixtureRepo/a.txt ("one\n") set up in beforeAll above.
+  it("returns unchanged text with real line numbers for an unchanged node", () => {
+    const d = getNodeDiff("HEAD", "a.txt", 1, 1, "unchanged", fixtureRepo);
+    expect(d.oldText).toBe(d.newText);
+    expect(d.lines[0]).toEqual({ type: "context", oldLine: 1, newLine: 1, text: "one" });
+  });
+});
+
+describe("formatHunkSnippet", () => {
+  const lines = [
+    { type: "context" as const, oldLine: 1, newLine: 1, text: "a" },
+    { type: "context" as const, oldLine: 2, newLine: 2, text: "b" },
+    { type: "context" as const, oldLine: 3, newLine: 3, text: "c" },
+    { type: "context" as const, oldLine: 4, newLine: 4, text: "d" },
+    { type: "removed" as const, oldLine: 5, newLine: null, text: "old" },
+    { type: "added" as const, oldLine: null, newLine: 5, text: "new" },
+    { type: "context" as const, oldLine: 6, newLine: 6, text: "e" },
+  ];
+
+  it("windows around the changed lines with two context lines", () => {
+    expect(formatHunkSnippet(lines).split("\n")).toEqual([
+      "     3 c",
+      "     4 d",
+      "-    5 old",
+      "+    5 new",
+      "     6 e",
+    ]);
+  });
+
+  it("caps line count", () => {
+    const many = Array.from({ length: 100 }, (_, i) => ({
+      type: "added" as const, oldLine: null, newLine: i + 1, text: `l${i}`,
+    }));
+    expect(formatHunkSnippet(many, 10).split("\n")).toHaveLength(10);
+  });
+
+  it("uses the whole (bounded) fragment when nothing changed", () => {
+    const ctx = lines.filter((l) => l.type === "context");
+    expect(formatHunkSnippet(ctx).split("\n")).toHaveLength(ctx.length);
+  });
+
+  it("returns empty string for no lines", () => {
+    expect(formatHunkSnippet([])).toBe("");
   });
 });
 

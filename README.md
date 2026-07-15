@@ -71,11 +71,20 @@ ambient repo root), and `CRG_COMMAND` sets the command used to launch the
 `GET /api/sessions/:id/export` returns:
 
 ```json
-{ "comments": [ { "id": "...", "nodeId": "...", "stableId": "...", "label": "...", "file": "...", "hunkSnippet": "...", "text": "...", "structuralContext": "...", "createdAt": 0 } ] }
+{
+  "branch": "HEAD",
+  "baseRef": "main",
+  "headSha": "…",
+  "comments": [ { "id": "…", "nodeId": "…", "stableId": "…", "label": "…", "file": "…", "startLine": 1, "endLine": 20, "hunkSnippet": "…", "text": "…", "structuralContext": "…", "createdAt": 0 } ]
+}
 ```
 
 `comments` is an ordered array (insertion order); a node with multiple
-comments has multiple entries, one per comment.
+comments has multiple entries, one per comment. `hunkSnippet` is derived by
+the server when the comment is created (the bounded changed fragment shown
+for the node, with real file line numbers); `structuralContext` is derived
+at export time from the session's call/test edges. Both are server-owned —
+`POST /api/sessions/:id/comments` accepts only `{ "nodeId": "…", "text": "…" }`.
 
 ## Data & privacy
 
