@@ -47,4 +47,10 @@ describe("isExportedAt", () => {
   it("returns false for unreadable files", () => {
     expect(isExportedAt("/nonexistent", "nope.ts", 1)).toBe(false);
   });
+  it("does not match 'export' as a substring of a method name (e.g. exportData)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "crw-exp-"));
+    mkdirSync(join(dir, "src"));
+    writeFileSync(join(dir, "src", "b.ts"), "class Foo {\n  exportData() {\n    return 1;\n  }\n}\n");
+    expect(isExportedAt(dir, "src/b.ts", 2)).toBe(false);
+  });
 });
