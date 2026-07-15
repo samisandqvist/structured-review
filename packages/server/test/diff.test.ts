@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { extractHunkDiff, getNodeDiff, nodeChangeStats, subtractRanges, resolveRef, changedFilesStrict, currentBranch, repoFingerprint, formatHunkSnippet, GitError } from "../src/diff.js";
+import { extractHunkDiff, extractLinesForRanges, getNodeDiff, nodeChangeStats, subtractRanges, resolveRef, changedFilesStrict, currentBranch, repoFingerprint, formatHunkSnippet, GitError } from "../src/diff.js";
 import type { DiffLine } from "../src/diff.js";
 
 let fixtureRepo: string;
@@ -242,6 +242,50 @@ describe("formatHunkSnippet", () => {
 
   it("returns empty string for no lines", () => {
     expect(formatHunkSnippet([])).toBe("");
+  });
+});
+
+describe("getNodeDiffForRanges", () => {
+  // Synthetic diff: hunk 1 touches lines 2-3 (residual), hunk 2 touches
+  // lines 10-12 (covered by a function node), hunk 3 touches lines 40-41 (residual).
+  const raw = [
+    "diff --git a/f.ts b/f.ts",
+    "--- a/f.ts",
+    "+++ b/f.ts",
+    "@@ -2,2 +2,2 @@",
+    "-old two",
+    "+new two",
+    " ctx three",
+    "@@ -10,3 +10,3 @@",
+    " fn body a",
+    "-fn old",
+    "+fn new",
+    " fn body b",
+    "@@ -40,2 +40,2 @@",
+    " ctx forty",
+    "-old fortyone",
+    "+new fortyone",
+  ].join("\n");
+
+  it("includes only the given ranges, excluding covered function hunks", () => {
+    // NOTE: this test calls the git-free core; see implementation step — the
+    // exported helper extractLinesForRanges is pure, getNodeDiffForRanges shells git.
+    const d = extractLinesForRanges(raw, [{ start: 2, end: 3 }, { start: 40, end: 41 }])!;
+    const texts = d.lines.map((l) => l.text);
+    expect(texts).toContain("new two");
+    expect(texts).toContain("new fortyone");
+    expect(texts).not.toContain("fn new");
+    expect(texts).not.toContain("fn old");
+  });
+
+  it("keeps real coordinates so the renderer shows a gap between fragments", () => {
+    const d = extractLinesForRanges(raw, [{ start: 2, end: 3 }, { start: 40, end: 41 }])!;
+    const newLines = d.lines.map((l) => l.newLine).filter((n): n is number => n !== null);
+    expect(Math.max(...newLines) - Math.min(...newLines)).toBeGreaterThan(30);
+  });
+
+  it("returns null when no range matches", () => {
+    expect(extractLinesForRanges(raw, [{ start: 100, end: 110 }])).toBeNull();
   });
 });
 

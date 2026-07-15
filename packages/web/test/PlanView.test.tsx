@@ -3,11 +3,11 @@ import { vi, beforeEach } from "vitest";
 import { PlanView } from "../src/components/PlanView.js";
 import { useUIStore } from "../src/store/ui.js";
 
-const mockUpdateStatus = vi.fn();
+const mockBulkMutate = vi.fn();
 const mockUpdateUnit = vi.fn();
 
 vi.mock("../src/api/hooks.js", () => ({
-  useUpdateNodeStatus: () => ({ mutate: mockUpdateStatus }),
+  useBulkUpdateNodeStatus: () => ({ mutate: mockBulkMutate }),
   useUpdateUnit: () => ({ mutate: mockUpdateUnit }),
   useSession: () => ({ data: { units: [
     { id: "u1", position: 0, kind: "flow", label: "Order handling", rationale: "the order path", memberStableIds: ["fn:handleOrder"], auto: false },
@@ -17,6 +17,7 @@ vi.mock("../src/api/hooks.js", () => ({
   ], coverage: { changedTotal: 3, covered: 2, unassigned: 1 } } }),
   useFlows: () => ({ data: { flows: [
     { id: 1, name: "handleOrder", criticality: 1, depth: 1, affected: true, entryStableId: "fn:handleOrder",
+      entryConfidence: 0.7, entryReasons: ["graph-root", "exported"],
       changedStableIds: ["fn:handleOrder", "fn:processOrder"],
       steps: [
         { stableId: "fn:handleOrder", label: "handleOrder", file: "o.ts", startLine: 1, endLine: 2, isTest: false, depth: 0, nodeId: "n1", changeStatus: "changed", reviewStatus: "unreviewed" },
@@ -25,12 +26,14 @@ vi.mock("../src/api/hooks.js", () => ({
         { stableId: "fn:processOrder", label: "processOrder", file: "o.ts", startLine: 10, endLine: 20, isTest: false, depth: 1, nodeId: "n4", changeStatus: "changed", reviewStatus: "reviewed-clean" },
       ] },
     { id: 2, name: "flow A", criticality: 0.5, depth: 1, affected: true, entryStableId: "fn:entryA",
+      entryConfidence: 0.4, entryReasons: ["graph-root"],
       changedStableIds: ["fn:entryA", "fn:shared"],
       steps: [
         { stableId: "fn:entryA", label: "entryA", file: "a.ts", startLine: 1, endLine: 2, isTest: false, depth: 0, nodeId: "n5", changeStatus: "changed", reviewStatus: "unreviewed" },
         { stableId: "fn:shared", label: "sharedHelper", file: "s.ts", startLine: 1, endLine: 2, isTest: false, depth: 1, nodeId: "n6", changeStatus: "changed", reviewStatus: "reviewed-clean" },
       ] },
     { id: 3, name: "flow B", criticality: 0.4, depth: 1, affected: true, entryStableId: "fn:entryB",
+      entryConfidence: 0.4, entryReasons: ["graph-root"],
       changedStableIds: ["fn:entryB", "fn:shared"],
       steps: [
         { stableId: "fn:entryB", label: "entryB", file: "b.ts", startLine: 1, endLine: 2, isTest: false, depth: 0, nodeId: "n7", changeStatus: "changed", reviewStatus: "unreviewed" },
@@ -53,7 +56,7 @@ vi.mock("../src/api/hooks.js", () => ({
 }));
 
 beforeEach(() => {
-  mockUpdateStatus.mockClear();
+  mockBulkMutate.mockClear();
   mockUpdateUnit.mockClear();
   useUIStore.setState({ collapsedUnits: [], expandedUnits: [] });
 });
@@ -119,13 +122,16 @@ describe("PlanView", () => {
     expect(screen.getByText("handleOrder")).toBeInTheDocument();
   });
 
-  it("marks remaining nodes reviewed after confirm", () => {
+  it("marks remaining nodes reviewed after confirm, in one bulk call", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={() => {}} />);
     // First unit ("Order handling"): one unreviewed changed step (handleOrder)
     fireEvent.click(screen.getAllByTestId("mark-remaining")[0]);
-    expect(mockUpdateStatus).toHaveBeenCalledTimes(1);
-    expect(mockUpdateStatus).toHaveBeenCalledWith({ nodeId: "n1", reviewStatus: "reviewed-clean" });
+    expect(mockBulkMutate).toHaveBeenCalledTimes(1);
+    expect(mockBulkMutate).toHaveBeenCalledWith({
+      nodeIds: expect.arrayContaining(["n1"]),
+      reviewStatus: "reviewed-clean",
+    });
   });
 
   it("collapses consecutive off-path steps into an expandable run", () => {
@@ -135,6 +141,13 @@ describe("PlanView", () => {
     fireEvent.click(screen.getByText("⋯ 2 unchanged calls"));
     expect(screen.getByText("ctxHelperOne")).toBeInTheDocument();
     expect(screen.getByText("ctxHelperTwo")).toBeInTheDocument();
+  });
+
+  it("shows entry confidence on flow units", () => {
+    render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={() => {}} />);
+    const chip = screen.getByTestId("entry-conf-u1");
+    expect(chip.textContent).toContain("70%");
+    expect(chip).toHaveAttribute("title", expect.stringContaining("exported"));
   });
 
   it("renders one track per entry of a multi-entry flow-unit and dedupes progress", () => {

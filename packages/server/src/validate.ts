@@ -61,6 +61,15 @@ export const nodePatchSchema = z.object({
   reviewedInUnit: z.number().int().nonnegative().optional(),
 });
 
+export const bulkNodeStatusSchema = z.object({
+  nodeIds: z
+    .array(z.string().min(1))
+    .min(1, "nodeIds must be nonempty")
+    .max(500, "too many nodeIds (max 500)"),
+  reviewStatus: z.enum(["unreviewed", "reviewed-clean", "reviewed-commented", "reviewed-elsewhere"]),
+  reviewedInUnit: z.number().int().nonnegative().optional(),
+});
+
 export const commentCreateSchema = z.object({
   nodeId: z.string().min(1, "nodeId is required"),
   text: z.string().trim().min(1, "comment text must be nonempty").max(10_000, "comment too long"),

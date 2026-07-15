@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "./client.js";
+import { api, type Node } from "./client.js";
 
 export function useSession(sessionId: string) {
   return useQuery({ queryKey: ["session", sessionId], queryFn: () => api.getSession(sessionId) });
@@ -30,6 +30,20 @@ export function useUpdateNodeStatus(sessionId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["nodes", sessionId] });
       qc.invalidateQueries({ queryKey: ["node", sessionId] });
+    },
+  });
+}
+export function useBulkUpdateNodeStatus(sessionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ nodeIds, reviewStatus }: { nodeIds: string[]; reviewStatus: Node["reviewStatus"] }) =>
+      api.bulkUpdateNodeStatus(sessionId, nodeIds, reviewStatus),
+    onSuccess: () => {
+      // One request, one invalidation wave — including flows, whose steps
+      // carry per-node reviewStatus.
+      qc.invalidateQueries({ queryKey: ["nodes", sessionId] });
+      qc.invalidateQueries({ queryKey: ["node", sessionId] });
+      qc.invalidateQueries({ queryKey: ["flows", sessionId] });
     },
   });
 }

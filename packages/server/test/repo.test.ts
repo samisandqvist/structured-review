@@ -5,6 +5,7 @@ import { createSession, getSession, updateSessionStatus } from "../src/repo/sess
 import { createUnit, getUnitsBySession, deleteUnit } from "../src/repo/units.js";
 import { createNode, getNodesBySession, getNode, getNodeNeighbors, updateNodeReviewStatus } from "../src/repo/nodes.js";
 import { createComment, getCommentsBySession, exportComments, structuralContextFor } from "../src/repo/comments.js";
+import { bulkUpdateNodeReviewStatus, BulkNodeError } from "../src/repo/bulk.js";
 
 let db: DB;
 beforeEach(() => { db = createMemoryDatabase(); });
@@ -156,5 +157,42 @@ describe("units repo (kind-tagged)", () => {
     const units = getUnitsBySession(db, s.id);
     expect(units[0]).toMatchObject({ kind: "flow", memberStableIds: ["fn:handleOrder"], auto: false });
     expect(units[1]).toMatchObject({ kind: "orphans", memberStableIds: ["fn:x"], auto: true });
+  });
+});
+
+describe("bulkUpdateNodeReviewStatus", () => {
+  it("updates all nodes in one call, normalizing commented nodes", () => {
+    const db = createMemoryDatabase();
+    const session = createSession(db, "HEAD", "main", "sha", "fp");
+    const base = { sessionId: session.id, startLine: 1, endLine: 5, changeStatus: "changed" as const, reviewStatus: "unreviewed" as const, reviewedInUnit: null, isTest: false };
+    const a = createNode(db, { ...base, stableId: "fn:a", label: "a", file: "a.ts" });
+    const b = createNode(db, { ...base, stableId: "fn:b", label: "b", file: "b.ts" });
+    createComment(db, session.id, b.id, "", "note", "");
+    const updated = bulkUpdateNodeReviewStatus(db, session.id, [a.id, b.id], "reviewed-clean");
+    expect(updated.map((n) => n.reviewStatus)).toEqual(["reviewed-clean", "reviewed-commented"]);
+  });
+
+  it("is atomic: one unknown id writes nothing", () => {
+    const db = createMemoryDatabase();
+    const session = createSession(db, "HEAD", "main", "sha", "fp");
+    const base = { sessionId: session.id, startLine: 1, endLine: 5, changeStatus: "changed" as const, reviewStatus: "unreviewed" as const, reviewedInUnit: null, isTest: false };
+    const a = createNode(db, { ...base, stableId: "fn:a", label: "a", file: "a.ts" });
+    expect(() => bulkUpdateNodeReviewStatus(db, session.id, [a.id, "node_nope"], "reviewed-clean"))
+      .toThrowError(BulkNodeError);
+    expect(getNode(db, a.id)!.reviewStatus).toBe("unreviewed");
+  });
+
+  it("rejects a node from another session", () => {
+    const db = createMemoryDatabase();
+    const s1 = createSession(db, "HEAD", "main", "sha", "fp");
+    const s2 = createSession(db, "HEAD", "main", "sha", "fp");
+    const base = { startLine: 1, endLine: 5, changeStatus: "changed" as const, reviewStatus: "unreviewed" as const, reviewedInUnit: null, isTest: false };
+    const foreign = createNode(db, { ...base, sessionId: s2.id, stableId: "fn:x", label: "x", file: "x.ts" });
+    try {
+      bulkUpdateNodeReviewStatus(db, s1.id, [foreign.id], "reviewed-clean");
+      expect.unreachable();
+    } catch (e) {
+      expect((e as BulkNodeError).missingNodeIds).toEqual([foreign.id]);
+    }
   });
 });

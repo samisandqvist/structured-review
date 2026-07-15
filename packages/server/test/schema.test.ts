@@ -70,4 +70,26 @@ describe("schema", () => {
     expect(() => migrate(db)).toThrow(/newer/i);
     db.close();
   });
+
+  it("adds nodes.residual_ranges via the v3 migration, NULL for existing rows", () => {
+    const db = new Database(":memory:");
+    db.exec(MIGRATIONS[1]);
+    db.exec(MIGRATIONS[2]);
+    db.pragma("user_version = 2");
+    db.prepare(
+      "INSERT INTO review_sessions (id, branch, base_ref, status, created_at, head_sha, repo_fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ).run("s1", "main", "main", "planning", 0, "", "");
+    db.prepare(
+      "INSERT INTO nodes (id, session_id, stable_id, label, file, start_line, end_line, change_status, review_status, reviewed_in_unit, is_test) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).run("n1", "s1", "fn:x", "x", "x.ts", 1, 2, "changed", "unreviewed", null, 0);
+
+    expect(() => migrate(db)).not.toThrow();
+    expect(db.pragma("user_version", { simple: true })).toBe(SCHEMA_VERSION);
+
+    const cols = (db.pragma("table_info(nodes)") as { name: string }[]).map((c) => c.name);
+    expect(cols).toContain("residual_ranges");
+    const row = db.prepare("SELECT residual_ranges FROM nodes WHERE id = ?").get("n1") as { residual_ranges: unknown };
+    expect(row.residual_ranges).toBeNull();
+    db.close();
+  });
 });

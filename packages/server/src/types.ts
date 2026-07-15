@@ -8,6 +8,11 @@ export type ReviewStatus =
   | "reviewed-elsewhere";
 export type EdgeType = "call" | "test";
 
+export interface LineRange {
+  start: number;
+  end: number;
+}
+
 export interface ReviewSession {
   id: string;
   branch: string;
@@ -41,6 +46,7 @@ export interface Node {
   reviewStatus: ReviewStatus;
   reviewedInUnit: number | null;
   isTest: boolean;
+  residualRanges: LineRange[] | null;
 }
 
 export interface Edge {
