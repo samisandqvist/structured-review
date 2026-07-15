@@ -21,7 +21,13 @@ export interface Comment {
   id: string; sessionId: string; nodeId: string; hunkSnippet: string;
   text: string; structuralContext: string; createdAt: number;
 }
-export interface NodeDiff { oldText: string; newText: string; }
+export interface DiffLine {
+  type: "context" | "added" | "removed";
+  oldLine: number | null;
+  newLine: number | null;
+  text: string;
+}
+export interface NodeDiff { oldText: string; newText: string; lines: DiffLine[]; }
 export interface FlowStep {
   stableId: string;
   label: string;

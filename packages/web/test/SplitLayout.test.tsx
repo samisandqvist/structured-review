@@ -17,7 +17,7 @@ vi.mock("../src/api/hooks.js", () => ({
   useFlows: () => ({ data: { flows: [], orphans: [] } }),
   useNodes: () => ({ data: { nodes, edges: [] } }),
   useNode: (_s: string, nodeId: string | null) => ({
-    data: nodeId ? { node: nodes.find((n) => n.id === nodeId), callers: [], callees: [], diff: { oldText: "", newText: "" } } : undefined,
+    data: nodeId ? { node: nodes.find((n) => n.id === nodeId), callers: [], callees: [], diff: { oldText: "", newText: "", lines: [] } } : undefined,
   }),
   useUpdateNodeStatus: () => ({ mutate: mockMutate }),
   useUpdateUnit: () => ({ mutate: vi.fn() }),
