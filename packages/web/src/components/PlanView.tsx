@@ -25,8 +25,8 @@ export function PlanView({
       <div style={empty}>
         <div style={{ maxWidth: 320, textAlign: "center" }}>
           <div style={{ fontSize: 26, marginBottom: 10, opacity: 0.5 }}>⌖</div>
-          <h2 style={{ fontSize: 16, marginBottom: 6 }}>No review plan yet</h2>
-          <p style={{ color: "var(--dim)", fontSize: 13, lineHeight: 1.6, margin: 0 }}>
+          <h2 style={{ fontSize: 17, marginBottom: 6 }}>No review plan yet</h2>
+          <p style={{ color: "var(--dim)", fontSize: 14, lineHeight: 1.6, margin: 0 }}>
             Run the walkthrough skill to build a plan, or check that the session has changes.
           </p>
         </div>
@@ -37,8 +37,8 @@ export function PlanView({
   return (
     <div style={wrap}>
       <div style={head}>
-        <span style={{ fontFamily: "var(--display)", fontWeight: 700, fontSize: 15 }}>Plan</span>
-        <span style={{ color: "var(--dim)", fontSize: 13 }}>{units.length} units</span>
+        <span style={{ fontFamily: "var(--display)", fontWeight: 700, fontSize: 16 }}>Plan</span>
+        <span style={{ color: "var(--dim)", fontSize: 14 }}>{units.length} units</span>
       </div>
       <div style={{ overflow: "auto", flex: 1, padding: "4px 16px 20px" }}>
         {units.map((u) => (

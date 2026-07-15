@@ -49,10 +49,10 @@ export function CommentBox({
           marginBottom: 11,
         }}
       >
-        <h3 style={{ fontSize: 17, color: "var(--text)", letterSpacing: "0.02em" }}>
+        <h3 style={{ fontSize: 18, color: "var(--text)", letterSpacing: "0.02em" }}>
           Comments
         </h3>
-        <span style={{ color: "var(--dim)", fontSize: 15 }}>
+        <span style={{ color: "var(--dim)", fontSize: 16 }}>
           {comments.length}
         </span>
       </div>
@@ -68,7 +68,7 @@ export function CommentBox({
                 border: "1px solid var(--line)",
                 borderLeft: "2px solid var(--led-commented)",
                 borderRadius: "var(--radius-sm)",
-                fontSize: 15,
+                fontSize: 16,
                 lineHeight: 1.55,
                 color: "var(--text)",
               }}
@@ -88,7 +88,7 @@ export function CommentBox({
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSubmit();
           }}
           placeholder="Leave a review comment…  (⌘↵ to send)"
-          style={{ flex: 1, minHeight: 58, fontSize: 15, padding: "11px 13px" }}
+          style={{ flex: 1, minHeight: 58, fontSize: 16, padding: "11px 13px" }}
         />
         <button
           className="btn btn--primary btn--lg"
