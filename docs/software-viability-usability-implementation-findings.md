@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-12  
 **Scope:** Repository Markdown, current implementation, and automated verification  
-**Status:** Assessment and recommendations — P0 items implemented 2026-07-14 (see below)
+**Status:** Assessment and recommendations — P0 items implemented 2026-07-14; remaining P1 items implemented 2026-07-15 (see below)
 
 ## Implementation status (2026-07-14, branch `fix/viability-p0`)
 
@@ -35,13 +35,25 @@ Each task passed an independent spec+quality review; the suite grew from 105 to
   level with the real SCIP provider rather than Playwright (`886cedb`).
 - Bonus fix found by the E2E test: `getFlows` counted test callers when picking
   flow entries, so tested production functions never headed flows (`208dae5`).
+- Exported comments lack hunk/structural context (High) — hunk snippets are
+  server-derived at comment creation from the node's real diff lines;
+  structural context is derived at export from stored call/test edges; the
+  export envelope carries branch/baseRef/headSha and node line ranges.
+- Structural exploration missing from the UI (High) — collapsible Relations
+  panel under the diff (direction, file, changed/test/in-walk/review state)
+  with breadcrumb detours and a "Return to review walk" action.
+- Diff reconstruction loses source coordinates (Medium) — `NodeDiff` now
+  carries hunk-accurate `DiffLine[]` (old/new file line numbers); the web
+  diff renders them directly instead of re-diffing text blobs.
+- Runtime API validation insufficient (Medium) — zod schemas on all mutating
+  routes with structured `{ error, issues }` 400s; comment creation enforces
+  node/session ownership.
 
-**Still open (unchanged findings below remain accurate):** comment hunk/structural
-context; structural exploration (Relations drawer); diff line coordinates;
-residual bounding boxes; entry-point provenance/confidence; SCIP edge semantics;
-runtime API validation (partial — git/branch inputs only); bulk mutations;
-error/loading/empty states; lint no-op; SSE cleanup. Deferred review triage
-lives in `.superpowers/sdd/progress.md` on the implementation branch.
+**Still open (unchanged findings below remain accurate):** entry-point
+provenance/confidence; residual bounding boxes; SCIP edge semantics; bulk
+mutations; error/loading/empty states; lint no-op; SSE cleanup. Deferred
+review triage lives in `.superpowers/sdd/progress.md` on the implementation
+branch.
 
 ## Executive summary
 
