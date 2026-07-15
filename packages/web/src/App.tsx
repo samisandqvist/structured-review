@@ -50,13 +50,13 @@ export function StatusBar({ sessionId }: { sessionId: string }) {
           style={{
             fontFamily: "var(--display)",
             fontWeight: 700,
-            fontSize: 18,
+            fontSize: 19,
             letterSpacing: "-0.01em",
           }}
         >
           Trace
         </span>
-        <span className="statusbar__sub" style={{ color: "var(--dim)", fontSize: 16, marginTop: 1 }}>
+        <span className="statusbar__sub" style={{ color: "var(--dim)", fontSize: 17, marginTop: 1 }}>
           code review walkthrough
         </span>
       </div>
@@ -69,16 +69,16 @@ export function StatusBar({ sessionId }: { sessionId: string }) {
           data-warn={coverage.unassigned > 0}
           style={{ color: coverage.unassigned > 0 ? "var(--warn, #d98a2b)" : "var(--text)" }}
         >
-          <span style={{ color: "var(--dim)", fontSize: 14, letterSpacing: "0.08em" }}>PLAN</span>
-          <span style={{ fontSize: 16, fontVariantNumeric: "tabular-nums" }}>
+          <span style={{ color: "var(--dim)", fontSize: 15, letterSpacing: "0.08em" }}>PLAN</span>
+          <span style={{ fontSize: 17, fontVariantNumeric: "tabular-nums" }}>
             {units.length} units · {coverage.covered}/{coverage.changedTotal} changes
           </span>
         </div>
       )}
       {sessionData?.stale && (
         <div className="statusbar__field" data-testid="stale-chip" style={{ color: "var(--warn, #d98a2b)" }}>
-          <span style={{ fontSize: 14 }}>⚠</span>
-          <span style={{ fontSize: 15 }}>repo moved since session start</span>
+          <span style={{ fontSize: 15 }}>⚠</span>
+          <span style={{ fontSize: 16 }}>repo moved since session start</span>
         </div>
       )}
 
@@ -88,7 +88,7 @@ export function StatusBar({ sessionId }: { sessionId: string }) {
         <div className="statusbar__progress">
           <span
             className="statusbar__progress-label"
-            style={{ color: "var(--dim)", fontSize: 14, letterSpacing: "0.08em" }}
+            style={{ color: "var(--dim)", fontSize: 15, letterSpacing: "0.08em" }}
           >
             REVIEWED
           </span>
@@ -112,7 +112,7 @@ export function StatusBar({ sessionId }: { sessionId: string }) {
               }}
             />
           </div>
-          <span style={{ fontSize: 16, fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>
+          <span style={{ fontSize: 17, fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>
             {reviewed}
             <span style={{ color: "var(--dim)" }}>/{total}</span>
           </span>
@@ -133,10 +133,10 @@ function Field({
 }) {
   return (
     <div className={`statusbar__field${className ? ` ${className}` : ""}`}>
-      <span style={{ color: "var(--dim)", fontSize: 14, letterSpacing: "0.08em", flexShrink: 0 }}>
+      <span style={{ color: "var(--dim)", fontSize: 15, letterSpacing: "0.08em", flexShrink: 0 }}>
         {label.toUpperCase()}
       </span>
-      <span className="statusbar__field-value" style={{ fontSize: 16, color: "var(--text)" }}>
+      <span className="statusbar__field-value" style={{ fontSize: 17, color: "var(--text)" }}>
         {children}
       </span>
     </div>

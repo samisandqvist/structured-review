@@ -138,13 +138,13 @@ export function SplitLayout({
                 {walkPath.length > 0 && (
                   <div
                     data-testid="breadcrumb"
-                    style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 10, fontSize: 14, color: "var(--dim)" }}
+                    style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 10, fontSize: 15, color: "var(--dim)" }}
                   >
                     {walkPath.map((id, i) => (
                       <button
                         key={`${id}-${i}`}
                         onClick={() => jumpToBreadcrumb(i)}
-                        style={{ background: "none", border: "none", color: "var(--accent, #4fd6ff)", cursor: "pointer", padding: 0, fontSize: 14, fontFamily: "var(--mono)" }}
+                        style={{ background: "none", border: "none", color: "var(--accent, #4fd6ff)", cursor: "pointer", padding: 0, fontSize: 15, fontFamily: "var(--mono)" }}
                       >
                         {nodeLabel(id)} ›
                       </button>
@@ -249,8 +249,8 @@ function EmptyState() {
     >
       <div style={{ maxWidth: 280 }}>
         <div style={{ fontSize: 28, marginBottom: 12, opacity: 0.5 }}>⌖</div>
-        <h2 style={{ fontSize: 18, marginBottom: 6 }}>Pick a node to start the walk</h2>
-        <p style={{ color: "var(--dim)", fontSize: 16, lineHeight: 1.6, margin: 0 }}>
+        <h2 style={{ fontSize: 19, marginBottom: 6 }}>Pick a node to start the walk</h2>
+        <p style={{ color: "var(--dim)", fontSize: 17, lineHeight: 1.6, margin: 0 }}>
           Pick a unit&apos;s node to read its diff and leave a comment.
         </p>
       </div>
