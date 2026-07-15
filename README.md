@@ -86,6 +86,26 @@ for the node, with real file line numbers); `structuralContext` is derived
 at export time from the session's call/test edges. Both are server-owned —
 `POST /api/sessions/:id/comments` accepts only `{ "nodeId": "…", "text": "…" }`.
 
+## Entry-point configuration
+
+Flow entry points are inferred from the call graph (functions nothing else
+calls) and scored: an explicit configuration scores 1.0, an exported graph
+root 0.7, a bare graph root 0.4. The flows API reports the evidence per flow
+as `entryReasons` (`graph-root` / `exported` / `configured`) and
+`entryConfidence`; the plan view shows the score on each flow unit.
+
+Framework-registered entry points (HTTP routes, CLI commands, event
+handlers) often have callers in the graph and are missed by inference —
+declare them in `.crw-entry-points.json` at the repository root:
+
+```json
+{ "entryPoints": [ { "label": "main", "file": "src/cli.ts" } ] }
+```
+
+`label` matches the function name exactly; `file` (optional) must equal or
+suffix-match the file path. Configured entries head flows even when the
+graph shows callers.
+
 ## Data & privacy
 
 Everything runs locally. The server binds to loopback (`127.0.0.1`) by
