@@ -337,6 +337,34 @@ export function nodeSignature(file: string, startLine: number, root: string = re
   return "";
 }
 
+/**
+ * Bounded, human-readable fragment of a node's diff for comment export:
+ * a window from two lines before the first changed line through two after
+ * the last (the whole fragment when nothing changed), capped in lines and
+ * characters. Format: marker + right-aligned file line number + text.
+ */
+export function formatHunkSnippet(lines: DiffLine[], maxLines = 40, maxChars = 2000): string {
+  if (lines.length === 0) return "";
+  const firstChanged = lines.findIndex((l) => l.type !== "context");
+  const lastChanged = firstChanged === -1
+    ? lines.length - 1
+    : lines.length - 1 - [...lines].reverse().findIndex((l) => l.type !== "context");
+  const from = Math.max(0, (firstChanged === -1 ? 0 : firstChanged) - 2);
+  const to = Math.min(lines.length - 1, lastChanged + 2);
+  const window = lines.slice(from, Math.min(to + 1, from + maxLines));
+  const out: string[] = [];
+  let chars = 0;
+  for (const l of window) {
+    const s = `${MARKER_CHAR[l.type]}${String(l.newLine ?? l.oldLine ?? 0).padStart(5)} ${l.text}`;
+    if (chars + s.length > maxChars) break;
+    out.push(s);
+    chars += s.length + 1;
+  }
+  return out.join("\n");
+}
+
+const MARKER_CHAR: Record<DiffLine["type"], string> = { context: " ", added: "+", removed: "-" };
+
 function sliceBoth(root: string, file: string, startLine: number, endLine: number): NodeDiff {
   return withTexts(contextLines(readSlice(root, file, startLine, endLine), startLine));
 }

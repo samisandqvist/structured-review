@@ -4,7 +4,7 @@ import { createMemoryDatabase } from "../src/db/connection.js";
 import { createSession, getSession, updateSessionStatus } from "../src/repo/sessions.js";
 import { createUnit, getUnitsBySession, deleteUnit } from "../src/repo/units.js";
 import { createNode, getNodesBySession, getNode, getNodeNeighbors, updateNodeReviewStatus } from "../src/repo/nodes.js";
-import { createComment, getCommentsBySession, exportComments } from "../src/repo/comments.js";
+import { createComment, getCommentsBySession, exportComments, structuralContextFor } from "../src/repo/comments.js";
 
 let db: DB;
 beforeEach(() => { db = createMemoryDatabase(); });
@@ -91,17 +91,27 @@ describe("comments repo", () => {
     createComment(db, session.id, node.id, "snippet", "needs fix", "callers: A");
     expect(getCommentsBySession(db, session.id)).toHaveLength(1);
   });
-  it("exports comments as an ordered array", () => {
+  it("exports comments as an ordered array, with startLine/endLine and structural context derived from edges", () => {
     const session = createSession(db, "feat", "main");
     const node = createNode(db, {
       sessionId: session.id, stableId: "fn:handleOrder", label: "handleOrder",
       file: "src/orders.ts", startLine: 10, endLine: 30, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false,
     });
-    createComment(db, session.id, node.id, "old", "bug here", "callers: routeHandler");
+    const caller = createNode(db, {
+      sessionId: session.id, stableId: "fn:routeHandler", label: "routeHandler",
+      file: "src/routes.ts", startLine: 1, endLine: 5, changeStatus: "unchanged", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false,
+    });
+    db.prepare("INSERT INTO edges (id, session_id, source_node_id, target_node_id, edge_type) VALUES (?, ?, ?, ?, 'call')")
+      .run("e1", session.id, caller.id, node.id);
+    // Stored structuralContext ("stale value") is ignored on export — it is
+    // always recomputed from the session's edges at export time.
+    createComment(db, session.id, node.id, "old", "bug here", "stale value");
     const exported = exportComments(db, session.id);
     expect(exported).toHaveLength(1);
     expect(exported[0].stableId).toBe("fn:handleOrder");
-    expect(exported[0].structuralContext).toBe("callers: routeHandler");
+    expect(exported[0].startLine).toBe(10);
+    expect(exported[0].endLine).toBe(30);
+    expect(exported[0].structuralContext).toBe("called by: routeHandler (src/routes.ts:1)");
   });
   it("preserves multiple comments on one node in creation order", () => {
     const session = createSession(db, "feat", "main");
@@ -116,6 +126,25 @@ describe("comments repo", () => {
     expect(exported.map((c) => c.text)).toEqual(["first", "second"]);
     expect(exported[0].nodeId).toBe(node.id);
     expect(exported[0].stableId).toBe(node.stableId);
+  });
+});
+
+describe("structuralContextFor", () => {
+  it("structuralContextFor lists callers, callees, and tests", () => {
+    const db = createMemoryDatabase();
+    const session = createSession(db, "HEAD", "main", "sha", "fp");
+    const base = { sessionId: session.id, startLine: 1, endLine: 5, changeStatus: "changed" as const, reviewStatus: "unreviewed" as const, reviewedInUnit: null, isTest: false };
+    const a = createNode(db, { ...base, stableId: "fn:a", label: "a", file: "src/a.ts" });
+    const b = createNode(db, { ...base, stableId: "fn:b", label: "b", file: "src/b.ts" });
+    const c = createNode(db, { ...base, stableId: "fn:c", label: "c", file: "src/c.ts" });
+    const t = createNode(db, { ...base, stableId: "fn:t", label: "t", file: "test/t.ts", isTest: true });
+    const addEdge = db.prepare("INSERT INTO edges (id, session_id, source_node_id, target_node_id, edge_type) VALUES (?, ?, ?, ?, ?)");
+    addEdge.run("e1", session.id, b.id, a.id, "call"); // b calls a
+    addEdge.run("e2", session.id, a.id, c.id, "call"); // a calls c
+    addEdge.run("e3", session.id, t.id, a.id, "test"); // t tests a
+    expect(structuralContextFor(db, a.id)).toBe(
+      "called by: b (src/b.ts:1); calls: c (src/c.ts:1); tested by: t (test/t.ts:1)"
+    );
   });
 });
 
