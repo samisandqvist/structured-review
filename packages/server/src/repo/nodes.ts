@@ -1,5 +1,5 @@
 import type { DB } from "../db/connection.js";
-import type { Node, ReviewStatus, ChangeStatus } from "../types.js";
+import type { Node, ReviewStatus, ChangeStatus, LineRange } from "../types.js";
 import { randomId } from "../util.js";
 
 interface NodeRow {
@@ -7,6 +7,7 @@ interface NodeRow {
   label: string; file: string; start_line: number; end_line: number;
   change_status: ChangeStatus; review_status: ReviewStatus; reviewed_in_unit: number | null;
   is_test: number;
+  residual_ranges: string | null;
 }
 
 function rowToNode(row: NodeRow): Node {
@@ -15,17 +16,23 @@ function rowToNode(row: NodeRow): Node {
     label: row.label, file: row.file, startLine: row.start_line, endLine: row.end_line,
     changeStatus: row.change_status, reviewStatus: row.review_status, reviewedInUnit: row.reviewed_in_unit,
     isTest: row.is_test === 1,
+    residualRanges: row.residual_ranges ? (JSON.parse(row.residual_ranges) as LineRange[]) : null,
   };
 }
 
-export function createNode(db: DB, node: Omit<Node, "id">): Node {
+export function createNode(
+  db: DB,
+  node: Omit<Node, "id" | "residualRanges"> & { residualRanges?: LineRange[] | null }
+): Node {
   const id = randomId("node");
+  const residualRanges = node.residualRanges ?? null;
   db.prepare(
-    `INSERT INTO nodes (id, session_id, stable_id, label, file, start_line, end_line, change_status, review_status, reviewed_in_unit, is_test)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO nodes (id, session_id, stable_id, label, file, start_line, end_line, change_status, review_status, reviewed_in_unit, is_test, residual_ranges)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(id, node.sessionId, node.stableId, node.label, node.file,
-    node.startLine, node.endLine, node.changeStatus, node.reviewStatus, node.reviewedInUnit, node.isTest ? 1 : 0);
-  return { ...node, id };
+    node.startLine, node.endLine, node.changeStatus, node.reviewStatus, node.reviewedInUnit, node.isTest ? 1 : 0,
+    residualRanges ? JSON.stringify(residualRanges) : null);
+  return { ...node, id, residualRanges };
 }
 
 export function getNodesBySession(db: DB, sessionId: string): Node[] {

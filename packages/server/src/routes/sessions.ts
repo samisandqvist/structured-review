@@ -122,6 +122,7 @@ export function createSessionsRoute(ctx: AppContext) {
         label: r.label, file: r.file, startLine: r.startLine, endLine: r.endLine,
         changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null,
         isTest: r.isTest,
+        residualRanges: r.ranges,
       });
     }
     const dbNodes = getNodesBySession(ctx.db, session.id);

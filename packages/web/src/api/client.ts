@@ -9,6 +9,7 @@ export interface Unit {
   memberStableIds: string[];
   auto: boolean;
 }
+export interface LineRange { start: number; end: number; }
 export interface Node {
   id: string; sessionId: string; stableId: string;
   label: string; file: string; startLine: number; endLine: number;
@@ -16,6 +17,7 @@ export interface Node {
   reviewStatus: "unreviewed" | "reviewed-clean" | "reviewed-commented" | "reviewed-elsewhere";
   reviewedInUnit: number | null;
   isTest: boolean;
+  residualRanges?: LineRange[] | null;
 }
 export interface Comment {
   id: string; sessionId: string; nodeId: string; hunkSnippet: string;

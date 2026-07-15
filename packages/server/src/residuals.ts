@@ -9,6 +9,7 @@ export interface ResidualNode {
   startLine: number;
   endLine: number;
   isTest: boolean;
+  ranges: LineRange[];
 }
 
 /**
@@ -32,6 +33,7 @@ export function computeResiduals(
     const end = Math.max(...residual.map((r) => r.end));
     const deleted = end === 0; // pure deletion: hunks attribute to new line 0
     const suffix = deleted ? " (deleted)" : spans.length > 0 ? " (module scope)" : "";
+    const sorted = residual.slice().sort((a, b) => a.start - b.start);
     out.push({
       stableId: `file-residual:${file}`,
       label: `${basename(file)}${suffix}`,
@@ -39,6 +41,7 @@ export function computeResiduals(
       startLine: start,
       endLine: end,
       isTest: isTestFile(file),
+      ranges: sorted,
     });
   }
   return out;
