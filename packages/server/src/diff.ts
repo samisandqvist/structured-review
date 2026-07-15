@@ -12,12 +12,23 @@ import { join } from "node:path";
  * re-diffs them for display. For unchanged/context nodes there is no diff, so
  * we return the current source on both sides.
  */
+export interface DiffLine {
+  type: "context" | "added" | "removed";
+  /** Real old-file line number (null for added lines). */
+  oldLine: number | null;
+  /** Real new-file line number (null for removed lines). */
+  newLine: number | null;
+  text: string;
+}
+
 export interface NodeDiff {
   oldText: string;
   newText: string;
+  lines: DiffLine[];
 }
 
 interface Hunk {
+  oldStart: number;
   newStart: number;
   newCount: number;
   lines: string[]; // raw diff lines incl. leading ' ', '+', '-'
@@ -200,8 +211,7 @@ export function getNodeDiff(
   root: string = repoRoot()
 ): NodeDiff {
   if (changeStatus === "unchanged") {
-    const slice = readSlice(root, file, startLine, endLine);
-    return { oldText: slice, newText: slice };
+    return withTexts(contextLines(readSlice(root, file, startLine, endLine), startLine));
   }
 
   let raw: string;
@@ -214,8 +224,7 @@ export function getNodeDiff(
       ...QUIET,
     });
   } catch {
-    const slice = readSlice(root, file, startLine, endLine);
-    return { oldText: slice, newText: slice };
+    return withTexts(contextLines(readSlice(root, file, startLine, endLine), startLine));
   }
 
   // Changed file, but maybe no hunk inside this node's span (e.g. the change was
@@ -231,41 +240,49 @@ export function getNodeDiff(
  * whole hunk. Returns null if nothing falls in the span. Pure — exported for tests.
  */
 export function extractHunkDiff(rawDiff: string, startLine: number, endLine: number): NodeDiff | null {
-  const oldLines: string[] = [];
-  const newLines: string[] = [];
-  let any = false;
-
+  const lines: DiffLine[] = [];
   for (const h of parseHunks(rawDiff)) {
+    let oldLine = h.oldStart;
     let newLine = h.newStart;
     for (const line of h.lines) {
       const marker = line[0];
       const text = line.slice(1);
       const inSpan = newLine >= startLine && newLine <= endLine;
       if (marker === " ") {
-        if (inSpan) {
-          oldLines.push(text);
-          newLines.push(text);
-          any = true;
-        }
+        if (inSpan) lines.push({ type: "context", oldLine, newLine, text });
+        oldLine++;
         newLine++;
       } else if (marker === "+") {
-        if (inSpan) {
-          newLines.push(text);
-          any = true;
-        }
+        if (inSpan) lines.push({ type: "added", oldLine: null, newLine, text });
         newLine++;
       } else {
         // Removed line: no new-file line of its own; attribute it to the new
         // position it sits at (the upcoming new line).
-        if (inSpan) {
-          oldLines.push(text);
-          any = true;
-        }
+        if (inSpan) lines.push({ type: "removed", oldLine, newLine: null, text });
+        oldLine++;
       }
     }
   }
-  if (!any) return null;
-  return { oldText: oldLines.join("\n"), newText: newLines.join("\n") };
+  if (lines.length === 0) return null;
+  return withTexts(lines);
+}
+
+function withTexts(lines: DiffLine[]): NodeDiff {
+  return {
+    oldText: lines.filter((l) => l.type !== "added").map((l) => l.text).join("\n"),
+    newText: lines.filter((l) => l.type !== "removed").map((l) => l.text).join("\n"),
+    lines,
+  };
+}
+
+function contextLines(slice: string, startLine: number): DiffLine[] {
+  if (!slice) return [];
+  return slice.split("\n").map((text, i) => ({
+    type: "context" as const,
+    oldLine: startLine + i,
+    newLine: startLine + i,
+    text,
+  }));
 }
 
 /** The full unified diff (context 3) of a file vs baseRef, or null if none/errored. */
@@ -321,17 +338,16 @@ export function nodeSignature(file: string, startLine: number, root: string = re
 }
 
 function sliceBoth(root: string, file: string, startLine: number, endLine: number): NodeDiff {
-  const slice = readSlice(root, file, startLine, endLine);
-  return { oldText: slice, newText: slice };
+  return withTexts(contextLines(readSlice(root, file, startLine, endLine), startLine));
 }
 
 function parseHunks(diff: string): Hunk[] {
   const hunks: Hunk[] = [];
   let current: Hunk | null = null;
   for (const line of diff.split("\n")) {
-    const header = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
+    const header = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
     if (header) {
-      current = { newStart: Number(header[1]), newCount: Number(header[2] ?? "1"), lines: [] };
+      current = { oldStart: Number(header[1]), newStart: Number(header[2]), newCount: Number(header[3] ?? "1"), lines: [] };
       hunks.push(current);
       continue;
     }
