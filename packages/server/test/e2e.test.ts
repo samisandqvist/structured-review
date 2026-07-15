@@ -134,9 +134,7 @@ describe("fixture-repo end-to-end review", () => {
 
     // 5. POST two comments on the helper node.
     for (const text of ["first", "second"]) {
-      const res = await app.request(`/api/sessions/${sid}/comments`, json({
-        nodeId: helperId, hunkSnippet: "return x + 2;", text, structuralContext: "callers: handler",
-      }));
+      const res = await app.request(`/api/sessions/${sid}/comments`, json({ nodeId: helperId, text }));
       expect(res.status).toBe(200);
     }
 
@@ -149,15 +147,26 @@ describe("fixture-repo end-to-end review", () => {
     expect(patchRes.status).toBe(200);
     expect((await patchRes.json()).node.reviewStatus).toBe("reviewed-commented");
 
-    // 7. GET /export -> ordered array of two comments, each with stableId + file (Task 1).
+    // 7. GET /export -> ordered array of two comments, each with stableId + file (Task 1),
+    //    plus a server-derived hunk snippet and structural context naming a real neighbor (Task 3).
     const exportRes = await app.request(`/api/sessions/${sid}/export`);
     expect(exportRes.status).toBe(200);
-    const { comments } = await exportRes.json();
+    const exportBody = await exportRes.json();
+    expect(exportBody.branch).toBe("HEAD");
+    expect(typeof exportBody.headSha).toBe("string");
+    expect(exportBody.baseRef).toBeTruthy();
+    const { comments } = exportBody;
     expect(comments).toHaveLength(2);
     expect(comments.map((c: any) => c.text)).toEqual(["first", "second"]);
     for (const c of comments) {
       expect(c.stableId).toBe(helperNode.stableId);
       expect(c.file).toBe("src/helper.ts");
+      expect(c.startLine).toBe(helperNode.startLine);
+      expect(c.endLine).toBe(helperNode.endLine);
+      expect(c.hunkSnippet.length).toBeGreaterThan(0);
+      expect(c.hunkSnippet).toMatch(/^\+/m);
+      // helper's only caller in the fixture is handler.
+      expect(c.structuralContext).toContain("handler");
     }
 
     // 8. Edit helper again (HEAD unchanged) -> stale via content fingerprint (Task 5).

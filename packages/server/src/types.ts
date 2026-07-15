@@ -67,6 +67,8 @@ export interface ExportedComment {
   stableId: string;
   label: string;
   file: string;
+  startLine: number;
+  endLine: number;
   hunkSnippet: string;
   text: string;
   structuralContext: string;

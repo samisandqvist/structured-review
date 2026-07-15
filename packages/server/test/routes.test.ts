@@ -223,7 +223,7 @@ describe("PATCH /api/sessions/:id/nodes/:nodeId", () => {
     const nid = nodes[0].id;
     await app.request(`/api/sessions/${sid}/comments`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nodeId: nid, hunkSnippet: "const x = 1", text: "this looks wrong", structuralContext: "callers: routeHandler" }),
+      body: JSON.stringify({ nodeId: nid, text: "this looks wrong" }),
     });
     const res = await app.request(`/api/sessions/${sid}/nodes/${nid}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
@@ -245,10 +245,37 @@ describe("POST /api/sessions/:id/comments", () => {
     const { nodes } = await nr.json();
     const res = await app.request(`/api/sessions/${session.id}/comments`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nodeId: nodes[0].id, hunkSnippet: "const x = 1", text: "this looks wrong", structuralContext: "callers: routeHandler" }),
+      body: JSON.stringify({ nodeId: nodes[0].id, text: "this looks wrong" }),
     });
     expect(res.status).toBe(200);
-    expect((await res.json()).comment.text).toBe("this looks wrong");
+    const { comment } = await res.json();
+    expect(comment.text).toBe("this looks wrong");
+    // The stub graph provider's nodes don't correspond to files on disk, so
+    // the server-derived snippet is empty here — real content is covered by
+    // the e2e test against a real fixture repo.
+    expect(comment.hunkSnippet).toBe("");
+    expect(comment.structuralContext).toBe("");
+  });
+
+  it("rejects a comment for a node from another session", async () => {
+    const crA = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session: sessionA } = await crA.json();
+    const crB = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session: sessionB } = await crB.json();
+    const nrB = await app.request(`/api/sessions/${sessionB.id}/nodes`);
+    const { nodes: nodesB } = await nrB.json();
+    const res = await app.request(`/api/sessions/${sessionA.id}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ nodeId: nodesB[0].id, text: "cross-session" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status).toBe(404);
   });
 });
 
@@ -263,7 +290,7 @@ describe("GET /api/sessions/:id/comments", () => {
     const { nodes } = await nr.json();
     await app.request(`/api/sessions/${session.id}/comments`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nodeId: nodes[0].id, hunkSnippet: "s", text: "comment 1", structuralContext: "callers: A" }),
+      body: JSON.stringify({ nodeId: nodes[0].id, text: "comment 1" }),
     });
     const res = await app.request(`/api/sessions/${session.id}/comments`);
     expect(res.status).toBe(200);
@@ -297,7 +324,7 @@ describe("coverage reconciliation", () => {
 });
 
 describe("GET /api/sessions/:id/export", () => {
-  it("exports comments as an ordered array with structural context", async () => {
+  it("exports comments as an ordered array with derived structural context", async () => {
     const cr = await app.request("/api/sessions", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
@@ -305,16 +332,37 @@ describe("GET /api/sessions/:id/export", () => {
     const { session } = await cr.json();
     const nr = await app.request(`/api/sessions/${session.id}/nodes`);
     const { nodes } = await nr.json();
+    const handleOrder = nodes.find((n: any) => n.stableId === "fn:handleOrder");
     await app.request(`/api/sessions/${session.id}/comments`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nodeId: nodes[0].id, hunkSnippet: "s", text: "fix this", structuralContext: "callers: A, B" }),
+      body: JSON.stringify({ nodeId: handleOrder.id, text: "fix this" }),
     });
     const res = await app.request(`/api/sessions/${session.id}/export`);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.comments).toHaveLength(1);
-    expect(body.comments[0].nodeId).toBe(nodes[0].id);
+    expect(body.comments[0].nodeId).toBe(handleOrder.id);
     expect(body.comments[0].text).toBe("fix this");
+    expect(body.comments[0].startLine).toBe(10);
+    expect(body.comments[0].endLine).toBe(30);
+    // StubGraphProvider wires fn:handleOrder -> fn:validateOrder, fn:saveOrder.
+    expect(body.comments[0].structuralContext).toBe(
+      "calls: validateOrder (src/orders.ts:35), saveOrder (src/db.ts:100)"
+    );
+  });
+
+  it("includes the session's git anchors", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const res = await app.request(`/api/sessions/${session.id}/export`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.branch).toBe("HEAD");
+    expect(typeof body.headSha).toBe("string");
+    expect(body.baseRef).toBeTruthy();
   });
 
   it("preserves multiple comments on the same node in creation order", async () => {
@@ -327,11 +375,11 @@ describe("GET /api/sessions/:id/export", () => {
     const { nodes } = await nr.json();
     await app.request(`/api/sessions/${session.id}/comments`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nodeId: nodes[0].id, hunkSnippet: "s1", text: "first", structuralContext: "ctxA" }),
+      body: JSON.stringify({ nodeId: nodes[0].id, text: "first" }),
     });
     await app.request(`/api/sessions/${session.id}/comments`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nodeId: nodes[0].id, hunkSnippet: "s2", text: "second", structuralContext: "ctxB" }),
+      body: JSON.stringify({ nodeId: nodes[0].id, text: "second" }),
     });
     const res = await app.request(`/api/sessions/${session.id}/export`);
     expect(res.status).toBe(200);

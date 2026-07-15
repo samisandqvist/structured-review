@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { extractHunkDiff, getNodeDiff, nodeChangeStats, subtractRanges, resolveRef, changedFilesStrict, currentBranch, repoFingerprint, GitError } from "../src/diff.js";
+import { extractHunkDiff, getNodeDiff, nodeChangeStats, subtractRanges, resolveRef, changedFilesStrict, currentBranch, repoFingerprint, formatHunkSnippet, GitError } from "../src/diff.js";
 import type { DiffLine } from "../src/diff.js";
 
 let fixtureRepo: string;
@@ -204,6 +204,44 @@ describe("getNodeDiff", () => {
     const d = getNodeDiff("HEAD", "a.txt", 1, 1, "unchanged", fixtureRepo);
     expect(d.oldText).toBe(d.newText);
     expect(d.lines[0]).toEqual({ type: "context", oldLine: 1, newLine: 1, text: "one" });
+  });
+});
+
+describe("formatHunkSnippet", () => {
+  const lines = [
+    { type: "context" as const, oldLine: 1, newLine: 1, text: "a" },
+    { type: "context" as const, oldLine: 2, newLine: 2, text: "b" },
+    { type: "context" as const, oldLine: 3, newLine: 3, text: "c" },
+    { type: "context" as const, oldLine: 4, newLine: 4, text: "d" },
+    { type: "removed" as const, oldLine: 5, newLine: null, text: "old" },
+    { type: "added" as const, oldLine: null, newLine: 5, text: "new" },
+    { type: "context" as const, oldLine: 6, newLine: 6, text: "e" },
+  ];
+
+  it("windows around the changed lines with two context lines", () => {
+    expect(formatHunkSnippet(lines).split("\n")).toEqual([
+      "     3 c",
+      "     4 d",
+      "-    5 old",
+      "+    5 new",
+      "     6 e",
+    ]);
+  });
+
+  it("caps line count", () => {
+    const many = Array.from({ length: 100 }, (_, i) => ({
+      type: "added" as const, oldLine: null, newLine: i + 1, text: `l${i}`,
+    }));
+    expect(formatHunkSnippet(many, 10).split("\n")).toHaveLength(10);
+  });
+
+  it("uses the whole (bounded) fragment when nothing changed", () => {
+    const ctx = lines.filter((l) => l.type === "context");
+    expect(formatHunkSnippet(ctx).split("\n")).toHaveLength(ctx.length);
+  });
+
+  it("returns empty string for no lines", () => {
+    expect(formatHunkSnippet([])).toBe("");
   });
 });
 
