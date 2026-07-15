@@ -108,6 +108,10 @@ describe("fixture-repo end-to-end review", () => {
     });
     expect(handlerFlow).toBeDefined();
     expect(handlerFlow.affected).toBe(true);
+    // handler is exported (`export function handler`) and heads the call tree
+    // as a graph root (its only caller, testHandler, is a test) -> 0.7.
+    expect(handlerFlow.entryReasons).toEqual(["graph-root", "exported"]);
+    expect(handlerFlow.entryConfidence).toBe(0.7);
     const inFlowsOrOrphans = new Set<string>([
       ...flows.flatMap((f: any) => f.steps.map((s: any) => s.stableId)),
       ...orphans.map((o: any) => o.stableId),

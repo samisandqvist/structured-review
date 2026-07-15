@@ -1,4 +1,5 @@
 import type { Flow, FlowStep } from "./provider.js";
+import type { EntryEvidence } from "./entry-points.js";
 
 export interface FlowNodeInfo {
   label: string;
@@ -83,6 +84,14 @@ export function flowCriticality(steps: FlowStep[]): number {
   return Math.min(1, (distinct * 0.6 + maxDepth * 0.4) / 12);
 }
 
-export function makeFlow(id: number, name: string, steps: FlowStep[]): Flow {
-  return { id, name, criticality: flowCriticality(steps), depth: steps.reduce((m, s) => Math.max(m, s.depth), 0), steps };
+export function makeFlow(id: number, name: string, steps: FlowStep[], evidence?: EntryEvidence): Flow {
+  return {
+    id,
+    name,
+    criticality: flowCriticality(steps),
+    depth: steps.reduce((m, s) => Math.max(m, s.depth), 0),
+    steps,
+    entryReasons: evidence?.reasons ?? ["graph-root"],
+    entryConfidence: evidence?.confidence ?? 0.4,
+  };
 }

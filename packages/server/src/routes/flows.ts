@@ -36,9 +36,11 @@ export function createFlowsRoute(ctx: AppContext) {
       return {
         id: f.id, name: f.name, criticality: f.criticality, depth: f.depth,
         affected, changedStableIds, entryStableId: f.steps[0]?.stableId ?? "", steps,
+        entryReasons: f.entryReasons ?? ["graph-root"],
+        entryConfidence: f.entryConfidence ?? 0.4,
       };
     });
-    flows.sort((a, b) => Number(b.affected) - Number(a.affected));
+    flows.sort((a, b) => Number(b.affected) - Number(a.affected) || b.entryConfidence - a.entryConfidence);
 
     const inAnyFlow = new Set(allFlows.flatMap((f) => f.steps.map((s) => s.stableId)));
     const orphans = nodes.filter((n) => n.changeStatus === "changed" && !inAnyFlow.has(n.stableId));

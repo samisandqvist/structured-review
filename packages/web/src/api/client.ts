@@ -53,6 +53,8 @@ export interface Flow {
   changedStableIds: string[];
   steps: FlowStep[];
   entryStableId: string;
+  entryReasons: string[];
+  entryConfidence: number;
 }
 export interface GraphEdgeDTO {
   sourceNodeId: string;
