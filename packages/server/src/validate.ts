@@ -8,7 +8,7 @@ export const sessionCreateSchema = z.object({
 
 const flowUnitSchema = z.object({
   kind: z.literal("flow"),
-  label: z.string(),
+  label: z.string().trim(),
   rationale: z.string().optional(),
   flowEntryStableId: z.string().min(1).optional(),
   flowEntryStableIds: z.array(z.string().min(1)).optional(),
@@ -16,13 +16,13 @@ const flowUnitSchema = z.object({
 
 const orphanUnitSchema = z.object({
   kind: z.literal("orphans"),
-  label: z.string(),
+  label: z.string().trim(),
   rationale: z.string().optional(),
   orphanStableIds: z.array(z.string().min(1)),
 });
 
 export const planSchema = z
-  .object({ units: z.array(z.union([flowUnitSchema, orphanUnitSchema])) })
+  .object({ units: z.array(z.discriminatedUnion("kind", [flowUnitSchema, orphanUnitSchema])) })
   .superRefine((body, ctx) => {
     const seen = new Set<string>();
     body.units.forEach((u, i) => {
