@@ -17,7 +17,7 @@ const MARKER: Record<DiffLine["type"], string> = { context: " ", added: "+", rem
 const gutterStyle: CSSProperties = {
   width: 1, minWidth: 44, padding: "0 8px", textAlign: "right",
   color: "#5c6678", background: "#0f141e", userSelect: "none",
-  fontSize: 13, verticalAlign: "top",
+  fontSize: 15, verticalAlign: "top",
 };
 
 /** Insert "gap" markers where consecutive lines skip file positions (hunk boundaries). */
@@ -39,12 +39,12 @@ function withSeparators(lines: DiffLine[]): (DiffLine | "gap")[] {
 function DiffLines({ lines }: { lines: DiffLine[] }) {
   return (
     <div style={{ border: "1px solid #283143", borderRadius: 8, overflow: "hidden", background: "#11151f" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "var(--mono)", fontSize: 15, lineHeight: 1.5 }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "var(--mono)", fontSize: 17, lineHeight: 1.5 }}>
         <tbody>
           {withSeparators(lines).map((l, i) =>
             l === "gap" ? (
               <tr key={`gap-${i}`} data-testid="diff-gap">
-                <td colSpan={4} style={{ padding: "2px 10px", color: "#5c6678", background: "#161c28", fontSize: 12, textAlign: "center" }}>⋯</td>
+                <td colSpan={4} style={{ padding: "2px 10px", color: "#5c6678", background: "#161c28", fontSize: 14, textAlign: "center" }}>⋯</td>
               </tr>
             ) : (
               <tr key={i} data-line-type={l.type} style={{ background: ROW_BG[l.type] }}>
@@ -75,14 +75,14 @@ export function DiffView({ node, diff }: { node: Node; diff?: NodeDiff }) {
           flexWrap: "wrap",
         }}
       >
-        <h2 style={{ fontSize: 17, fontFamily: "var(--mono)", fontWeight: 700 }}>
+        <h2 style={{ fontSize: 19, fontFamily: "var(--mono)", fontWeight: 700 }}>
           {node.label}
         </h2>
         <NodeBadge status={node.reviewStatus} />
         {node.changeStatus === "unchanged" && (
           <span
             style={{
-              fontSize: 13,
+              fontSize: 15,
               color: "var(--dim)",
               border: "1px dashed var(--line-bright)",
               borderRadius: 4,
@@ -93,7 +93,7 @@ export function DiffView({ node, diff }: { node: Node; diff?: NodeDiff }) {
             context · unchanged
           </span>
         )}
-        <span style={{ fontSize: 13, color: "var(--dim)", marginLeft: "auto" }}>
+        <span style={{ fontSize: 15, color: "var(--dim)", marginLeft: "auto" }}>
           {node.file}:{node.startLine}–{node.endLine}
         </span>
       </div>
@@ -101,7 +101,7 @@ export function DiffView({ node, diff }: { node: Node; diff?: NodeDiff }) {
         {lines.length > 0 ? (
           <DiffLines lines={lines} />
         ) : (
-          <div style={{ padding: 16, color: "var(--faint)", fontSize: 13 }}>
+          <div style={{ padding: 16, color: "var(--faint)", fontSize: 15 }}>
             No source available for this node.
           </div>
         )}

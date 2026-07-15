@@ -66,6 +66,46 @@ function makeFixture(): string {
   return root;
 }
 
+/**
+ * A committed fixture where `helper` has a *non-test* caller (`handler`) —
+ * which disqualifies it from graph-root status — and itself calls `util`, so
+ * it still has callees (a configured entry needs callees to head a flow).
+ * `.crw-entry-points.json` names it by a bare filename ("helper.ts") to
+ * exercise the path-segment-boundary suffix match against the real
+ * "src/helper.ts" path.
+ */
+function makeConfiguredEntryFixture(): string {
+  const root = mkdtempSync(join(tmpdir(), "crw-e2e-configured-"));
+  dir = root;
+
+  git(root, "init", "-b", "main");
+  git(root, "config", "user.email", "t@t");
+  git(root, "config", "user.name", "t");
+
+  writeFileSync(join(root, "package.json"), JSON.stringify({ name: "fixture", type: "module", private: true }, null, 2) + "\n");
+  writeFileSync(
+    join(root, "tsconfig.json"),
+    JSON.stringify({ compilerOptions: { module: "esnext", moduleResolution: "bundler", strict: true }, include: ["src"] }, null, 2) + "\n"
+  );
+  mkdirSync(join(root, "src"));
+  writeFileSync(join(root, "src", "util.ts"), "export function util(x: number): number {\n  return x * 2;\n}\n");
+  writeFileSync(
+    join(root, "src", "helper.ts"),
+    'import { util } from "./util.js";\nexport function helper(x: number): number {\n  return util(x) + 1;\n}\n'
+  );
+  writeFileSync(
+    join(root, "src", "handler.ts"),
+    'import { helper } from "./helper.js";\nexport function handler(): number {\n  return helper(1);\n}\n'
+  );
+  writeFileSync(
+    join(root, ".crw-entry-points.json"),
+    JSON.stringify({ entryPoints: [{ label: "helper", file: "helper.ts" }] }) + "\n"
+  );
+  git(root, "add", ".");
+  git(root, "commit", "-m", "init configured-entry fixture");
+  return root;
+}
+
 const json = (body: unknown) => ({
   method: "POST",
   headers: { "Content-Type": "application/json" },
@@ -108,6 +148,10 @@ describe("fixture-repo end-to-end review", () => {
     });
     expect(handlerFlow).toBeDefined();
     expect(handlerFlow.affected).toBe(true);
+    // handler is exported (`export function handler`) and heads the call tree
+    // as a graph root (its only caller, testHandler, is a test) -> 0.7.
+    expect(handlerFlow.entryReasons).toEqual(["graph-root", "exported"]);
+    expect(handlerFlow.entryConfidence).toBe(0.7);
     const inFlowsOrOrphans = new Set<string>([
       ...flows.flatMap((f: any) => f.steps.map((s: any) => s.stableId)),
       ...orphans.map((o: any) => o.stableId),
@@ -175,6 +219,27 @@ describe("fixture-repo end-to-end review", () => {
     const staleBody = await staleRes.json();
     expect(staleBody.stale).toBe(true);
     expect(staleBody.staleReason).toBe("working-tree-changed");
+  });
+
+  it("a configured entry heads a flow despite a non-test caller (path-segment suffix match)", { timeout: 120_000 }, async () => {
+    dir = makeConfiguredEntryFixture();
+    const app = createApp({ db: createMemoryDatabase(), graphProvider: new ScipGraphProvider({ repoRoot: dir }), repoRoot: dir });
+
+    const cr = await app.request("/api/sessions", json({ branch: "HEAD", baseRef: "HEAD" }));
+    expect(cr.status).toBe(200);
+    const { session } = await cr.json();
+    const sid: string = session.id;
+
+    const flowsRes = await app.request(`/api/sessions/${sid}/flows`);
+    expect(flowsRes.status).toBe(200);
+    const { flows } = await flowsRes.json();
+    // `helper` is called by `handler` (a non-test, non-root caller) so it
+    // would not naturally head a flow; only the configured entry does it.
+    const helperFlow = flows.find((f: any) => f.steps[0]?.label === "helper");
+    expect(helperFlow).toBeDefined();
+    expect(helperFlow.steps.some((s: any) => s.label === "util")).toBe(true);
+    expect(helperFlow.entryReasons).toContain("configured");
+    expect(helperFlow.entryConfidence).toBe(1.0);
   });
 
   it("rejects a session for a non-checked-out branch", async () => {

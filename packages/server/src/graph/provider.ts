@@ -39,6 +39,10 @@ export interface Flow {
   criticality: number;
   depth: number;
   steps: FlowStep[];
+  /** Why the entry heads this flow (graph-root / exported / configured). */
+  entryReasons?: string[];
+  /** 0–1; 1.0 = explicitly configured, 0.4 = bare graph root. */
+  entryConfidence?: number;
 }
 
 export interface GraphProvider {

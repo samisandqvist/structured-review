@@ -30,6 +30,7 @@ vi.mock("../src/api/hooks.js", () => ({
       : undefined,
   }),
   useUpdateNodeStatus: () => ({ mutate: mockMutate }),
+  useBulkUpdateNodeStatus: () => ({ mutate: vi.fn() }),
   useUpdateUnit: () => ({ mutate: vi.fn() }),
   useComments: () => ({ data: { comments: [] } }),
   useCreateComment: () => ({ mutate: vi.fn() }),

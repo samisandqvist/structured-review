@@ -9,6 +9,7 @@ export interface Unit {
   memberStableIds: string[];
   auto: boolean;
 }
+export interface LineRange { start: number; end: number; }
 export interface Node {
   id: string; sessionId: string; stableId: string;
   label: string; file: string; startLine: number; endLine: number;
@@ -16,6 +17,7 @@ export interface Node {
   reviewStatus: "unreviewed" | "reviewed-clean" | "reviewed-commented" | "reviewed-elsewhere";
   reviewedInUnit: number | null;
   isTest: boolean;
+  residualRanges?: LineRange[] | null;
 }
 export interface Comment {
   id: string; sessionId: string; nodeId: string; hunkSnippet: string;
@@ -51,6 +53,8 @@ export interface Flow {
   changedStableIds: string[];
   steps: FlowStep[];
   entryStableId: string;
+  entryReasons: string[];
+  entryConfidence: number;
 }
 export interface GraphEdgeDTO {
   sourceNodeId: string;
@@ -99,6 +103,10 @@ export const api = {
   updateNodeStatus: (sessionId: string, nodeId: string, reviewStatus: Node["reviewStatus"], reviewedInUnit?: number) =>
     fetchJson<{ node: Node }>(`/sessions/${sessionId}/nodes/${nodeId}`, {
       method: "PATCH", body: JSON.stringify({ reviewStatus, reviewedInUnit }),
+    }),
+  bulkUpdateNodeStatus: (sessionId: string, nodeIds: string[], reviewStatus: Node["reviewStatus"]) =>
+    fetchJson<{ nodes: Node[] }>(`/sessions/${sessionId}/nodes`, {
+      method: "PATCH", body: JSON.stringify({ nodeIds, reviewStatus }),
     }),
   getComments: (id: string) =>
     fetchJson<{ comments: Comment[] }>(`/sessions/${id}/comments`),

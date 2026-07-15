@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useFlows, useNodes, useSession, useUpdateNodeStatus, useUpdateUnit } from "../api/hooks.js";
+import { useBulkUpdateNodeStatus, useFlows, useNodes, useSession, useUpdateUnit } from "../api/hooks.js";
 import { useUIStore } from "../store/ui.js";
 import type { Flow, FlowStep, GraphEdgeDTO, Node, Unit } from "../api/client.js";
 
@@ -25,8 +25,8 @@ export function PlanView({
       <div style={empty}>
         <div style={{ maxWidth: 320, textAlign: "center" }}>
           <div style={{ fontSize: 26, marginBottom: 10, opacity: 0.5 }}>⌖</div>
-          <h2 style={{ fontSize: 16, marginBottom: 6 }}>No review plan yet</h2>
-          <p style={{ color: "var(--dim)", fontSize: 13, lineHeight: 1.6, margin: 0 }}>
+          <h2 style={{ fontSize: 18, marginBottom: 6 }}>No review plan yet</h2>
+          <p style={{ color: "var(--dim)", fontSize: 15, lineHeight: 1.6, margin: 0 }}>
             Run the walkthrough skill to build a plan, or check that the session has changes.
           </p>
         </div>
@@ -37,8 +37,8 @@ export function PlanView({
   return (
     <div style={wrap}>
       <div style={head}>
-        <span style={{ fontFamily: "var(--display)", fontWeight: 700, fontSize: 15 }}>Plan</span>
-        <span style={{ color: "var(--dim)", fontSize: 13 }}>{units.length} units</span>
+        <span style={{ fontFamily: "var(--display)", fontWeight: 700, fontSize: 17 }}>Plan</span>
+        <span style={{ color: "var(--dim)", fontSize: 15 }}>{units.length} units</span>
       </div>
       <div style={{ overflow: "auto", flex: 1, padding: "4px 16px 20px" }}>
         {units.map((u) => (
@@ -120,7 +120,7 @@ function UnitBlock({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(unit.label);
 
-  const updateStatus = useUpdateNodeStatus(sessionId);
+  const bulkStatus = useBulkUpdateNodeStatus(sessionId);
   // Unreviewed changed nodeIds of this unit: flow-units from their tracks'
   // steps, orphan-units (or unresolved flows) from memberNodes.
   const remaining: string[] = useFlowProgress
@@ -130,7 +130,7 @@ function UnitBlock({
     : memberNodes.filter((n) => n.reviewStatus === "unreviewed").map((n) => n.id);
   const markRemaining = () => {
     if (!window.confirm(`Mark ${remaining.length} node${remaining.length === 1 ? "" : "s"} reviewed?`)) return;
-    for (const nodeId of remaining) updateStatus.mutate({ nodeId, reviewStatus: "reviewed-clean" });
+    bulkStatus.mutate({ nodeIds: remaining, reviewStatus: "reviewed-clean" });
   };
 
   // Production nodes of this unit, for test linkage.
@@ -185,6 +185,17 @@ function UnitBlock({
           <h3 className="unit__name" onDoubleClick={() => !unit.auto && setEditing(true)}>{unit.label}</h3>
         )}
         {unit.auto && <span className="unit__badge">unassigned</span>}
+        {unit.kind === "flow" && flows.length > 0 && (
+          <span
+            className="unit__badge"
+            data-testid={`entry-conf-${unit.id}`}
+            title={`entry evidence: ${flows
+              .map((f) => `${f.name}: ${(f.entryReasons ?? []).join("+")}`)
+              .join("; ")}`}
+          >
+            ⚑ {Math.round(Math.max(...flows.map((f) => f.entryConfidence ?? 0.4)) * 100)}%
+          </span>
+        )}
         {testStats.total > 0 && (
           <button
             data-testid={`test-chip-${unit.id}`}

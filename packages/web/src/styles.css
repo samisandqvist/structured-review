@@ -63,7 +63,7 @@ body {
   background: var(--ink);
   color: var(--text);
   font-family: var(--mono);
-  font-size: 15px;
+  font-size: 17px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -181,7 +181,7 @@ h3 {
 /* ---- Buttons ------------------------------------------------------------- */
 .btn {
   font-family: var(--mono);
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 500;
   color: var(--text);
   background: var(--surface-2);
@@ -232,7 +232,7 @@ h3 {
 /* ---- Inputs -------------------------------------------------------------- */
 textarea {
   font-family: var(--mono);
-  font-size: 15px;
+  font-size: 17px;
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--line);
@@ -315,7 +315,7 @@ textarea:focus {
 .tnode__label {
   font-family: var(--mono);
   font-weight: 700;
-  font-size: 13px;
+  font-size: 15px;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -323,14 +323,14 @@ textarea:focus {
 }
 .tnode__depth {
   margin-left: auto;
-  font-size: 10.5px;
+  font-size: 12.5px;
   font-weight: 500;
   color: var(--dim);
   letter-spacing: 0.06em;
   flex-shrink: 0;
 }
 .tnode__file {
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: var(--dim);
   white-space: nowrap;
   overflow: hidden;
@@ -394,7 +394,7 @@ textarea:focus {
 .tnode__tests {
   margin-left: auto;
   flex-shrink: 0;
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: var(--led-clean);
   background: rgba(70, 211, 138, 0.12);
   border-radius: 999px;
@@ -403,7 +403,7 @@ textarea:focus {
 .tnode__expand {
   margin-top: 6px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 13px;
   color: var(--trace);
   background: var(--surface-2);
   border: 1px solid var(--line);
@@ -453,12 +453,12 @@ textarea:focus {
   gap: 7px;
 }
 .graph-controls__count {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--text);
 }
 .chip {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 14px;
   color: var(--dim);
   background: var(--surface-2);
   border: 1px solid var(--line);
@@ -476,7 +476,7 @@ textarea:focus {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 13px;
+  font-size: 15px;
   color: var(--dim);
   cursor: pointer;
   user-select: none;
@@ -486,7 +486,7 @@ textarea:focus {
   cursor: pointer;
 }
 .graph-controls__hint {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--faint);
 }
 .chip--clear:hover {
@@ -501,7 +501,7 @@ textarea:focus {
   gap: 8px;
 }
 .graph-focus__label {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--trace);
   font-weight: 500;
   max-width: 150px;
@@ -517,7 +517,7 @@ textarea:focus {
 }
 .graph-entries > summary {
   cursor: pointer;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--dim);
   letter-spacing: 0.04em;
   list-style: none;
@@ -548,7 +548,7 @@ textarea:focus {
   gap: 8px;
   text-align: left;
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: 14.5px;
   line-height: 1.7;
   color: var(--dim);
   background: transparent;
@@ -566,7 +566,7 @@ textarea:focus {
 }
 .graph-entries__count {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--faint);
   background: var(--surface-2);
   border-radius: 999px;
@@ -596,7 +596,7 @@ textarea:focus {
 }
 .viewtoggle__opt {
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: 14.5px;
   color: var(--dim);
   background: transparent;
   border: none;
@@ -634,11 +634,11 @@ textarea:focus {
 .flow__name {
   font-family: var(--mono);
   font-weight: 700;
-  font-size: 14px;
+  font-size: 16px;
   color: var(--dim);
 }
 .flow__badge {
-  font-size: 10.5px;
+  font-size: 12.5px;
   letter-spacing: 0.04em;
   color: var(--trace);
   background: var(--trace-soft);
@@ -647,7 +647,7 @@ textarea:focus {
 }
 .flow__crit,
 .flow__len {
-  font-size: 11.5px;
+  font-size: 13.5px;
   color: var(--faint);
 }
 .flow__len {
@@ -665,12 +665,12 @@ textarea:focus {
 }
 .flow__branch {
   color: var(--faint);
-  font-size: 13px;
+  font-size: 15px;
   margin-right: 1px;
 }
 .step {
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: 16px;
   color: var(--dim);
   background: var(--surface);
   border: 1px solid var(--line);
@@ -721,27 +721,27 @@ textarea:focus {
 /* ---- Plan view (unit-grouped) ------------------------------------------- */
 .unit { padding: 10px 0 14px; border-bottom: 1px solid var(--line); }
 .unit__bar { display: flex; align-items: baseline; gap: 8px; }
-.unit__name { font-size: 14px; font-weight: 700; margin: 0; }
-.unit__badge { font-size: 11px; color: var(--warn, #d98a2b); border: 1px solid var(--warn, #d98a2b); border-radius: 4px; padding: 0 5px; }
-.unit__progress { margin-left: auto; font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
-.unit__chevron { background: none; border: none; color: var(--dim); cursor: pointer; font-size: 12px; padding: 0 2px; }
+.unit__name { font-size: 17px; font-weight: 700; margin: 0; }
+.unit__badge { font-size: 13px; color: var(--warn, #d98a2b); border: 1px solid var(--warn, #d98a2b); border-radius: 4px; padding: 0 5px; }
+.unit__progress { margin-left: auto; font-size: 14px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.unit__chevron { background: none; border: none; color: var(--dim); cursor: pointer; font-size: 14px; padding: 0 2px; }
 .unit__chevron:hover { color: var(--text); }
-.unit__bulk { background: none; border: 1px solid var(--line-bright); border-radius: 4px; color: var(--dim); cursor: pointer; font-size: 11px; padding: 0 5px; }
+.unit__bulk { background: none; border: 1px solid var(--line-bright); border-radius: 4px; color: var(--dim); cursor: pointer; font-size: 13px; padding: 0 5px; }
 .unit__bulk:hover { color: var(--text); border-color: var(--text); }
 .unit__name-input {
-  font-size: 14px; font-weight: 700; font-family: inherit;
+  font-size: 17px; font-weight: 700; font-family: inherit;
   background: var(--surface); color: var(--text);
   border: 1px solid var(--line-bright); border-radius: 4px; padding: 0 4px;
 }
-.unit__tests { background: none; border: 1px solid var(--line-bright); border-radius: 4px; color: var(--dim); cursor: pointer; font-size: 11px; padding: 0 5px; }
+.unit__tests { background: none; border: 1px solid var(--line-bright); border-radius: 4px; color: var(--dim); cursor: pointer; font-size: 13px; padding: 0 5px; }
 .unit__tests:hover { color: var(--text); border-color: var(--text); }
 .unit__tests--warn { color: var(--warn, #d98a2b); border-color: var(--warn, #d98a2b); }
-.unit__rationale { margin: 2px 0 8px; font-size: 12px; color: var(--dim); line-height: 1.5; }
+.unit__rationale { margin: 2px 0 8px; font-size: 14px; color: var(--dim); line-height: 1.5; }
 .unit__chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.unit__track-caption { font-size: 11px; color: var(--dim); font-family: var(--mono); letter-spacing: 0.05em; margin: 6px 0 2px; }
+.unit__track-caption { font-size: 13px; color: var(--dim); font-family: var(--mono); letter-spacing: 0.05em; margin: 6px 0 2px; }
 .flow__collapsed {
   background: none; border: 1px dashed var(--line-bright); border-radius: 4px;
-  color: var(--dim); font-size: 12px; padding: 1px 8px; cursor: pointer;
+  color: var(--dim); font-size: 14px; padding: 1px 8px; cursor: pointer;
 }
 .flow__collapsed:hover { color: var(--text); border-color: var(--text); }
 
@@ -752,7 +752,7 @@ textarea:focus {
 .keys-overlay dl {
   display: grid; grid-template-columns: auto 1fr; gap: 8px 18px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
-  padding: 20px 26px; font-size: 14px;
+  padding: 20px 26px; font-size: 16px;
 }
 .keys-overlay dt { font-family: var(--mono); color: var(--trace, #4fd6ff); }
 .keys-overlay dd { margin: 0; color: var(--text); }
