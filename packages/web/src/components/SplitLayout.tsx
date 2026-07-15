@@ -5,6 +5,7 @@ import { buildWalkOrder, nextInWalk, nextUnreviewed } from "../walk-order.js";
 import { PlanView } from "./PlanView.js";
 import { DiffView } from "./DiffView.js";
 import { CommentBox } from "./CommentBox.js";
+import { RelationsPanel } from "./RelationsPanel.js";
 
 export function SplitLayout({
   sessionId,
@@ -29,11 +30,40 @@ export function SplitLayout({
     () => buildWalkOrder(sessionData?.units ?? [], flowsData?.flows ?? [], nodes),
     [sessionData, flowsData, nodes]
   );
+  const walkStableIds = useMemo(() => new Set(order.map((e) => e.stableId)), [order]);
+  const nodeLabel = useCallback(
+    (id: string) => nodes.find((n) => n.id === id)?.label ?? id,
+    [nodes]
+  );
+
+  const walkPath = useUIStore((s) => s.walkPath);
+  const pushToWalkPath = useUIStore((s) => s.pushToWalkPath);
+  const truncateWalkPath = useUIStore((s) => s.truncateWalkPath);
+
+  // A walk move (plan click, j/k/n/r) ends any detour.
+  const walkTo = useCallback((nodeId: string | null) => {
+    truncateWalkPath(0);
+    setCurrentNode(nodeId);
+  }, [truncateWalkPath, setCurrentNode]);
+
+  // A relation click is a detour: remember where we came from.
+  const selectRelation = useCallback((nodeId: string) => {
+    const cur = useUIStore.getState().currentNodeId;
+    if (cur) pushToWalkPath(cur);
+    setCurrentNode(nodeId);
+  }, [pushToWalkPath, setCurrentNode]);
+
+  const jumpToBreadcrumb = useCallback((index: number) => {
+    const path = useUIStore.getState().walkPath;
+    if (index < 0 || index >= path.length) return;
+    setCurrentNode(path[index]);
+    truncateWalkPath(index);
+  }, [setCurrentNode, truncateWalkPath]);
 
   const goNextUnreviewed = useCallback(() => {
     const id = nextUnreviewed(order, nodes, useUIStore.getState().currentNodeId);
-    if (id) setCurrentNode(id);
-  }, [order, nodes, setCurrentNode]);
+    if (id) walkTo(id);
+  }, [order, nodes, walkTo]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -42,10 +72,10 @@ export function SplitLayout({
       const cur = useUIStore.getState().currentNodeId;
       if (e.key === "j") {
         const id = nextInWalk(order, cur, 1);
-        if (id) setCurrentNode(id);
+        if (id) walkTo(id);
       } else if (e.key === "k") {
         const id = nextInWalk(order, cur, -1);
-        if (id) setCurrentNode(id);
+        if (id) walkTo(id);
       } else if (e.key === "n") {
         goNextUnreviewed();
       } else if (e.key === "r" && cur) {
@@ -59,7 +89,7 @@ export function SplitLayout({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [order, goNextUnreviewed, setCurrentNode, updateStatus]);
+  }, [order, goNextUnreviewed, walkTo, updateStatus]);
 
   const handleMouseDown = useCallback(() => {
     document.body.style.cursor = "col-resize";
@@ -87,7 +117,7 @@ export function SplitLayout({
     >
       <div ref={containerRef} style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         <div style={{ flex: splitRatio, overflow: "hidden", height: "100%" }}>
-          <PlanView sessionId={sessionId} currentNodeId={currentNodeId} onSelectNode={setCurrentNode} />
+          <PlanView sessionId={sessionId} currentNodeId={currentNodeId} onSelectNode={walkTo} />
         </div>
 
         <Divider onMouseDown={handleMouseDown} />
@@ -105,7 +135,33 @@ export function SplitLayout({
           {currentNode ? (
             <>
               <div style={{ flex: 1, overflow: "auto", padding: "12px 14px" }}>
+                {walkPath.length > 0 && (
+                  <div
+                    data-testid="breadcrumb"
+                    style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 10, fontSize: 13, color: "var(--dim)" }}
+                  >
+                    {walkPath.map((id, i) => (
+                      <button
+                        key={`${id}-${i}`}
+                        onClick={() => jumpToBreadcrumb(i)}
+                        style={{ background: "none", border: "none", color: "var(--accent, #4fd6ff)", cursor: "pointer", padding: 0, fontSize: 13, fontFamily: "var(--mono)" }}
+                      >
+                        {nodeLabel(id)} ›
+                      </button>
+                    ))}
+                    <span style={{ fontFamily: "var(--mono)" }}>{currentNode.label}</span>
+                    <button data-testid="return-to-walk" className="btn" style={{ marginLeft: "auto" }} onClick={() => jumpToBreadcrumb(0)}>
+                      ⏎ Return to review walk
+                    </button>
+                  </div>
+                )}
                 <DiffView node={currentNode} diff={nodeData?.diff} />
+                <RelationsPanel
+                  callers={nodeData?.callers ?? []}
+                  callees={nodeData?.callees ?? []}
+                  walkStableIds={walkStableIds}
+                  onSelect={selectRelation}
+                />
               </div>
               <div
                 style={{

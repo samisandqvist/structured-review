@@ -7,8 +7,9 @@ import { fileChangedRanges, gitHeadSha, repoFingerprint, resolveRef, rangesOverl
 import { computeResiduals } from "../residuals.js";
 import type { ChangeSubgraph, GraphNode } from "../graph/provider.js";
 import type { ChangeStatus } from "../types.js";
-import { computeCoverage, flowEntries, type PlanUnitInput } from "../coverage.js";
+import { computeCoverage, flowEntries } from "../coverage.js";
 import { randomId } from "../util.js";
+import { parseBody, sessionCreateSchema, planSchema, unitPatchSchema } from "../validate.js";
 
 /**
  * Turn a provider subgraph into the nodes we actually store:
@@ -58,7 +59,9 @@ export function createSessionsRoute(ctx: AppContext) {
   const router = new Hono();
 
   router.post("/", async (c) => {
-    const body = await c.req.json<{ branch: string; baseRef: string }>();
+    const parsed = await parseBody(c, sessionCreateSchema);
+    if (!parsed.ok) return parsed.res;
+    const body = parsed.data;
 
     // Fail loudly here: an unusable repo/baseRef must not silently produce an
     // empty-but-complete-looking session (see diff.ts changedFilesStrict).
@@ -169,7 +172,9 @@ export function createSessionsRoute(ctx: AppContext) {
     const sessionId = c.req.param("id");
     const session = getSession(ctx.db, sessionId);
     if (!session) return c.json({ error: "not found" }, 404);
-    const body = await c.req.json<{ units: PlanUnitInput[] }>();
+    const parsed = await parseBody(c, planSchema);
+    if (!parsed.ok) return parsed.res;
+    const body = parsed.data;
 
     const changedStableIds = getNodesBySession(ctx.db, sessionId)
       .filter((n) => n.changeStatus === "changed")
@@ -204,8 +209,10 @@ export function createSessionsRoute(ctx: AppContext) {
     const unit = units.find((u) => u.id === c.req.param("unitId"));
     if (!unit) return c.json({ error: "not found" }, 404);
     if (unit.auto) return c.json({ error: "auto unit is not editable" }, 400);
-    const body = await c.req.json<{ label?: string; position?: number }>();
-    if (typeof body.label === "string" && body.label.trim()) updateUnitLabel(ctx.db, unit.id, body.label.trim());
+    const parsed = await parseBody(c, unitPatchSchema);
+    if (!parsed.ok) return parsed.res;
+    const body = parsed.data;
+    if (body.label !== undefined) updateUnitLabel(ctx.db, unit.id, body.label);
     if (typeof body.position === "number") {
       const ids = units.map((u) => u.id).filter((id) => id !== unit.id);
       ids.splice(Math.max(0, Math.min(body.position, ids.length)), 0, unit.id);

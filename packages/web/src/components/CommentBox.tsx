@@ -21,7 +21,7 @@ export function CommentBox({
   const handleSubmit = () => {
     if (!text.trim()) return;
     createComment.mutate(
-      { nodeId, hunkSnippet: "", text: text.trim(), structuralContext: "" },
+      { nodeId, text: text.trim() },
       {
         onSuccess: () => {
           setText("");

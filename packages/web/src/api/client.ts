@@ -21,7 +21,13 @@ export interface Comment {
   id: string; sessionId: string; nodeId: string; hunkSnippet: string;
   text: string; structuralContext: string; createdAt: number;
 }
-export interface NodeDiff { oldText: string; newText: string; }
+export interface DiffLine {
+  type: "context" | "added" | "removed";
+  oldLine: number | null;
+  newLine: number | null;
+  text: string;
+}
+export interface NodeDiff { oldText: string; newText: string; lines: DiffLine[]; }
 export interface FlowStep {
   stableId: string;
   label: string;
@@ -96,9 +102,9 @@ export const api = {
     }),
   getComments: (id: string) =>
     fetchJson<{ comments: Comment[] }>(`/sessions/${id}/comments`),
-  createComment: (id: string, nodeId: string, hunkSnippet: string, text: string, structuralContext: string) =>
+  createComment: (id: string, nodeId: string, text: string) =>
     fetchJson<{ comment: Comment }>(`/sessions/${id}/comments`, {
-      method: "POST", body: JSON.stringify({ nodeId, hunkSnippet, text, structuralContext }),
+      method: "POST", body: JSON.stringify({ nodeId, text }),
     }),
   updateUnit: (sessionId: string, unitId: string, patch: { label?: string; position?: number }) =>
     fetchJson<{ units: Unit[] }>(`/sessions/${sessionId}/units/${unitId}`, {
@@ -106,5 +112,7 @@ export const api = {
     }),
   getFlows: (id: string) => fetchJson<{ flows: Flow[]; orphans: Node[] }>(`/sessions/${id}/flows`),
   exportComments: (id: string) =>
-    fetchJson<{ comments: Record<string, unknown>[] }>(`/sessions/${id}/export`),
+    fetchJson<{ branch: string; baseRef: string; headSha: string; comments: Record<string, unknown>[] }>(
+      `/sessions/${id}/export`
+    ),
 };
