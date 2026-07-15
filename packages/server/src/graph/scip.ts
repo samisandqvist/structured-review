@@ -10,6 +10,7 @@ import type { ChangeStatus, EdgeType } from "../types.js";
 import { fileChangedRanges, rangesOverlap, repoFingerprint, repoRoot, type LineRange } from "../diff.js";
 import { isTestFile } from "../util.js";
 import { buildFlowTree, makeFlow, reachesChanged } from "./flow-tree.js";
+import { entryEvidence, isExportedAt, loadConfiguredEntries } from "./entry-points.js";
 
 /**
  * Graph provider backed by SCIP (Sourcegraph Code Intelligence Protocol).
@@ -170,19 +171,41 @@ export class ScipGraphProvider implements GraphProvider {
       const n = g.nodes.get(sym);
       return n ? { label: n.label, file: n.file, startLine: n.startLine, endLine: n.endLine, isTest: n.isTest } : undefined;
     };
-    // Entry points: non-test nodes that head a call tree (have callees, no
-    // NON-TEST callers). Test callers don't disqualify — a call from a test is
-    // a TESTED_BY relationship (see getChangeSubgraph), not evidence the node
-    // sits mid-flow; otherwise any tested production function could never head
-    // a flow and well-tested repos would degrade to all-orphan plans.
-    const entries = [...g.nodes.entries()].filter(
-      ([sym, n]) =>
-        !n.isTest &&
-        (g.callAdj.get(sym)?.length ?? 0) > 0 &&
-        (g.callRev.get(sym) ?? []).filter((c) => !g.nodes.get(c)?.isTest).length === 0
+    // Graph roots: non-test nodes that head a call tree (have callees, no
+    // NON-TEST callers) — test callers are TESTED_BY, not mid-flow evidence.
+    const rootSyms = new Set(
+      [...g.nodes.entries()]
+        .filter(
+          ([sym, n]) =>
+            !n.isTest &&
+            (g.callAdj.get(sym)?.length ?? 0) > 0 &&
+            (g.callRev.get(sym) ?? []).filter((c) => !g.nodes.get(c)?.isTest).length === 0
+        )
+        .map(([sym]) => sym)
     );
-    return entries
-      .map(([sym, n], i) => makeFlow(i + 1, n.label, buildFlowTree(sym, g.callAdj, resolve, relevant)))
+    // Configured entries head flows even with callers (DI/route registration
+    // hides real entry points from the call graph), but still need callees.
+    const configured = loadConfiguredEntries(this.repoRoot);
+    const configuredSyms = new Set(
+      [...g.nodes.entries()]
+        .filter(([, n]) =>
+          configured.some((c) => c.label === n.label && (!c.file || n.file === c.file || n.file.endsWith(c.file)))
+        )
+        .filter(([sym]) => (g.callAdj.get(sym)?.length ?? 0) > 0)
+        .map(([sym]) => sym)
+    );
+    const entrySyms = [...new Set([...rootSyms, ...configuredSyms])];
+    const fileCache = new Map<string, string[]>();
+    return entrySyms
+      .map((sym, i) => {
+        const n = g.nodes.get(sym)!;
+        const evidence = entryEvidence({
+          isRoot: rootSyms.has(sym),
+          isExported: isExportedAt(this.repoRoot, n.file, n.startLine, fileCache),
+          isConfigured: configuredSyms.has(sym),
+        });
+        return makeFlow(i + 1, n.label, buildFlowTree(sym, g.callAdj, resolve, relevant), evidence);
+      })
       .filter((f) => f.steps.length > 1)
       .sort((a, b) => b.criticality - a.criticality);
   }

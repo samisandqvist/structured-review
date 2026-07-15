@@ -185,6 +185,17 @@ function UnitBlock({
           <h3 className="unit__name" onDoubleClick={() => !unit.auto && setEditing(true)}>{unit.label}</h3>
         )}
         {unit.auto && <span className="unit__badge">unassigned</span>}
+        {unit.kind === "flow" && flows.length > 0 && (
+          <span
+            className="unit__badge"
+            data-testid={`entry-conf-${unit.id}`}
+            title={`entry evidence: ${flows
+              .map((f) => `${f.name}: ${(f.entryReasons ?? []).join("+")}`)
+              .join("; ")}`}
+          >
+            ⚑ {Math.round(Math.max(...flows.map((f) => f.entryConfidence ?? 0.4)) * 100)}%
+          </span>
+        )}
         {testStats.total > 0 && (
           <button
             data-testid={`test-chip-${unit.id}`}

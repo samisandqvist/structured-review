@@ -17,6 +17,7 @@ vi.mock("../src/api/hooks.js", () => ({
   ], coverage: { changedTotal: 3, covered: 2, unassigned: 1 } } }),
   useFlows: () => ({ data: { flows: [
     { id: 1, name: "handleOrder", criticality: 1, depth: 1, affected: true, entryStableId: "fn:handleOrder",
+      entryConfidence: 0.7, entryReasons: ["graph-root", "exported"],
       changedStableIds: ["fn:handleOrder", "fn:processOrder"],
       steps: [
         { stableId: "fn:handleOrder", label: "handleOrder", file: "o.ts", startLine: 1, endLine: 2, isTest: false, depth: 0, nodeId: "n1", changeStatus: "changed", reviewStatus: "unreviewed" },
@@ -25,12 +26,14 @@ vi.mock("../src/api/hooks.js", () => ({
         { stableId: "fn:processOrder", label: "processOrder", file: "o.ts", startLine: 10, endLine: 20, isTest: false, depth: 1, nodeId: "n4", changeStatus: "changed", reviewStatus: "reviewed-clean" },
       ] },
     { id: 2, name: "flow A", criticality: 0.5, depth: 1, affected: true, entryStableId: "fn:entryA",
+      entryConfidence: 0.4, entryReasons: ["graph-root"],
       changedStableIds: ["fn:entryA", "fn:shared"],
       steps: [
         { stableId: "fn:entryA", label: "entryA", file: "a.ts", startLine: 1, endLine: 2, isTest: false, depth: 0, nodeId: "n5", changeStatus: "changed", reviewStatus: "unreviewed" },
         { stableId: "fn:shared", label: "sharedHelper", file: "s.ts", startLine: 1, endLine: 2, isTest: false, depth: 1, nodeId: "n6", changeStatus: "changed", reviewStatus: "reviewed-clean" },
       ] },
     { id: 3, name: "flow B", criticality: 0.4, depth: 1, affected: true, entryStableId: "fn:entryB",
+      entryConfidence: 0.4, entryReasons: ["graph-root"],
       changedStableIds: ["fn:entryB", "fn:shared"],
       steps: [
         { stableId: "fn:entryB", label: "entryB", file: "b.ts", startLine: 1, endLine: 2, isTest: false, depth: 0, nodeId: "n7", changeStatus: "changed", reviewStatus: "unreviewed" },
@@ -135,6 +138,13 @@ describe("PlanView", () => {
     fireEvent.click(screen.getByText("⋯ 2 unchanged calls"));
     expect(screen.getByText("ctxHelperOne")).toBeInTheDocument();
     expect(screen.getByText("ctxHelperTwo")).toBeInTheDocument();
+  });
+
+  it("shows entry confidence on flow units", () => {
+    render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={() => {}} />);
+    const chip = screen.getByTestId("entry-conf-u1");
+    expect(chip.textContent).toContain("70%");
+    expect(chip).toHaveAttribute("title", expect.stringContaining("exported"));
   });
 
   it("renders one track per entry of a multi-entry flow-unit and dedupes progress", () => {
