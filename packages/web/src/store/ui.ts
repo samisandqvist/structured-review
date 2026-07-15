@@ -17,7 +17,7 @@ interface UIState {
   setCurrentUnit: (index: number) => void;
   setCurrentNode: (nodeId: string | null) => void;
   pushToWalkPath: (nodeId: string) => void;
-  popWalkPath: () => void;
+  truncateWalkPath: (index: number) => void;
   toggleOverview: () => void;
   toggleUnitCollapsed: (unitId: string, currentlyCollapsed: boolean) => void;
 }
@@ -37,7 +37,7 @@ export const useUIStore = create<UIState>()(
       setCurrentUnit: (index) => set({ currentUnitIndex: index, currentNodeId: null, walkPath: [] }),
       setCurrentNode: (nodeId) => set({ currentNodeId: nodeId }),
       pushToWalkPath: (nodeId) => set((s) => ({ walkPath: [...s.walkPath, nodeId] })),
-      popWalkPath: () => set((s) => ({ walkPath: s.walkPath.slice(0, -1) })),
+      truncateWalkPath: (index) => set((s) => ({ walkPath: s.walkPath.slice(0, index) })),
       toggleOverview: () => set((s) => ({ overviewOpen: !s.overviewOpen })),
       toggleUnitCollapsed: (unitId, currentlyCollapsed) =>
         set((s) =>

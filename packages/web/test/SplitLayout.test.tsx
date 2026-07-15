@@ -10,6 +10,9 @@ const nodes = [
   { id: "n-b", stableId: "fn:b", label: "b", file: "f.ts", startLine: 5, endLine: 6, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false },
 ];
 
+const callerNode = { id: "n-c", stableId: "fn:c", label: "c", file: "g.ts", startLine: 1, endLine: 3, changeStatus: "unchanged", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false };
+const allNodes = [...nodes, callerNode];
+
 vi.mock("../src/api/hooks.js", () => ({
   useSession: () => ({ data: { units: [
     { id: "u1", position: 0, kind: "orphans", label: "All", rationale: "", memberStableIds: ["fn:a", "fn:b"], auto: false },
@@ -17,7 +20,14 @@ vi.mock("../src/api/hooks.js", () => ({
   useFlows: () => ({ data: { flows: [], orphans: [] } }),
   useNodes: () => ({ data: { nodes, edges: [] } }),
   useNode: (_s: string, nodeId: string | null) => ({
-    data: nodeId ? { node: nodes.find((n) => n.id === nodeId), callers: [], callees: [], diff: { oldText: "", newText: "", lines: [] } } : undefined,
+    data: nodeId
+      ? {
+          node: allNodes.find((n) => n.id === nodeId),
+          callers: nodeId === "n-a" ? [callerNode] : [],
+          callees: [],
+          diff: { oldText: "", newText: "", lines: [] },
+        }
+      : undefined,
   }),
   useUpdateNodeStatus: () => ({ mutate: mockMutate }),
   useUpdateUnit: () => ({ mutate: vi.fn() }),
@@ -27,7 +37,28 @@ vi.mock("../src/api/hooks.js", () => ({
 
 beforeEach(() => {
   mockMutate.mockClear();
-  useUIStore.setState({ currentNodeId: null });
+  useUIStore.setState({ currentNodeId: null, walkPath: [] });
+});
+
+describe("Relations drawer detours", () => {
+  it("clicking a relation opens it with a breadcrumb, return goes back to the walk", () => {
+    useUIStore.setState({ currentNodeId: "n-a" });
+    render(<SplitLayout sessionId="s1" currentNodeId="n-a" />);
+    fireEvent.click(screen.getByTestId("relation-n-c"));
+    expect(useUIStore.getState().currentNodeId).toBe("n-c");
+    expect(useUIStore.getState().walkPath).toEqual(["n-a"]);
+    expect(screen.getByTestId("breadcrumb")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("return-to-walk"));
+    expect(useUIStore.getState().currentNodeId).toBe("n-a");
+    expect(useUIStore.getState().walkPath).toEqual([]);
+  });
+
+  it("walk navigation clears a detour breadcrumb", () => {
+    useUIStore.setState({ currentNodeId: "n-c", walkPath: ["n-a"] });
+    render(<SplitLayout sessionId="s1" currentNodeId="n-c" />);
+    fireEvent.keyDown(window, { key: "j" });
+    expect(useUIStore.getState().walkPath).toEqual([]);
+  });
 });
 
 describe("SplitLayout walk navigation", () => {
