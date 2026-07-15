@@ -3,7 +3,7 @@ import type { AppContext } from "../app.js";
 import { getNodesBySession, getNode, getNodeNeighbors, updateNodeReviewStatus } from "../repo/nodes.js";
 import { getSession } from "../repo/sessions.js";
 import { nodeHasComments } from "../repo/comments.js";
-import { getNodeDiff } from "../diff.js";
+import { getNodeDiff, getNodeDiffForRanges } from "../diff.js";
 import { parseBody, nodePatchSchema } from "../validate.js";
 
 export function createNodesRoute(ctx: AppContext) {
@@ -28,7 +28,10 @@ export function createNodesRoute(ctx: AppContext) {
     const { callers, callees } = getNodeNeighbors(ctx.db, node.id);
     const session = getSession(ctx.db, sessionId);
     const diff = session
-      ? getNodeDiff(session.baseRef, node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot)
+      ? (node.residualRanges && node.residualRanges.length > 0
+          ? getNodeDiffForRanges(session.baseRef, node.file, node.residualRanges, ctx.repoRoot) ??
+            getNodeDiff(session.baseRef, node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot)
+          : getNodeDiff(session.baseRef, node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot))
       : { oldText: "", newText: "", lines: [] };
     return c.json({ node, callers, callees, diff });
   });

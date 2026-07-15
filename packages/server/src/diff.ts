@@ -2,6 +2,8 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { LineRange } from "./types.js";
+export type { LineRange };
 
 /**
  * Real diff content for a node, pulled from git.
@@ -32,11 +34,6 @@ interface Hunk {
   newStart: number;
   newCount: number;
   lines: string[]; // raw diff lines incl. leading ' ', '+', '-'
-}
-
-export interface LineRange {
-  start: number;
-  end: number;
 }
 
 export class GitError extends Error {
@@ -265,6 +262,40 @@ export function extractHunkDiff(rawDiff: string, startLine: number, endLine: num
   }
   if (lines.length === 0) return null;
   return withTexts(lines);
+}
+
+/** DiffLines for several disjoint new-file ranges of one file's unified diff.
+ *  Each range is clipped exactly (extractHunkDiff), so hunks inside covered
+ *  node spans never leak in. Null when nothing falls in any range. */
+export function extractLinesForRanges(rawDiff: string, ranges: LineRange[]): NodeDiff | null {
+  const lines: DiffLine[] = [];
+  for (const r of ranges) {
+    const d = extractHunkDiff(rawDiff, r.start, r.end);
+    if (d) lines.push(...d.lines);
+  }
+  if (lines.length === 0) return null;
+  return withTexts(lines);
+}
+
+/** Diff for a residual pseudo-node: only its exact residual ranges. */
+export function getNodeDiffForRanges(
+  baseRef: string,
+  file: string,
+  ranges: LineRange[],
+  root: string = repoRoot()
+): NodeDiff | null {
+  let raw: string;
+  try {
+    raw = execFileSync("git", ["diff", "--text", "--unified=3", baseRef, "--", file], {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+      ...QUIET,
+    });
+  } catch {
+    return null;
+  }
+  return extractLinesForRanges(raw, ranges);
 }
 
 function withTexts(lines: DiffLine[]): NodeDiff {

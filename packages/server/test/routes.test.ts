@@ -494,6 +494,19 @@ describe("residual pseudo-nodes", () => {
     const residual = changes.find((ch: any) => ch.stableId === "file-residual:config.json");
     expect(residual.kind).toBe("file");
   });
+
+  it("round-trips the residual node's exact ranges", async () => {
+    const session = await makeResidualSession();
+    const nr = await app.request(`/api/sessions/${session.id}/nodes`);
+    const { nodes } = await nr.json();
+    const residual = nodes.find((n: any) => n.stableId === "file-residual:config.json");
+    expect(Array.isArray(residual.residualRanges)).toBe(true);
+    expect(residual.residualRanges.length).toBeGreaterThan(0);
+    for (const r of residual.residualRanges) {
+      expect(typeof r.start).toBe("number");
+      expect(typeof r.end).toBe("number");
+    }
+  });
 });
 
 describe("PATCH /api/sessions/:id/units/:unitId", () => {
