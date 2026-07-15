@@ -16,7 +16,7 @@
 - Server API base path is `/api`; routes live in `packages/server/src/routes/`, DB access in `packages/server/src/repo/`.
 - Web API types are hand-duplicated in `packages/web/src/api/client.ts` — every server DTO change must be mirrored there.
 - Commit messages: conventional (`feat(server): ...`), each ending with the line `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`.
-- Do not modify `packages/skill` (it does not call the comment or export endpoints).
+- Do not modify `packages/skill` (it reads only `.comments` from the export response — the additive envelope change keeps it working — and never posts comments).
 
 ---
 
@@ -1205,4 +1205,4 @@ Expected: JSON with a session id (SCIP indexing may take ~30–60 s). Then `PUT`
 
 - **Spec coverage:** finding "structural exploration" → Task 4 (direction, label+file, changed/test state, in-walk, reviewed, breadcrumb + return — all five bullet requirements covered); "diff coordinates" → Tasks 1–2 (exact `DiffLine` shape from the doc, unchanged nodes numbered from `startLine`); "comment context" stage 1 → Task 3 (server-derived, bounded snippet + export-time structural context; stage-2 line selection is explicitly deferred per the P1 scope); "runtime validation" → Task 5 (statuses, unit unions, nonempty labels/entries, duplicates, comment ownership + length, reorder positions via `position` int ≥ 0; branch/base-ref already validated).
 - **Type consistency:** `DiffLine` is declared identically in `server/src/diff.ts` and `web/src/api/client.ts` (hand-mirrored per repo convention). `truncateWalkPath(index)` is the only new store API; `RelationsPanel` props match the `SplitLayout` call site; `formatHunkSnippet` marker/padding format matches the Task 3 unit test exactly (`marker + padStart(5) + space + text`).
-- **Known intentional break:** export envelope changes from `{comments}` to `{branch, baseRef, headSha, comments}` — additive, `comments` key unchanged; `packages/skill` doesn't call export (verified).
+- **Known intentional break:** export envelope changes from `{comments}` to `{branch, baseRef, headSha, comments}` — additive, `comments` key unchanged; `packages/skill` calls `GET /export` (orchestrate.ts:52-54) but reads only `.comments`, so the additive envelope is compatible (verified by final review).
