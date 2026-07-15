@@ -681,6 +681,9 @@ describe("runtime validation", () => {
       headers: { "Content-Type": "application/json" },
     });
     expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("validation failed");
+    expect(body.issues).toContainEqual({ path: "units.0.label", message: "unit label must be nonempty" });
   });
 
   it("rejects a flow unit with no entries", async () => {
@@ -690,6 +693,9 @@ describe("runtime validation", () => {
       headers: { "Content-Type": "application/json" },
     });
     expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("validation failed");
+    expect(body.issues).toContainEqual({ path: "units.0", message: "flow unit needs at least one entry stableId" });
   });
 
   it("rejects the same stableId claimed by two units", async () => {
@@ -702,6 +708,43 @@ describe("runtime validation", () => {
       headers: { "Content-Type": "application/json" },
     });
     expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("validation failed");
+    expect(body.issues).toContainEqual({
+      path: "units.1",
+      message: "stableId 'fn:validateOrder' appears in more than one unit",
+    });
+  });
+
+  it("rejects a plan unit with an unrecognized kind", async () => {
+    const res = await app.request(`/api/sessions/${sessionId}/plan`, {
+      method: "PUT",
+      body: JSON.stringify({ units: [{ kind: "bogus", label: "X" }] }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("validation failed");
+    const issue = body.issues.find((i: { path: string }) => i.path === "units.0.kind");
+    expect(issue).toBeDefined();
+    expect(issue.message).not.toBe("Invalid input");
+    expect(issue.message).toMatch(/discriminator/i);
+  });
+
+  it("accepts a flow unit sending both the legacy singular and plural entry fields", async () => {
+    const res = await app.request(`/api/sessions/${sessionId}/plan`, {
+      method: "PUT",
+      body: JSON.stringify({ units: [{
+        kind: "flow",
+        label: "Order flow",
+        flowEntryStableId: "fn:validateOrder",
+        flowEntryStableIds: ["fn:validateOrder"],
+      }] }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.units[0].memberStableIds).toEqual(["fn:validateOrder"]);
   });
 
   it("rejects an unknown review status", async () => {
@@ -711,6 +754,12 @@ describe("runtime validation", () => {
       headers: { "Content-Type": "application/json" },
     });
     expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("validation failed");
+    expect(body.issues).toContainEqual({
+      path: "reviewStatus",
+      message: expect.stringContaining("Invalid option"),
+    });
   });
 
   it("rejects an empty unit patch", async () => {
@@ -718,6 +767,9 @@ describe("runtime validation", () => {
       method: "PATCH", body: JSON.stringify({}), headers: { "Content-Type": "application/json" },
     });
     expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("validation failed");
+    expect(body.issues).toContainEqual({ path: "", message: "nothing to update" });
   });
 
   it("rejects an empty comment", async () => {
@@ -727,6 +779,9 @@ describe("runtime validation", () => {
       headers: { "Content-Type": "application/json" },
     });
     expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("validation failed");
+    expect(body.issues).toContainEqual({ path: "text", message: "comment text must be nonempty" });
   });
 });
 
