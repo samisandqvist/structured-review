@@ -3,7 +3,8 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ScipGraphProvider, type BuiltGraph } from "../src/graph/scip.js";
+import { ScipGraphProvider, type BuiltGraph, type ScipDocument } from "../src/graph/scip.js";
+import { type IndexerJob } from "../src/graph/roots.js";
 
 const EMPTY: BuiltGraph = { nodes: new Map(), callAdj: new Map(), callRev: new Map() };
 
@@ -70,6 +71,84 @@ describe("ScipGraphProvider cache", () => {
     await expect(p.getNeighbors("x")).rejects.toThrow("indexer died");
     await p.getNeighbors("x"); // retries, succeeds
     expect(p.builds).toBe(2);
+  });
+});
+
+describe("per-job cache", () => {
+  class MultiFake extends ScipGraphProvider {
+    ran: string[] = [];
+    state: Record<string, string> = { ts: "a", py: "a" };
+    failPy = false;
+    protected override discoverJobs(): IndexerJob[] {
+      return [
+        { language: "ts", root: "", hasSources: true },
+        { language: "py", root: "svc", hasSources: true },
+      ];
+    }
+    // Whole-repo key = both subtree keys, so any edit invalidates the outer
+    // cache (like the real repoFingerprint) while job caches stay per-root.
+    protected override repoStateKey(): string { return JSON.stringify(this.state); }
+    protected override jobStateKey(job: IndexerJob): string { return this.state[job.language]; }
+    protected override runIndexer(job: IndexerJob): Promise<ScipDocument[]> {
+      this.ran.push(`${job.language}:${job.root}`);
+      if (this.failPy && job.language === "py") return Promise.reject(new Error("py indexer died"));
+      return Promise.resolve([]);
+    }
+  }
+
+  it("first build runs every job", async () => {
+    const p = new MultiFake({ repoRoot: "/tmp" });
+    await p.getNeighbors("x");
+    expect(p.ran).toEqual(["ts:", "py:svc"]);
+  });
+
+  it("editing one language's subtree re-runs only that job", async () => {
+    const p = new MultiFake({ repoRoot: "/tmp" });
+    await p.getNeighbors("x");
+    p.state = { ...p.state, py: "b" };
+    await p.getNeighbors("x");
+    expect(p.ran).toEqual(["ts:", "py:svc", "py:svc"]);
+  });
+
+  it("a failed job is dropped from the job cache so the next build retries it", async () => {
+    const p = new MultiFake({ repoRoot: "/tmp" });
+    p.failPy = true;
+    await expect(p.getNeighbors("x")).rejects.toThrow("py indexer died");
+    p.failPy = false;
+    p.state = { ...p.state }; // same keys: ts job cache must survive the failure
+    await p.getNeighbors("x");
+    expect(p.ran).toEqual(["ts:", "py:svc", "py:svc"]);
+  });
+
+  it("SCIP_NO_CACHE=1 bypasses the job cache too", async () => {
+    process.env.SCIP_NO_CACHE = "1";
+    const p = new MultiFake({ repoRoot: "/tmp" });
+    await p.getNeighbors("x");
+    await p.getNeighbors("x");
+    expect(p.ran).toEqual(["ts:", "py:svc", "ts:", "py:svc"]);
+  });
+});
+
+describe("discoverJobs filtering", () => {
+  class JobsProbe extends ScipGraphProvider {
+    jobs: IndexerJob[] = [];
+    publicJobs(): IndexerJob[] { return this.discoverJobs(); }
+  }
+  afterEach(() => { delete process.env.SCIP_LANGS; });
+
+  it("SCIP_LANGS filters enabled languages", () => {
+    process.env.SCIP_LANGS = "py";
+    // this repo has a ts root and no py root -> filtered to nothing -> but the
+    // fallback only fires when discovery found NO jobs at all, not when the
+    // filter removed them.
+    const p = new JobsProbe();
+    expect(p.publicJobs()).toEqual([]);
+  });
+
+  it("defaults to ts,py — java roots are excluded until Phase 4", () => {
+    const p = new JobsProbe();
+    expect(p.publicJobs().every((j) => j.language === "ts" || j.language === "py")).toBe(true);
+    expect(p.publicJobs().length).toBeGreaterThan(0); // this repo's own ts root
   });
 });
 

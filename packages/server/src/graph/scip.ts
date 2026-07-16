@@ -7,7 +7,8 @@ import { fileURLToPath } from "node:url";
 import protobuf from "protobufjs";
 import type { GraphProvider, GraphNode, GraphEdge, ChangeSubgraph, Flow } from "./provider.js";
 import type { ChangeStatus, EdgeType } from "../types.js";
-import { fileChangedRanges, rangesOverlap, repoFingerprint, repoRoot, type LineRange } from "../diff.js";
+import { fileChangedRanges, rangesOverlap, repoFingerprint, repoRoot, subtreeFingerprint, type LineRange } from "../diff.js";
+import { discoverLanguageRoots, rootHasSources, type IndexerJob } from "./roots.js";
 import { isTestFile } from "../util.js";
 import { buildFlowTree, makeFlow, reachesChanged } from "./flow-tree.js";
 import { entryEvidence, isExportedAt, loadConfiguredEntries } from "./entry-points.js";
@@ -56,6 +57,7 @@ export class ScipGraphProvider implements GraphProvider {
   private contextDepth: number;
   private proto?: protobuf.Root;
   private cache?: { key: string; graph: Promise<BuiltGraph> };
+  private jobCache = new Map<string, { key: string; docs: Promise<ScipDocument[]> }>();
 
   constructor(opts: ScipOptions = {}) {
     this.repoRoot = opts.repoRoot ?? process.env.SCIP_REPO_ROOT ?? repoRoot();
@@ -234,36 +236,99 @@ export class ScipGraphProvider implements GraphProvider {
     return entry.graph;
   }
 
-  /** Index the repo with the SCIP indexer and derive the call graph. */
+  /** Enabled indexer jobs: discovered roots filtered by SCIP_LANGS (default ts,py). */
+  protected discoverJobs(): IndexerJob[] {
+    const enabled = new Set(
+      (process.env.SCIP_LANGS ?? "ts,py").split(",").map((s) => s.trim()).filter(Boolean)
+    );
+    const discovered = discoverLanguageRoots(this.repoRoot);
+    const jobs = discovered.filter((j) => enabled.has(j.language));
+    // No marker files anywhere in the repo: preserve the old single-indexer
+    // behavior (scip-typescript --infer-tsconfig at repo root).
+    if (discovered.length === 0 && enabled.has("ts")) {
+      return [{ language: "ts", root: "", hasSources: rootHasSources(this.repoRoot, "ts") }];
+    }
+    return jobs;
+  }
+
+  /** Run every enabled indexer job (each cached per subtree) and merge the documents. */
   protected async indexAndBuild(): Promise<BuiltGraph> {
+    this.proto ??= await protobuf.load(SCIP_PROTO);
+    const jobs = this.discoverJobs();
+    const perJob = await Promise.all(jobs.map((j) => this.jobDocuments(j)));
+    return buildGraphFromIndex({ documents: perJob.flat() }, this.repoRoot);
+  }
+
+  /** Subtree-scoped cache key; any git failure yields a unique key (cache miss, never stale). */
+  protected jobStateKey(job: IndexerJob): string {
+    return subtreeFingerprint(job.root, this.repoRoot) ?? `no-git:${Math.random()}`;
+  }
+
+  /** Index a root at most once per subtree state; concurrent callers share the run. */
+  private jobDocuments(job: IndexerJob): Promise<ScipDocument[]> {
+    if (process.env.SCIP_NO_CACHE === "1") return this.runIndexer(job);
+    const id = `${job.language} ${job.root}`;
+    const key = this.jobStateKey(job);
+    const hit = this.jobCache.get(id);
+    if (hit?.key === key) return hit.docs;
+    const entry = { key, docs: this.runIndexer(job) };
+    this.jobCache.set(id, entry);
+    entry.docs.catch(() => {
+      if (this.jobCache.get(id) === entry) this.jobCache.delete(id);
+    });
+    return entry.docs;
+  }
+
+  /** Run one job's SCIP indexer, decode its index, and re-root the documents. */
+  protected async runIndexer(job: IndexerJob): Promise<ScipDocument[]> {
+    const absRoot = job.root ? join(this.repoRoot, job.root) : this.repoRoot;
     const dir = mkdtempSync(join(tmpdir(), "scip-crw-"));
     const indexPath = join(dir, "index.scip");
-    // --infer-tsconfig writes a tsconfig.json into the repo if none exists; clean
-    // it up afterward so we don't leave an artifact in the reviewed tree.
-    const tsconfigPath = join(this.repoRoot, "tsconfig.json");
+    // --infer-tsconfig writes a tsconfig.json into the root if none exists;
+    // clean it up so we don't leave an artifact in the reviewed tree.
+    const tsconfigPath = join(absRoot, "tsconfig.json");
     const hadTsconfig = existsSync(tsconfigPath);
+    const started = Date.now();
     try {
-      const binJs = resolveScipTypescriptBin();
-      execFileSync(process.execPath, [binJs, "index", "--infer-tsconfig", "--output", indexPath], {
-        cwd: this.repoRoot,
-        encoding: "utf8",
-        maxBuffer: 256 * 1024 * 1024,
-      });
+      try {
+        if (job.language === "ts") {
+          const binJs = resolveIndexerBin("@sourcegraph/scip-typescript", "scip-typescript");
+          execFileSync(process.execPath, [binJs, "index", "--infer-tsconfig", "--output", indexPath], {
+            cwd: absRoot,
+            encoding: "utf8",
+            maxBuffer: 256 * 1024 * 1024,
+          });
+        } else {
+          throw new IndexError(`no indexer available for language '${job.language}' (root '${job.root || "."}')`);
+        }
+      } catch (e) {
+        if (e instanceof IndexError) throw e;
+        const err = e as Error & { stderr?: unknown };
+        const stderr = err.stderr ? `\n${String(err.stderr).slice(-2000)}` : "";
+        throw new IndexError(`${job.language} indexer failed for root '${job.root || "."}': ${err.message}${stderr}`);
+      }
       this.proto ??= await protobuf.load(SCIP_PROTO);
       const Index = this.proto.lookupType("scip.Index");
       const idx = Index.toObject(Index.decode(readFileSync(indexPath)), { longs: Number, defaults: false }) as ScipIndex;
-      return buildGraphFromIndex(idx, this.repoRoot);
+      const docs = rerootDocuments(idx.documents ?? [], job.root, absRoot);
+      if (docs.length === 0 && job.hasSources) {
+        throw new IndexError(
+          `${job.language} indexer produced an empty index for root '${job.root || "."}', which contains ${job.language} sources`
+        );
+      }
+      console.log(`scip: ${job.language} root '${job.root || "."}' — ${docs.length} documents in ${Date.now() - started}ms`);
+      return docs;
     } finally {
       rmSync(dir, { recursive: true, force: true });
-      if (!hadTsconfig) rmSync(tsconfigPath, { force: true });
+      if (job.language === "ts" && !hadTsconfig) rmSync(tsconfigPath, { force: true });
     }
   }
 }
 
-function resolveScipTypescriptBin(): string {
-  const pkgPath = require.resolve("@sourcegraph/scip-typescript/package.json");
-  const pkg = require("@sourcegraph/scip-typescript/package.json") as { bin: string | Record<string, string> };
-  const rel = typeof pkg.bin === "string" ? pkg.bin : pkg.bin["scip-typescript"];
+function resolveIndexerBin(pkgName: string, binName: string): string {
+  const pkgPath = require.resolve(`${pkgName}/package.json`);
+  const pkg = require(`${pkgName}/package.json`) as { bin: string | Record<string, string> };
+  const rel = typeof pkg.bin === "string" ? pkg.bin : pkg.bin[binName];
   return join(dirname(pkgPath), rel);
 }
 
