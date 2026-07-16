@@ -38,7 +38,14 @@ const SOURCE_EXTS: Record<IndexerLanguage, string[]> = {
 const FINGERPRINT_EXTRAS: Record<IndexerLanguage, string[]> = {
   ts: ["tsconfig*.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock"],
   py: ["pyrightconfig.json", "setup.cfg", "poetry.lock", "uv.lock", "Pipfile.lock"],
-  java: [], // revisit in Phase 4 (settings.gradle, gradle.properties, …)
+  java: [
+    "settings.gradle",
+    "settings.gradle.kts",
+    "gradle.properties",
+    "gradle.lockfile",
+    "maven-wrapper.properties",
+    "settings.xml",
+  ],
 };
 
 /**

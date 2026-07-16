@@ -125,4 +125,19 @@ describe("languagePathspecs", () => {
       ":(glob)**/yarn.lock",
     ]);
   });
+
+  it("covers java sources, build files, and build-config extras", () => {
+    expect(languagePathspecs("java", "example-service")).toEqual([
+      ":(glob)example-service/**/*.java",
+      ":(glob)example-service/**/pom.xml",
+      ":(glob)example-service/**/build.gradle",
+      ":(glob)example-service/**/build.gradle.kts",
+      ":(glob)example-service/**/settings.gradle",
+      ":(glob)example-service/**/settings.gradle.kts",
+      ":(glob)example-service/**/gradle.properties",
+      ":(glob)example-service/**/gradle.lockfile",
+      ":(glob)example-service/**/maven-wrapper.properties",
+      ":(glob)example-service/**/settings.xml",
+    ]);
+  });
 });
