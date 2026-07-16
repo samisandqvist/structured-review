@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { extractHunkDiff, extractLinesForRanges, getNodeDiff, nodeChangeStats, subtractRanges, resolveRef, changedFilesStrict, currentBranch, repoFingerprint, formatHunkSnippet, GitError } from "../src/diff.js";
+import { extractHunkDiff, extractLinesForRanges, getNodeDiff, nodeChangeStats, subtractRanges, resolveRef, changedFilesStrict, currentBranch, repoFingerprint, subtreeFingerprint, formatHunkSnippet, GitError } from "../src/diff.js";
 import type { DiffLine } from "../src/diff.js";
 
 let fixtureRepo: string;
@@ -305,5 +305,82 @@ describe("subtractRanges", () => {
   });
   it("handles multiple input ranges", () => {
     expect(subtractRanges([r(1, 3), r(8, 12)], [r(2, 9)])).toEqual([r(1, 1), r(10, 12)]);
+  });
+});
+
+describe("subtreeFingerprint", () => {
+  function makeRepo(): { dir: string; git: (...a: string[]) => string } {
+    const dir = mkdtempSync(join(tmpdir(), "crw-subtree-"));
+    const git = (...a: string[]) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
+    git("init", "-b", "main");
+    git("config", "user.email", "t@t");
+    git("config", "user.name", "t");
+    mkdirSync(join(dir, "a"));
+    mkdirSync(join(dir, "b"));
+    writeFileSync(join(dir, "a", "f.txt"), "a1\n");
+    writeFileSync(join(dir, "b", "f.txt"), "b1\n");
+    git("add", ".");
+    git("commit", "-m", "init");
+    return { dir, git };
+  }
+
+  it("moves when the subtree changes and stays put when a sibling changes", () => {
+    const { dir } = makeRepo();
+    try {
+      const a1 = subtreeFingerprint("a", dir);
+      const b1 = subtreeFingerprint("b", dir);
+      writeFileSync(join(dir, "b", "f.txt"), "b2\n");
+      expect(subtreeFingerprint("a", dir)).toBe(a1);
+      expect(subtreeFingerprint("b", dir)).not.toBe(b1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("a commit touching only a sibling leaves the key unchanged (tree sha, not HEAD)", () => {
+    const { dir, git } = makeRepo();
+    try {
+      const a1 = subtreeFingerprint("a", dir);
+      writeFileSync(join(dir, "b", "f.txt"), "b2\n");
+      git("add", ".");
+      git("commit", "-m", "touch b only");
+      expect(subtreeFingerprint("a", dir)).toBe(a1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("sees untracked files under the subtree, including in a root absent at HEAD", () => {
+    const { dir } = makeRepo();
+    try {
+      mkdirSync(join(dir, "newroot"));
+      writeFileSync(join(dir, "newroot", "x.py"), "one\n");
+      const k1 = subtreeFingerprint("newroot", dir);
+      expect(k1).not.toBeNull();
+      writeFileSync(join(dir, "newroot", "x.py"), "two\n");
+      expect(subtreeFingerprint("newroot", dir)).not.toBe(k1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("subdir '' fingerprints the whole repo", () => {
+    const { dir } = makeRepo();
+    try {
+      const k1 = subtreeFingerprint("", dir);
+      writeFileSync(join(dir, "a", "f.txt"), "a2\n");
+      expect(subtreeFingerprint("", dir)).not.toBe(k1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("returns null when git is unavailable", () => {
+    const dir = mkdtempSync(join(tmpdir(), "crw-subtree-nogit-"));
+    try {
+      expect(subtreeFingerprint("a", dir)).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

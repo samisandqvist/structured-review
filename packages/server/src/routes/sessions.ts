@@ -4,6 +4,7 @@ import { createSession, getSession, updateSessionStatus } from "../repo/sessions
 import { createUnit, getUnitsBySession, deleteUnit, updateUnitLabel, setUnitPositions } from "../repo/units.js";
 import { createNode, getNodesBySession } from "../repo/nodes.js";
 import { fileChangedRanges, gitHeadSha, repoFingerprint, resolveRef, rangesOverlap, currentBranch, GitError, type LineRange } from "../diff.js";
+import { IndexError } from "../graph/scip.js";
 import { computeResiduals } from "../residuals.js";
 import type { ChangeSubgraph, GraphNode } from "../graph/provider.js";
 import type { ChangeStatus } from "../types.js";
@@ -104,6 +105,7 @@ export function createSessionsRoute(ctx: AppContext) {
       residuals = computeResiduals(body.baseRef, spansByFile, ctx.repoRoot!);
     } catch (e) {
       if (e instanceof GitError) return c.json({ error: e.message, phase: e.phase }, 400);
+      if (e instanceof IndexError) return c.json({ error: e.message, phase: e.phase }, 400);
       throw e;
     }
 
