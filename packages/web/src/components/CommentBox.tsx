@@ -4,6 +4,8 @@ import {
   useCreateComment,
   useUpdateNodeStatus,
 } from "../api/hooks.js";
+import { useUIStore } from "../store/ui.js";
+import { selectionLabel } from "./DiffView.js";
 
 export function CommentBox({
   sessionId,
@@ -17,14 +19,20 @@ export function CommentBox({
   const updateStatus = useUpdateNodeStatus(sessionId);
   const [text, setText] = useState("");
   const comments = data?.comments.filter((c) => c.nodeId === nodeId) ?? [];
+  const lineSelection = useUIStore((s) => s.lineSelection);
+  const setLineSelection = useUIStore((s) => s.setLineSelection);
+  const requestAnchorHighlight = useUIStore((s) => s.requestAnchorHighlight);
 
   const handleSubmit = () => {
     if (!text.trim()) return;
     createComment.mutate(
-      { nodeId, text: text.trim() },
+      lineSelection
+        ? { nodeId, text: text.trim(), anchor: lineSelection.anchor }
+        : { nodeId, text: text.trim() },
       {
         onSuccess: () => {
           setText("");
+          setLineSelection(null);
           // Leaving a comment is what marks a node reviewed-commented — there
           // is no separate button for it.
           updateStatus.mutate({ nodeId, reviewStatus: "reviewed-commented" });
@@ -57,6 +65,28 @@ export function CommentBox({
         </span>
       </div>
 
+      {lineSelection && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <span
+            style={{
+              fontSize: 15, fontFamily: "var(--mono)", color: "var(--text)",
+              background: "var(--surface)", border: "1px solid var(--line-bright)",
+              borderRadius: 4, padding: "2px 8px",
+            }}
+          >
+            commenting on {lineSelection.label}
+          </span>
+          <button
+            aria-label="clear line selection"
+            className="btn"
+            onClick={() => setLineSelection(null)}
+            style={{ fontSize: 14, padding: "1px 7px" }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {comments.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 12 }}>
           {comments.map((c) => (
@@ -73,6 +103,19 @@ export function CommentBox({
                 color: "var(--text)",
               }}
             >
+              {c.anchor && (
+                <button
+                  onClick={() => requestAnchorHighlight(c.anchor!)}
+                  style={{
+                    display: "inline-block", marginRight: 8, fontSize: 14,
+                    fontFamily: "var(--mono)", color: "var(--dim)",
+                    background: "transparent", border: "1px solid var(--line)",
+                    borderRadius: 4, padding: "0 6px", cursor: "pointer",
+                  }}
+                >
+                  {selectionLabel(c.anchor)}
+                </button>
+              )}
               {c.text}
             </div>
           ))}

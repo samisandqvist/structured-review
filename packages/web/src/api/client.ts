@@ -19,9 +19,17 @@ export interface Node {
   isTest: boolean;
   residualRanges?: LineRange[] | null;
 }
+export type AnchorSide = "old" | "new";
+export interface CommentAnchor {
+  startLine: number;
+  startSide: AnchorSide;
+  endLine: number;
+  endSide: AnchorSide;
+}
 export interface Comment {
   id: string; sessionId: string; nodeId: string; hunkSnippet: string;
   text: string; structuralContext: string; createdAt: number;
+  anchor: CommentAnchor | null;
 }
 export interface DiffLine {
   type: "context" | "added" | "removed";
@@ -110,9 +118,9 @@ export const api = {
     }),
   getComments: (id: string) =>
     fetchJson<{ comments: Comment[] }>(`/sessions/${id}/comments`),
-  createComment: (id: string, nodeId: string, text: string) =>
+  createComment: (id: string, nodeId: string, text: string, anchor?: CommentAnchor) =>
     fetchJson<{ comment: Comment }>(`/sessions/${id}/comments`, {
-      method: "POST", body: JSON.stringify({ nodeId, text }),
+      method: "POST", body: JSON.stringify(anchor ? { nodeId, text, anchor } : { nodeId, text }),
     }),
   updateUnit: (sessionId: string, unitId: string, patch: { label?: string; position?: number }) =>
     fetchJson<{ units: Unit[] }>(`/sessions/${sessionId}/units/${unitId}`, {
