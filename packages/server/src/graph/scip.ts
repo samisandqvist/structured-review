@@ -269,18 +269,46 @@ function resolveScipTypescriptBin(): string {
 
 // ---- SCIP decoding -------------------------------------------------------
 
-interface ScipOccurrence {
+export interface ScipOccurrence {
   range?: number[];
   enclosingRange?: number[];
   symbol?: string;
   symbolRoles?: number;
 }
-interface ScipDocument {
+export interface ScipDocument {
   relativePath?: string;
   occurrences?: ScipOccurrence[];
 }
-interface ScipIndex {
+export interface ScipIndex {
   documents: ScipDocument[];
+}
+
+/**
+ * Indexer failure surfaced to session creation as a phase error, mirroring
+ * GitError: an indexer that exits non-zero or produces an empty index for a
+ * root that plainly has sources must not silently yield an orphan-only plan.
+ */
+export class IndexError extends Error {
+  readonly phase = "index" as const;
+  constructor(message: string) {
+    super(message);
+    this.name = "IndexError";
+  }
+}
+
+/**
+ * Re-root one indexer job's documents to repo-relative paths. Each indexer
+ * runs with cwd = its own root and emits paths relative to it (occasionally
+ * absolute); the merged graph needs repo-relative paths for git diffs.
+ */
+export function rerootDocuments(docs: ScipDocument[], jobRoot: string, absRoot: string): ScipDocument[] {
+  const absSlash = absRoot.endsWith("/") ? absRoot : `${absRoot}/`;
+  const prefix = jobRoot ? `${jobRoot}/` : "";
+  return docs.map((d) => {
+    let p = d.relativePath ?? "";
+    if (p.startsWith(absSlash)) p = p.slice(absSlash.length);
+    return { ...d, relativePath: `${prefix}${p}` };
+  });
 }
 
 const ROLE_DEFINITION = 0x1;
