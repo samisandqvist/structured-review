@@ -1,7 +1,11 @@
 # Line-Specific Commenting — Design
 
-**Status:** approved 2026-07-16 (brainstormed with Sami; "line ranges" and
-"changed lines only" chosen explicitly). Next: writing-plans → SDD.
+**Status:** implemented + verified live 2026-07-16 (aivo OBO dogfood:
+range select via click/shift-click, chip, anchored comment with range-scoped
+snippet `+44…+47`, chip re-highlight, node-level null anchor, export carries
+anchor; screenshot `line-comments-anchored.png`). Approved 2026-07-16
+(brainstormed with Sami; "line ranges" and "changed lines only" chosen
+explicitly).
 
 **Goal:** a comment can be anchored to a range of changed diff lines inside a
 node, selected in the diff pane, validated server-side, and carried through
