@@ -7,7 +7,8 @@ import type { DB } from "../src/db/connection.js";
 import { createMemoryDatabase } from "../src/db/connection.js";
 import { createApp } from "../src/app.js";
 import { StubGraphProvider } from "../src/graph/stub.js";
-import type { Flow } from "../src/graph/provider.js";
+import type { Flow, ChangeSubgraph } from "../src/graph/provider.js";
+import { IndexError } from "../src/graph/scip.js";
 
 let db: DB;
 let app: ReturnType<typeof createApp>;
@@ -115,6 +116,25 @@ describe("POST /api/sessions", () => {
     const body = await res.json();
     expect(body.error).toMatch(/git|ref/i);
     expect(body.phase).toBe("list-files");
+    const { n } = db.prepare("SELECT COUNT(*) AS n FROM review_sessions").get() as { n: number };
+    expect(n).toBe(0);
+  });
+
+  it("fails with 400 and phase 'index' when an indexer breaks, persisting nothing", async () => {
+    class IndexBreakingStub extends StubGraphProvider {
+      override async getChangeSubgraph(): Promise<ChangeSubgraph> {
+        throw new IndexError("py indexer failed for root 'svc': exit 1");
+      }
+    }
+    const app2 = createApp({ db, graphProvider: new IndexBreakingStub(), repoRoot: fixtureRoot });
+    const res = await app2.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.phase).toBe("index");
+    expect(body.error).toMatch(/py indexer failed/);
     const { n } = db.prepare("SELECT COUNT(*) AS n FROM review_sessions").get() as { n: number };
     expect(n).toBe(0);
   });
