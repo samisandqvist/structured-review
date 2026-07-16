@@ -182,14 +182,17 @@ describe("java symbol shapes (spike deltas)", () => {
   });
 
   it("does not apply the java node filter to non-java documents", () => {
-    // A python term-shaped symbol with enclosingRange must still be dropped or
-    // kept exactly as before this change: the ts/py fixtures above prove
-    // labels/nodes are unchanged, this pins the filter's file scoping.
+    // A term-shaped symbol (no `).` suffix) with an enclosingRange in a .ts
+    // document must remain a node: only .java documents get the
+    // method-descriptor filter. This is the shape that would be wrongly
+    // dropped if the filter lost its file scoping.
+    const TS_TERM = "scip-typescript npm pkg 1.0 src/`a.ts`/handlers.";
     const tsDoc: ScipDocument[] = [{
       relativePath: "src/a.ts",
-      occurrences: [{ symbol: TS_MAIN, symbolRoles: 1, range: [0, 9, 10], enclosingRange: [0, 0, 4, 1] }],
+      occurrences: [{ symbol: TS_TERM, symbolRoles: 1, range: [0, 6, 14], enclosingRange: [0, 0, 4, 1] }],
     }];
     const g = buildGraphFromIndex({ documents: tsDoc }, "/repo");
-    expect(g.nodes.has(TS_MAIN)).toBe(true);
+    expect(g.nodes.has(TS_TERM)).toBe(true);
+    expect(g.nodes.get(TS_TERM)?.label).toBe("handlers");
   });
 });

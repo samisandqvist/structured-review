@@ -396,7 +396,7 @@ const ROLE_DEFINITION = 0x1;
 const ROLE_IMPORT = 0x2;
 
 function labelOf(symbol: string): string | null {
-  // Strip any method descriptor suffix: `().` and java overloads `(+N).`.
+  // Strip any parenthesized descriptor suffix: `().`, java overload disambiguators like `(+1).`.
   const s = symbol.replace(/\([^)]*\)\.$/, "").replace(/[.#/]+$/, "");
   // Java constructors (`Cls#`<init>``): label with the class name.
   const ctor = s.match(/([A-Za-z0-9_$]+)#`<init>`$/);
