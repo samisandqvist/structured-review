@@ -109,6 +109,37 @@ export function repoFingerprint(root: string = repoRoot()): string | null {
   }
 }
 
+/**
+ * Content-sensitive fingerprint of one subtree (a language root), or null
+ * when git is unavailable. Keyed on the subtree's tree object sha at HEAD —
+ * not HEAD itself — so commits that don't touch the subtree leave the key
+ * unchanged; plus `git diff HEAD -- <subdir>` (staged + unstaged) and each
+ * untracked file's path and content under the subtree.
+ */
+export function subtreeFingerprint(subdir: string, root: string = repoRoot()): string | null {
+  const pathspec = subdir === "" ? "." : subdir;
+  try {
+    const h = createHash("sha256");
+    try {
+      const treeRef = subdir === "" ? "HEAD^{tree}" : `HEAD:${subdir}`;
+      h.update(execFileSync("git", ["rev-parse", treeRef], { cwd: root, encoding: "utf8", ...QUIET }));
+    } catch {
+      // Subtree absent at HEAD (brand-new root): untracked contents below cover it.
+      h.update("<no-tree>");
+    }
+    h.update(execFileSync("git", ["diff", "HEAD", "--", pathspec], { cwd: root, maxBuffer: 256 * 1024 * 1024, ...QUIET }));
+    const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard", "--", pathspec], { cwd: root, encoding: "utf8", ...QUIET })
+      .split("\n").filter(Boolean);
+    for (const f of untracked) {
+      h.update(f);
+      try { h.update(readFileSync(join(root, f))); } catch { h.update("<unreadable>"); }
+    }
+    return h.digest("hex");
+  } catch {
+    return null;
+  }
+}
+
 /** The currently checked-out branch name ("HEAD" when detached), or null on git failure. */
 export function currentBranch(root: string = repoRoot()): string | null {
   try {
