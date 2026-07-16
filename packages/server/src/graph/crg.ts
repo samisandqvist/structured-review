@@ -3,6 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { GraphProvider, GraphNode, GraphEdge, ChangeSubgraph } from "./provider.js";
 import type { ChangeStatus, EdgeType } from "../types.js";
+import { isTestFile } from "../util.js";
 
 /**
  * Graph provider backed by code-review-graph (CRG), an MCP server that builds a
@@ -32,9 +33,6 @@ const isNoiseName = (name: string) => name.trim().length <= 2;
 
 // CRG only flags actual test cases (it/describe) as tests, so helpers defined in
 // a test file leak into the non-test view. Treat anything in a test file as test.
-const isTestFile = (filePath: string) =>
-  /\.(test|spec)\.[cm]?[jt]sx?$/.test(filePath) || /(^|\/)(test|tests|__tests__)\//.test(filePath);
-
 const isTestNode = (n: CrgNode) => n.kind === "Test" || n.is_test === true || isTestFile(n.file_path);
 
 interface CrgNode {

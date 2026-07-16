@@ -7,6 +7,10 @@ export function randomId(prefix: string): string {
  * TS/JS `*.test.ts` / `*.spec.tsx` …, Python `test_*.py` / `*_test.py` /
  * `conftest.py`, Java Maven `src/test/java/` trees plus surefire/failsafe
  * naming (`*Test.java`, `*IT.java`), and the shared test-directory rule.
+ *
+ * TODO (Phase 4): revisit the Java patterns against surefire/failsafe
+ * defaults — `*Tests.java` (plural) under-matches, and the all-caps `…IT.java`
+ * shape over-matches non-test classes ending in "IT".
  */
 export const isTestFile = (p: string) =>
   /\.(test|spec)\.[cm]?[jt]sx?$/.test(p) ||

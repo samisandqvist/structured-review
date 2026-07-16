@@ -103,6 +103,11 @@ describe("languagePathspecs", () => {
       ":(glob)mcp/svc/**/pyproject.toml",
       ":(glob)mcp/svc/**/setup.py",
       ":(glob)mcp/svc/**/requirements.txt",
+      ":(glob)mcp/svc/**/pyrightconfig.json",
+      ":(glob)mcp/svc/**/setup.cfg",
+      ":(glob)mcp/svc/**/poetry.lock",
+      ":(glob)mcp/svc/**/uv.lock",
+      ":(glob)mcp/svc/**/Pipfile.lock",
     ]);
   });
 
@@ -114,6 +119,10 @@ describe("languagePathspecs", () => {
       ":(glob)**/*.cts",
       ":(glob)**/tsconfig.json",
       ":(glob)**/package.json",
+      ":(glob)**/tsconfig*.json",
+      ":(glob)**/package-lock.json",
+      ":(glob)**/pnpm-lock.yaml",
+      ":(glob)**/yarn.lock",
     ]);
   });
 });

@@ -33,19 +33,30 @@ const SOURCE_EXTS: Record<IndexerLanguage, string[]> = {
   java: [".java"],
 };
 
+// Fingerprint-only inputs: files the indexers read beyond sources and markers
+// (config chains, lockfiles). Not markers — they must not create roots.
+const FINGERPRINT_EXTRAS: Record<IndexerLanguage, string[]> = {
+  ts: ["tsconfig*.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock"],
+  py: ["pyrightconfig.json", "setup.cfg", "poetry.lock", "uv.lock", "Pipfile.lock"],
+  java: [], // revisit in Phase 4 (settings.gradle, gradle.properties, …)
+};
+
 /**
  * Git pathspecs covering one language's index inputs under a root: its source
- * files plus its marker files (a tsconfig/pyproject edit changes indexer
- * behavior even when no source file moved). Used to scope the index-cache
- * fingerprint so edits in one language don't invalidate another language's
- * job. In git glob magic a leading `**\/` also matches depth zero, so the
- * repo-root ("") specs cover top-level files.
+ * files, marker files (a tsconfig/pyproject edit changes indexer behavior
+ * even when no source file moved), and fingerprint-only extras — config
+ * chains (tsconfig `extends`, pyrightconfig/setup.cfg) and lockfiles that
+ * alter indexer output but must not create roots. Used to scope the
+ * index-cache fingerprint so edits in one language don't invalidate another
+ * language's job. In git glob magic a leading `**\/` also matches depth
+ * zero, so the repo-root ("") specs cover top-level files.
  */
 export function languagePathspecs(language: IndexerLanguage, root: string): string[] {
   const prefix = root ? `${root}/` : "";
   return [
     ...SOURCE_EXTS[language].map((ext) => `:(glob)${prefix}**/*${ext}`),
     ...MARKERS[language].map((m) => `:(glob)${prefix}**/${m}`),
+    ...FINGERPRINT_EXTRAS[language].map((m) => `:(glob)${prefix}**/${m}`),
   ];
 }
 
