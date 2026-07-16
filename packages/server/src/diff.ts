@@ -115,6 +115,12 @@ export function repoFingerprint(root: string = repoRoot()): string | null {
  * not HEAD itself — so commits that don't touch the subtree leave the key
  * unchanged; plus `git diff HEAD -- <subdir>` (staged + unstaged) and each
  * untracked file's path and content under the subtree.
+ *
+ * Known limitation: the `""` (repo root) subdir key spans the *whole* repo
+ * (pathspec "."), so a language root that sits at the repo root above other
+ * nested-language roots invalidates on any change anywhere in the tree, not
+ * just changes relevant to its own language — see the Phase 1 roadmap
+ * checkpoint note for the remedy (language-scoped fingerprint by SOURCE_EXTS).
  */
 export function subtreeFingerprint(subdir: string, root: string = repoRoot()): string | null {
   const pathspec = subdir === "" ? "." : subdir;

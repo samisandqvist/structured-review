@@ -67,6 +67,17 @@ only `mcp/introspector-jdbc` (2.4 s warm session vs 20 s cold), the other 14
 roots served from the per-root cache. Full plan coverage 47/47, zero
 unassigned.
 
+**Known limitation (final review, 2026-07-16):** the per-root cache split
+degrades when a language root sits at `""` (repo root) above nested roots of
+another language — `subtreeFingerprint("")` hashes `git diff HEAD -- .` (the
+whole repo), so editing a nested Python file also moves the repo-root TS
+job's key and re-indexes TS even though nothing TS-relevant changed. This is
+an efficiency limitation, not a correctness bug (the cache never serves stale
+data — it just over-invalidates). The known remedy, if it bites in practice,
+is a language-scoped subtree fingerprint that filters `git diff` /
+untracked-file listing by the job's language `SOURCE_EXTS` instead of the
+raw pathspec; candidate for Phase 2.
+
 ## Phase 2 — Per-language heuristics (~1–2 days)
 
 Two TS-chauvinist functions gain language variants, keyed off file
