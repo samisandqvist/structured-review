@@ -128,6 +128,21 @@ describe("comments repo", () => {
     expect(exported[0].nodeId).toBe(node.id);
     expect(exported[0].stableId).toBe(node.stableId);
   });
+
+  it("persists and parses a comment anchor; null anchor round-trips", () => {
+    const session = createSession(db, "feat", "main");
+    const node = createNode(db, {
+      sessionId: session.id, stableId: "fn:x", label: "x",
+      file: "x.ts", startLine: 1, endLine: 2, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false,
+    });
+    const anchored = createComment(db, session.id, node.id, "snip", "left on lines", "", {
+      startLine: 3, startSide: "old", endLine: 5, endSide: "new",
+    });
+    const plain = createComment(db, session.id, node.id, "snip", "node-level", "");
+    const byId = new Map(getCommentsBySession(db, session.id).map((c) => [c.id, c]));
+    expect(byId.get(anchored.id)?.anchor).toEqual({ startLine: 3, startSide: "old", endLine: 5, endSide: "new" });
+    expect(byId.get(plain.id)?.anchor).toBeNull();
+  });
 });
 
 describe("structuralContextFor", () => {

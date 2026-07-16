@@ -93,3 +93,13 @@ describe("schema", () => {
     db.close();
   });
 });
+
+describe("v4 anchor column", () => {
+  it("migrates to v4 and persists an anchor JSON round-trip", () => {
+    const db = createMemoryDatabase();
+    expect(db.pragma("user_version", { simple: true })).toBe(4);
+    const cols = (db.prepare("PRAGMA table_info(comments)").all() as { name: string }[]).map((c) => c.name);
+    expect(cols).toContain("anchor");
+    db.close();
+  });
+});

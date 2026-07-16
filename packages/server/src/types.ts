@@ -65,6 +65,18 @@ export interface Comment {
   text: string;
   structuralContext: string;
   createdAt: number;
+  anchor: CommentAnchor | null;
+}
+
+export type AnchorSide = "old" | "new";
+/** GitHub-shaped line anchor: endpoints are CHANGED diff lines; removed lines
+ *  anchor by old-file line on side "old", added lines by new-file line on
+ *  side "new". Range order is row position in the rendered node diff. */
+export interface CommentAnchor {
+  startLine: number;
+  startSide: AnchorSide;
+  endLine: number;
+  endSide: AnchorSide;
 }
 
 export interface ExportedComment {
@@ -79,4 +91,5 @@ export interface ExportedComment {
   text: string;
   structuralContext: string;
   createdAt: number;
+  anchor: CommentAnchor | null;
 }
