@@ -119,6 +119,15 @@ Decision gate before committing to Phase 4. Produce a short findings note
   spanning definition occurrences per file) — re-estimate before starting;
   otherwise proceed.
 
+**Phase 3 gate (2026-07-16): PASSED** — see
+`docs/scip-java-spike-findings.md`. enclosingRange present on all 806 method
+defs, call refs method-granular (controller → service chains on the OBO diff
+confirmed), broken build = exit 1 + no index file. 13 s warm index on
+introspector (compile-dominated). Two small decoder deltas for Phase 4: Java
+node filter (fields also carry enclosingRange — require `).` suffix) and a
+labelOf generalization (`(+N).` overloads, backticked `<init>`). Original
+~2–4 day Phase 4 estimate stands.
+
 ## Phase 4 — scip-java integration (~2–4 days, after the gate)
 
 - New indexer job type on the Phase 1 orchestration: per Maven/Gradle
