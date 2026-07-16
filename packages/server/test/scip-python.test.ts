@@ -22,7 +22,7 @@ describe("scip-python integration", () => {
       writeFileSync(join(dir, "svc", "helper.py"), 'def greet(name: str) -> str:\n    return "hello " + name\n');
       writeFileSync(
         join(dir, "svc", "app.py"),
-        'from helper import greet\n\n\ndef main() -> None:\n    print(greet("world"))\n'
+        'from helper import greet\n\n\ndef main() -> None:\n    print(greet("world"))\n\n\nif __name__ == "__main__":\n    main()\n'
       );
       git("add", ".");
       git("commit", "-m", "init");
@@ -33,6 +33,8 @@ describe("scip-python integration", () => {
       expect(main, `expected a 'main' flow, got: ${flows.map((f) => f.name).join(", ")}`).toBeDefined();
       expect(main!.steps.map((s) => s.label)).toEqual(["main", "greet"]);
       expect(main!.steps.map((s) => s.file)).toEqual(["svc/app.py", "svc/helper.py"]);
+      expect(main!.entryReasons).toContain("cli");
+      expect(main!.entryConfidence).toBe(0.8);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
