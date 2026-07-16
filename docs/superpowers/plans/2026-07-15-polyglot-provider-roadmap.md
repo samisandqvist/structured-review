@@ -54,6 +54,19 @@ The architectural piece; Python rides along as the cheapest second indexer.
   MCP half of that diff (config → backend_client → server) should produce
   affected flows and relations while Java remains residual-only.
 
+**Phase 1 checkpoint (2026-07-16): PASSED.** Dogfood on aivo
+`introspector-obo` vs main: discovery found 15 language roots (5 ts, 10 py),
+all indexed and merged (~20 s cold). The Python MCP half produced 5 affected
+flows — `main → config.from_env → create_server → _build_obo_token_provider
+→ exchange` plus the four MCP tools (`executeSql` etc.) each flowing through
+`backend_client` into shared `_get_headers` — and the plan UI rendered flow
+tracks, entry evidence, and node-scoped Python diffs (screenshot:
+`phase1-python-flows.png`). All 19 Java files landed residual-only, grouped
+into orphan units. Cache split verified: touching one Python file re-indexed
+only `mcp/introspector-jdbc` (2.4 s warm session vs 20 s cold), the other 14
+roots served from the per-root cache. Full plan coverage 47/47, zero
+unassigned.
+
 ## Phase 2 — Per-language heuristics (~1–2 days)
 
 Two TS-chauvinist functions gain language variants, keyed off file
