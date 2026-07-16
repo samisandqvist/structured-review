@@ -7,7 +7,7 @@ import type { DB } from "../src/db/connection.js";
 import { createMemoryDatabase } from "../src/db/connection.js";
 import { createApp } from "../src/app.js";
 import { StubGraphProvider } from "../src/graph/stub.js";
-import type { Flow, ChangeSubgraph } from "../src/graph/provider.js";
+import type { Flow, ChangeSubgraph, GraphProvider } from "../src/graph/provider.js";
 import { IndexError } from "../src/graph/scip.js";
 
 let db: DB;
@@ -1074,5 +1074,31 @@ describe("GET /api/sessions/:id/changes", () => {
       expect(ch).not.toHaveProperty("oldText");
       expect(ch).not.toHaveProperty("newText");
     }
+  });
+
+  it("classifies python #-method stableIds as methods and plain callables as functions", async () => {
+    const pyProvider: GraphProvider = {
+      async getChangeSubgraph(): Promise<ChangeSubgraph> {
+        return {
+          nodes: [
+            { stableId: "scip-python python svc 0.0.1 `app`/main().", label: "main", file: "app.py", startLine: 1, endLine: 3, isEntryPoint: true, changeStatus: "changed", isTest: false },
+            { stableId: "scip-python python svc 0.0.1 `app`/Client#send().", label: "send", file: "app.py", startLine: 5, endLine: 8, isEntryPoint: false, changeStatus: "changed", isTest: false },
+          ],
+          edges: [],
+        };
+      },
+      async getFlows() { return []; },
+      async getNeighbors() { return { callers: [], callees: [] }; },
+    };
+    const pyApp = createApp({ db, graphProvider: pyProvider, repoRoot: fixtureRoot });
+    const cr = await pyApp.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const res = await pyApp.request(`/api/sessions/${session.id}/changes`);
+    const { changes } = await res.json();
+    const byLabel = Object.fromEntries(changes.map((c: any) => [c.label, c.kind]));
+    expect(byLabel).toEqual({ main: "function", send: "method" });
   });
 });

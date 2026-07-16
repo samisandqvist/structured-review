@@ -104,3 +104,30 @@ describe("assertIndexNotEmpty", () => {
     expect(() => assertIndexNotEmpty(docs, job(true))).not.toThrow();
   });
 });
+
+describe("python symbol shapes (audit lock-in)", () => {
+  // Real scip-python shapes: backticked dotted module descriptor, `#` for
+  // methods, `().` suffix for callables.
+  const PY_FN = "scip-python python svc 0.0.1 `app.web`/handler().";
+  const PY_METHOD = "scip-python python svc 0.0.1 `app.client`/Client#send().";
+
+  it("labels backticked-module functions and #-methods by their trailing identifier", () => {
+    const documents: ScipDocument[] = [
+      {
+        relativePath: "app/web.py",
+        occurrences: [
+          { symbol: PY_FN, symbolRoles: 1, range: [0, 4, 11], enclosingRange: [0, 0, 2, 0] },
+          { symbol: PY_METHOD, symbolRoles: 0, range: [1, 4, 10] }, // handler calls Client.send
+        ],
+      },
+      {
+        relativePath: "app/client.py",
+        occurrences: [{ symbol: PY_METHOD, symbolRoles: 1, range: [1, 8, 12], enclosingRange: [1, 4, 3, 0] }],
+      },
+    ];
+    const g = buildGraphFromIndex({ documents }, "/repo");
+    expect(g.nodes.get(PY_FN)?.label).toBe("handler");
+    expect(g.nodes.get(PY_METHOD)?.label).toBe("send");
+    expect(g.callAdj.get(PY_FN)).toEqual([PY_METHOD]);
+  });
+});
