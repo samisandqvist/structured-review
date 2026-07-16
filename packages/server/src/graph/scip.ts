@@ -319,11 +319,7 @@ export class ScipGraphProvider implements GraphProvider {
       const Index = this.proto.lookupType("scip.Index");
       const idx = Index.toObject(Index.decode(readFileSync(indexPath)), { longs: Number, defaults: false }) as ScipIndex;
       const docs = rerootDocuments(idx.documents ?? [], job.root, absRoot);
-      if (docs.length === 0 && job.hasSources) {
-        throw new IndexError(
-          `${job.language} indexer produced an empty index for root '${job.root || "."}', which contains ${job.language} sources`
-        );
-      }
+      assertIndexNotEmpty(docs, job);
       console.log(`scip: ${job.language} root '${job.root || "."}' — ${docs.length} documents in ${Date.now() - started}ms`);
       return docs;
     } finally {
@@ -366,6 +362,15 @@ export class IndexError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "IndexError";
+  }
+}
+
+/** Fail loudly when an indexer yields nothing for a root that plainly has sources. */
+export function assertIndexNotEmpty(docs: ScipDocument[], job: IndexerJob): void {
+  if (docs.length === 0 && job.hasSources) {
+    throw new IndexError(
+      `${job.language} indexer produced an empty index for root '${job.root || "."}', which contains ${job.language} sources`
+    );
   }
 }
 

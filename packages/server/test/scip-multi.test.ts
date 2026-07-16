@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { buildGraphFromIndex, rerootDocuments, IndexError, type ScipDocument } from "../src/graph/scip.js";
+import { buildGraphFromIndex, rerootDocuments, assertIndexNotEmpty, IndexError, type ScipDocument } from "../src/graph/scip.js";
+import type { IndexerJob } from "../src/graph/roots.js";
 
 const TS_MAIN = "scip-typescript npm pkg 1.0 src/`a.ts`/f().";
 const TS_UTIL = "scip-typescript npm pkg 1.0 src/`a.ts`/g().";
@@ -72,5 +73,34 @@ describe("IndexError", () => {
     expect(e.phase).toBe("index");
     expect(e.name).toBe("IndexError");
     expect(e).toBeInstanceOf(Error);
+  });
+});
+
+describe("assertIndexNotEmpty", () => {
+  const job = (hasSources: boolean, overrides: Partial<IndexerJob> = {}): IndexerJob => ({
+    language: "ts",
+    root: "svc",
+    hasSources,
+    ...overrides,
+  });
+
+  it("throws IndexError (phase 'index') for an empty index when the root has sources", () => {
+    expect(() => assertIndexNotEmpty([], job(true))).toThrow(IndexError);
+    try {
+      assertIndexNotEmpty([], job(true));
+      throw new Error("expected assertIndexNotEmpty to throw");
+    } catch (e) {
+      expect(e).toBeInstanceOf(IndexError);
+      expect((e as IndexError).phase).toBe("index");
+    }
+  });
+
+  it("does not throw for an empty index when the root has no sources", () => {
+    expect(() => assertIndexNotEmpty([], job(false))).not.toThrow();
+  });
+
+  it("does not throw for a non-empty index", () => {
+    const docs: ScipDocument[] = [{ relativePath: "svc/a.ts", occurrences: [] }];
+    expect(() => assertIndexNotEmpty(docs, job(true))).not.toThrow();
   });
 });

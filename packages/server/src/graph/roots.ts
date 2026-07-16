@@ -45,7 +45,7 @@ export function discoverLanguageRoots(repoRoot: string): IndexerJob[] {
   );
   return kept
     .map((c) => ({ ...c, hasSources: rootHasSources(c.root ? join(repoRoot, c.root) : repoRoot, c.language) }))
-    .sort((a, b) => a.root.localeCompare(b.root) || a.language.localeCompare(b.language));
+    .sort((a, b) => (a.root < b.root ? -1 : a.root > b.root ? 1 : a.language < b.language ? -1 : a.language > b.language ? 1 : 0));
 }
 
 /** True when `child` is strictly inside `parent` ("" = repo root contains everything else). */

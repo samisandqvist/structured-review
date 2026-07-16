@@ -150,6 +150,29 @@ describe("discoverJobs filtering", () => {
     expect(p.publicJobs().every((j) => j.language === "ts" || j.language === "py")).toBe(true);
     expect(p.publicJobs().length).toBeGreaterThan(0); // this repo's own ts root
   });
+
+  it("no marker files anywhere: falls back to a single ts root-repo job", () => {
+    const dir = mkdtempSync(join(tmpdir(), "crw-no-markers-"));
+    try {
+      writeFileSync(join(dir, "a.ts"), "export const x = 1;\n");
+      const p = new JobsProbe({ repoRoot: dir });
+      expect(p.publicJobs()).toEqual([{ language: "ts", root: "", hasSources: true }]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("no marker files, and ts not enabled: the fallback does not fire", () => {
+    const dir = mkdtempSync(join(tmpdir(), "crw-no-markers-"));
+    try {
+      writeFileSync(join(dir, "a.ts"), "export const x = 1;\n");
+      process.env.SCIP_LANGS = "py";
+      const p = new JobsProbe({ repoRoot: dir });
+      expect(p.publicJobs()).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("getFlows entry selection", () => {
