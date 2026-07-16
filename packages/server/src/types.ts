@@ -21,6 +21,8 @@ export interface ReviewSession {
   createdAt: number;
   headSha: string;
   repoFingerprint: string;
+  /** Per-language indexing degradation notices captured at session creation. */
+  indexWarnings: string[];
 }
 
 export interface Unit {

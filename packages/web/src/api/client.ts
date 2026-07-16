@@ -1,6 +1,7 @@
 export interface ReviewSession {
   id: string; branch: string; baseRef: string;
   status: "planning" | "walking" | "complete"; createdAt: number;
+  indexWarnings?: string[];
 }
 export interface Unit {
   id: string; sessionId: string; position: number; label: string;

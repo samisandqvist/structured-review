@@ -72,6 +72,19 @@ describe("ScipGraphProvider cache", () => {
     await p.getNeighbors("x"); // retries, succeeds
     expect(p.builds).toBe(2);
   });
+
+  it("exposes the build's warnings via getIndexWarnings", async () => {
+    class WarnProvider extends FakeProvider {
+      protected override indexAndBuild(): Promise<BuiltGraph> {
+        this.builds++;
+        return Promise.resolve({ ...EMPTY, warnings: ["Java indexing skipped for 1 root(s)"] });
+      }
+    }
+    const p = new WarnProvider({ repoRoot: "/tmp" });
+    expect(await p.getIndexWarnings()).toEqual(["Java indexing skipped for 1 root(s)"]);
+    await p.getNeighbors("x");
+    expect(p.builds).toBe(1); // warnings ride the same cached build
+  });
 });
 
 describe("per-job cache", () => {

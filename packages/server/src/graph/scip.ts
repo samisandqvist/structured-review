@@ -44,6 +44,8 @@ export interface BuiltGraph {
   nodes: Map<string, RawNode>; // symbol -> node
   callAdj: Map<string, string[]>; // caller -> callees (deduped)
   callRev: Map<string, string[]>; // callee -> callers
+  /** Per-language degradation notices from job planning (e.g. java toolchain missing). */
+  warnings?: string[];
 }
 
 export interface ScipOptions {
@@ -239,10 +241,10 @@ export class ScipGraphProvider implements GraphProvider {
     return entry.graph;
   }
 
-  /** Enabled indexer jobs: discovered roots filtered by SCIP_LANGS (default ts,py). */
+  /** Enabled indexer jobs: discovered roots filtered by SCIP_LANGS (default ts,py,java). */
   protected discoverJobs(): IndexerJob[] {
     const enabled = new Set(
-      (process.env.SCIP_LANGS ?? "ts,py").split(",").map((s) => s.trim()).filter(Boolean)
+      (process.env.SCIP_LANGS ?? "ts,py,java").split(",").map((s) => s.trim()).filter(Boolean)
     );
     const discovered = discoverLanguageRoots(this.repoRoot);
     const jobs = discovered.filter((j) => enabled.has(j.language));
@@ -254,12 +256,50 @@ export class ScipGraphProvider implements GraphProvider {
     return jobs;
   }
 
+  /** Test seam over the module-level resolver. */
+  protected resolveJavaCommand(): ScipJavaCommand | null {
+    return resolveScipJavaCommand();
+  }
+
+  /**
+   * Jobs to actually run plus degradation warnings. A missing Java toolchain
+   * must not fail (or silently hollow out) a ts/py session: java jobs drop
+   * with a warning that surfaces in session diagnostics; their files stay
+   * visible as residual-only changes. A present-but-failing toolchain is NOT
+   * handled here — runIndexer throws IndexError loudly for that.
+   */
+  protected planJobs(): { jobs: IndexerJob[]; warnings: string[] } {
+    const jobs = this.discoverJobs();
+    const javaJobs = jobs.filter((j) => j.language === "java");
+    if (javaJobs.length === 0 || this.resolveJavaCommand()) return { jobs, warnings: [] };
+    const roots = javaJobs.map((j) => `'${j.root || "."}'`).join(", ");
+    return {
+      jobs: jobs.filter((j) => j.language !== "java"),
+      warnings: [
+        `Java indexing skipped for ${javaJobs.length} root(s) (${roots}): scip-java toolchain not found. ` +
+          `Install coursier ('cs') plus a JDK and Maven (scip-java runs via ` +
+          `'cs launch com.sourcegraph:scip-java_2.13:${SCIP_JAVA_DEFAULT_VERSION} -M com.sourcegraph.scip_java.ScipJava -- index'), ` +
+          `or set SCIP_JAVA_CMD. Java changes appear as residual-only until then.`,
+      ],
+    };
+  }
+
+  /** Degradation notices for the current (cached) build — [] when none. */
+  async getIndexWarnings(): Promise<string[]> {
+    return (await this.buildGraph()).warnings ?? [];
+  }
+
   /** Run every enabled indexer job (each cached per subtree) and merge the documents. */
   protected async indexAndBuild(): Promise<BuiltGraph> {
     this.proto ??= await protobuf.load(SCIP_PROTO);
-    const jobs = this.discoverJobs();
+    const { jobs, warnings } = this.planJobs();
     const perJob = await Promise.all(jobs.map((j) => this.jobDocuments(j)));
-    return buildGraphFromIndex({ documents: perJob.flat() }, this.repoRoot);
+    const g = buildGraphFromIndex({ documents: perJob.flat() }, this.repoRoot);
+    if (warnings.length) {
+      for (const w of warnings) console.warn(`scip: ${w}`);
+      g.warnings = warnings;
+    }
+    return g;
   }
 
   /** Language-scoped subtree cache key; any git failure yields a unique key (cache miss, never stale). */
