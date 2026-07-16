@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { discoverLanguageRoots, rootHasSources } from "../src/graph/roots.js";
+import { discoverLanguageRoots, languagePathspecs, rootHasSources } from "../src/graph/roots.js";
 
 /** Lay out files under a fresh temp dir; keys are relative paths. */
 function fixture(files: Record<string, string>): string {
@@ -93,5 +93,27 @@ describe("discoverLanguageRoots", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("languagePathspecs", () => {
+  it("covers source extensions and marker files under a nested root", () => {
+    expect(languagePathspecs("py", "mcp/svc")).toEqual([
+      ":(glob)mcp/svc/**/*.py",
+      ":(glob)mcp/svc/**/pyproject.toml",
+      ":(glob)mcp/svc/**/setup.py",
+      ":(glob)mcp/svc/**/requirements.txt",
+    ]);
+  });
+
+  it("anchors repo-root specs at any depth including the top level", () => {
+    expect(languagePathspecs("ts", "")).toEqual([
+      ":(glob)**/*.ts",
+      ":(glob)**/*.tsx",
+      ":(glob)**/*.mts",
+      ":(glob)**/*.cts",
+      ":(glob)**/tsconfig.json",
+      ":(glob)**/package.json",
+    ]);
   });
 });

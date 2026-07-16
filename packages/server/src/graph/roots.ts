@@ -33,6 +33,22 @@ const SOURCE_EXTS: Record<IndexerLanguage, string[]> = {
   java: [".java"],
 };
 
+/**
+ * Git pathspecs covering one language's index inputs under a root: its source
+ * files plus its marker files (a tsconfig/pyproject edit changes indexer
+ * behavior even when no source file moved). Used to scope the index-cache
+ * fingerprint so edits in one language don't invalidate another language's
+ * job. In git glob magic a leading `**\/` also matches depth zero, so the
+ * repo-root ("") specs cover top-level files.
+ */
+export function languagePathspecs(language: IndexerLanguage, root: string): string[] {
+  const prefix = root ? `${root}/` : "";
+  return [
+    ...SOURCE_EXTS[language].map((ext) => `:(glob)${prefix}**/*${ext}`),
+    ...MARKERS[language].map((m) => `:(glob)${prefix}**/${m}`),
+  ];
+}
+
 // Never descend into dependency trees, build output, or venvs; hidden dirs
 // (".git", ".venv", ".hidden") are skipped by the dot rule.
 const SKIP_DIRS = new Set(["node_modules", "dist", "build", "out", "target", "coverage", "venv", "__pycache__"]);

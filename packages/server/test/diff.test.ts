@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { extractHunkDiff, extractLinesForRanges, getNodeDiff, nodeChangeStats, subtractRanges, resolveRef, changedFilesStrict, currentBranch, repoFingerprint, subtreeFingerprint, formatHunkSnippet, anchorRowRange, GitError } from "../src/diff.js";
 import type { DiffLine } from "../src/diff.js";
 import type { CommentAnchor } from "../src/types.js";
+import { languagePathspecs } from "../src/graph/roots.js";
 
 let fixtureRepo: string;
 let emptyTmpDir: string;
@@ -412,6 +413,53 @@ describe("subtreeFingerprint", () => {
     const dir = mkdtempSync(join(tmpdir(), "crw-subtree-nogit-"));
     try {
       expect(subtreeFingerprint("a", dir)).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("with pathspecs, only moves when files of that language (or its markers) change", () => {
+    const dir = mkdtempSync(join(tmpdir(), "crw-fp-lang-"));
+    try {
+      const g = (...a: string[]) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
+      g("init", "-b", "main");
+      g("config", "user.email", "t@t");
+      g("config", "user.name", "t");
+      writeFileSync(join(dir, "package.json"), "{}");
+      writeFileSync(join(dir, "a.ts"), "export const x = 1;\n");
+      mkdirSync(join(dir, "mcp", "svc"), { recursive: true });
+      writeFileSync(join(dir, "mcp", "svc", "pyproject.toml"), "[project]\n");
+      writeFileSync(join(dir, "mcp", "svc", "b.py"), "x = 1\n");
+      g("add", ".");
+      g("commit", "-m", "init");
+
+      const tsSpecs = languagePathspecs("ts", "");
+      const pySpecs = languagePathspecs("py", "mcp/svc");
+      const ts1 = subtreeFingerprint("", dir, tsSpecs);
+      const py1 = subtreeFingerprint("mcp/svc", dir, pySpecs);
+
+      // Editing a nested python file must NOT move the repo-root ts key.
+      writeFileSync(join(dir, "mcp", "svc", "b.py"), "x = 2\n");
+      expect(subtreeFingerprint("", dir, tsSpecs)).toBe(ts1);
+      expect(subtreeFingerprint("mcp/svc", dir, pySpecs)).not.toBe(py1);
+
+      // Editing a top-level ts file moves the ts key (zero-depth ** match), not py.
+      const py2 = subtreeFingerprint("mcp/svc", dir, pySpecs);
+      writeFileSync(join(dir, "a.ts"), "export const x = 2;\n");
+      expect(subtreeFingerprint("", dir, tsSpecs)).not.toBe(ts1);
+      expect(subtreeFingerprint("mcp/svc", dir, pySpecs)).toBe(py2);
+
+      // Editing a ts marker file moves the ts key.
+      const ts2 = subtreeFingerprint("", dir, tsSpecs);
+      writeFileSync(join(dir, "package.json"), '{"name":"x"}');
+      expect(subtreeFingerprint("", dir, tsSpecs)).not.toBe(ts2);
+
+      // An untracked python file moves only the py key.
+      const ts3 = subtreeFingerprint("", dir, tsSpecs);
+      const py3 = subtreeFingerprint("mcp/svc", dir, pySpecs);
+      writeFileSync(join(dir, "mcp", "svc", "c.py"), "y = 1\n");
+      expect(subtreeFingerprint("", dir, tsSpecs)).toBe(ts3);
+      expect(subtreeFingerprint("mcp/svc", dir, pySpecs)).not.toBe(py3);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
