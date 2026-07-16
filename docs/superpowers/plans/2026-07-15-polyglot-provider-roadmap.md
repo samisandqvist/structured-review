@@ -225,6 +225,49 @@ Feeds plugin packaging directly: packaging task 3 (skill paths → built CLI)
 ships this same binary via `${CLAUDE_PLUGIN_ROOT}`, and the skill.md shrinks
 to "run `crw …`" invocations.
 
+## Unassigned-changes revisit — attach tests and uncalled types to their context (design + implement, after the CLI, before/alongside plugin packaging)
+
+Motivation (2026-07-16 Phase 4 dogfood): the OBO session planned 26/100
+changes into flow units; the other 74 landed in "Unassigned changes" — and
+most of them are not orphans in any meaningful sense. They fall into three
+groups with obvious homes:
+
+1. **Changed tests** (the bulk: `*Test.java` methods, `test_*.py`
+   functions). Flows exclude tests by design (test callers are TESTED_BY
+   evidence, not flow steps), so changed tests always land unassigned today
+   even when the code they exercise sits in a flow unit. Option: nest them
+   as green sub-nodes "under" the production node they exercise — the
+   opposite of call-graph direction, but it puts the test in the same
+   mental context as the code under review ("here's the change, here's how
+   its tests changed"). The data already exists: TESTED_BY edges are in the
+   subgraph, and the UI already styles tests green (the per-unit
+   `tests n/m` chip counts them).
+2. **Uncalled types/DTOs** (changed nodes or residuals with no call
+   edges — `DirectSqlRequestDto`, `UpdateRequireUserTokenDto.java`).
+   Option: nest them under the node/file that requires/imports them. The
+   index has this: SCIP import occurrences (ROLE_IMPORT) and references to
+   type symbols (`…#`) are currently *dropped* in `buildGraphFromIndex` —
+   a "required-by" relation derived from them would attach a DTO to the
+   controller/service that consumes it.
+3. **Module-scope residuals** of files whose methods ARE in flows
+   (`IntrospectionService.java (module scope)`): could attach to the same
+   unit as the file's flow nodes (same-file affinity — no new index data
+   needed).
+
+Design questions to settle first (this item starts with a brainstorm, not
+code): does "assigned" mean walk-order membership (reviewed inside the
+unit's walk) or just visual nesting with coverage credit? Do nested tests
+count toward the unit's reviewed n/m or keep their own ledger? Ordering
+within a node: code first, then its tests? What happens when a test
+exercises nodes in two different units (first unit in plan order wins,
+duplicate as reference, or reviewer choice)? And how much should the
+mechanical `crw plan --auto` exploit this vs. leaving it to LLM-authored
+plans?
+
+Not scoped yet — needs its own brainstorm → plan cycle. Rough guess ~1–2
+days for options 1+3 (data exists), option 2 adds decoder work (keep the
+dropped import/type references, file-level "requires" edges).
+
 ## Release as a Claude Code plugin (findings, 2026-07-16)
 
 Assessed against current plugin docs
