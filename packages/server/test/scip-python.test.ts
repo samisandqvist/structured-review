@@ -15,7 +15,10 @@ describe("scip-python integration", () => {
       git("config", "user.email", "t@t");
       git("config", "user.name", "t");
       mkdirSync(join(dir, "svc"));
-      writeFileSync(join(dir, "svc", "pyproject.toml"), '[project]\nname = "svc"\nversion = "0.0.1"\n');
+      writeFileSync(
+        join(dir, "svc", "pyproject.toml"),
+        '[project]\nname = "svc"\nversion = "0.0.1"\n\n[tool.pyright]\n'
+      );
       writeFileSync(join(dir, "svc", "helper.py"), 'def greet(name: str) -> str:\n    return "hello " + name\n');
       writeFileSync(
         join(dir, "svc", "app.py"),
