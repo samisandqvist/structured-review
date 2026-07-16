@@ -185,6 +185,46 @@ each improve quality without blocking use. Plugin packaging and Phase 5
 
 ---
 
+## Agent CLI — set up and harvest reviews without curl/SQL (~0.5–1 day, before plugin packaging)
+
+Motivation (2026-07-16 Phase 4 dogfood): driving a review session as the
+agent currently means hand-rolling `curl` against the HTTP API to create the
+session and build a plan, and reading the SQLite file directly to see the
+user's review output (comments, reviewed states). That works but is
+error-prone, undiscoverable, and exactly the part the walkthrough skill
+scripts — it deserves a stable command surface.
+
+**Shape:** a small Node CLI (extend `packages/skill/src`, e.g. `crw <cmd>`),
+JSON on stdout for agent consumption, human-readable with `--pretty`. Thin
+wrapper over the existing HTTP API (and server lifecycle) — no new server
+endpoints unless a gap shows up; notably NO direct SQLite access, so it
+stays correct across schema migrations.
+
+Setup side:
+
+- `crw serve [--repo <path>] [--port N]` — ensure the hub is running against
+  a repo (start if needed, reuse if healthy), print base URL + PID.
+- `crw session create --branch <b> --base <ref>` — create a session; print
+  session id, UI URL (`…/?session=<id>`), node/flow counts, and
+  `indexWarnings` (the agent must relay degradation warnings to the user).
+- `crw plan --session <id> --auto` — mechanical plan: top flow entries per
+  language + auto orphans (what the Phase 4 dogfood did by hand);
+  `crw plan --session <id> --units <file.json>` for an LLM-authored plan.
+
+Harvest side (act on the user's review output):
+
+- `crw status --session <id>` — coverage, per-unit reviewed/total,
+  remaining-unreviewed node list; stale flag.
+- `crw comments --session <id>` — all comments with node label, file,
+  anchor (start/end line + side), hunk snippet, and review status —
+  GitHub-mappable, ready for the skill's wrap-up (PR feedback / report).
+- `crw wait --session <id> [--until reviewed|commented]` — optional: poll
+  until review activity settles, for "tell me when Sami is done" flows.
+
+Feeds plugin packaging directly: packaging task 3 (skill paths → built CLI)
+ships this same binary via `${CLAUDE_PLUGIN_ROOT}`, and the skill.md shrinks
+to "run `crw …`" invocations.
+
 ## Release as a Claude Code plugin (findings, 2026-07-16)
 
 Assessed against current plugin docs
