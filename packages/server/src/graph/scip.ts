@@ -350,7 +350,11 @@ export class ScipGraphProvider implements GraphProvider {
             maxBuffer: 256 * 1024 * 1024,
           });
         } else if (job.language === "java") {
-          const cmd = resolveScipJavaCommand();
+          // Route through the resolveJavaCommand() seam (not the module-level
+          // helper directly) so a subclass overriding it for planning also
+          // controls execution. argv0 may be a bare name (e.g. "cs") that
+          // execFileSync re-resolves against PATH at spawn time.
+          const cmd = this.resolveJavaCommand();
           if (!cmd) {
             throw new IndexError(
               `scip-java toolchain not found for root '${job.root || "."}': install coursier ('cs') plus a JDK and Maven, or set SCIP_JAVA_CMD`

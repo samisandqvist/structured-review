@@ -76,17 +76,22 @@ describe("scip-java integration", () => {
         git("add", ".");
         git("commit", "-m", "init");
 
+        const prev = process.env.SCIP_LANGS;
         process.env.SCIP_LANGS = "java";
-        const provider = new ScipGraphProvider({ repoRoot: dir });
-        const flows = await provider.getFlows();
-        const main = flows.find((f) => f.name === "main");
-        expect(main, `expected a 'main' flow, got: ${flows.map((f) => f.name).join(", ")}`).toBeDefined();
-        const labels = main!.steps.map((s) => s.label);
-        expect(labels).toEqual(expect.arrayContaining(["main", "run", "greet"]));
-        const greet = main!.steps.find((s) => s.label === "greet")!;
-        expect(greet.file).toBe("svc/src/main/java/demo/Svc.java");
+        try {
+          const provider = new ScipGraphProvider({ repoRoot: dir });
+          const flows = await provider.getFlows();
+          const main = flows.find((f) => f.name === "main");
+          expect(main, `expected a 'main' flow, got: ${flows.map((f) => f.name).join(", ")}`).toBeDefined();
+          const labels = main!.steps.map((s) => s.label);
+          expect(labels).toEqual(expect.arrayContaining(["main", "run", "greet"]));
+          const greet = main!.steps.find((s) => s.label === "greet")!;
+          expect(greet.file).toBe("svc/src/main/java/demo/Svc.java");
+        } finally {
+          if (prev === undefined) delete process.env.SCIP_LANGS;
+          else process.env.SCIP_LANGS = prev;
+        }
       } finally {
-        delete process.env.SCIP_LANGS;
         rmSync(dir, { recursive: true, force: true });
       }
     }
@@ -131,5 +136,22 @@ describe("java degradation (planJobs)", () => {
     }
     const p = new NoJava({ repoRoot: "/tmp" });
     expect(p.plan().warnings).toEqual([]);
+  });
+
+  it("attaches degradation warnings to the real build (indexAndBuild wiring)", async () => {
+    class JavaOnly extends ScipGraphProvider {
+      protected override discoverJobs(): IndexerJob[] {
+        return [{ language: "java", root: "example-service", hasSources: true }];
+      }
+      protected override resolveJavaCommand(): ScipJavaCommand | null { return null; }
+      protected override repoStateKey(): string { return "k1"; }
+    }
+    const p = new JavaOnly({ repoRoot: "/tmp" });
+    const warnings = await p.getIndexWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/Java indexing skipped/);
+    // The degraded build is a real (empty) graph, not an error.
+    const flows = await p.getFlows();
+    expect(flows).toEqual([]);
   });
 });
