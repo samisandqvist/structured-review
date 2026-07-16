@@ -11,7 +11,7 @@ import { fileChangedRanges, rangesOverlap, repoFingerprint, repoRoot, subtreeFin
 import { discoverLanguageRoots, rootHasSources, type IndexerJob } from "./roots.js";
 import { isTestFile } from "../util.js";
 import { buildFlowTree, makeFlow, reachesChanged } from "./flow-tree.js";
-import { entryEvidence, isExportedAt, loadConfiguredEntries } from "./entry-points.js";
+import { entryEvidence, isExportedAt, loadConfiguredEntries, pythonEntryReasons } from "./entry-points.js";
 
 /**
  * Graph provider backed by SCIP (Sourcegraph Code Intelligence Protocol).
@@ -201,10 +201,13 @@ export class ScipGraphProvider implements GraphProvider {
     return entrySyms
       .map((sym, i) => {
         const n = g.nodes.get(sym)!;
+        const isPy = n.file.endsWith(".py");
         const evidence = entryEvidence({
           isRoot: rootSyms.has(sym),
-          isExported: isExportedAt(this.repoRoot, n.file, n.startLine, fileCache),
+          // `export` keyword is a TS/JS concept; never probe it on Python files.
+          isExported: isPy ? false : isExportedAt(this.repoRoot, n.file, n.startLine, fileCache),
           isConfigured: configuredSyms.has(sym),
+          detected: isPy ? pythonEntryReasons(this.repoRoot, n.file, { label: n.label, startLine: n.startLine }, fileCache) : [],
         });
         return makeFlow(i + 1, n.label, buildFlowTree(sym, g.callAdj, resolve, relevant), evidence);
       })
