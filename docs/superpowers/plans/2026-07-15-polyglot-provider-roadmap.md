@@ -143,6 +143,20 @@ labelOf generalization (`(+N).` overloads, backticked `<init>`). Original
   Java files should form flows (controller → service → introspector →
   policy/helper), which is the review this whole roadmap exists for.
 
+**Phase 4 checkpoint (2026-07-16): PASSED.** Dogfood on aivo
+`introspector-obo` vs main: 235 flows (51 Java, 37 Python), including
+`introspect → resolveJdbcUrl → resolveDbAccessToken → performDatabase-
+Introspection` — the OBO chain itself. 17/19 changed Java files carry method
+nodes (2 field-only DTOs correctly residual); constructor labels render as
+class names; node-scoped Java diffs work (screenshot:
+`p4-java-flow-tracks.png`, `p4-java-node-diff.png`). 27 s cold across all
+three languages, 1.9 s warm. Degradation verified live: server with `cs`
+stripped from PATH still creates the session (19 s), persists the exact
+install-hint warning, indexes 0 Java nodes, and all 19 Java files appear as
+residual pseudo-nodes; PlanView shows the amber banner
+(`p4-degradation-banner.png`). Python flows unchanged (Phase 1 regression
+check).
+
 ## Explicitly out of scope (this roadmap)
 
 - LSP refinement (P3 — only if SCIP accuracy gaps show up in practice).
