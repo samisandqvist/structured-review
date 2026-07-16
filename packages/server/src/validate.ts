@@ -70,9 +70,18 @@ export const bulkNodeStatusSchema = z.object({
   reviewedInUnit: z.number().int().nonnegative().optional(),
 });
 
+const anchorSide = z.enum(["old", "new"]);
+export const commentAnchorSchema = z.object({
+  startLine: z.number().int().positive(),
+  startSide: anchorSide,
+  endLine: z.number().int().positive(),
+  endSide: anchorSide,
+});
+
 export const commentCreateSchema = z.object({
   nodeId: z.string().min(1, "nodeId is required"),
   text: z.string().trim().min(1, "comment text must be nonempty").max(10_000, "comment too long"),
+  anchor: commentAnchorSchema.optional(),
 });
 
 export type Parsed<T> = { ok: true; data: T } | { ok: false; res: Response };
