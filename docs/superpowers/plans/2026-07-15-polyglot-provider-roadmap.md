@@ -54,6 +54,30 @@ The architectural piece; Python rides along as the cheapest second indexer.
   MCP half of that diff (config → backend_client → server) should produce
   affected flows and relations while Java remains residual-only.
 
+**Phase 1 checkpoint (2026-07-16): PASSED.** Dogfood on aivo
+`introspector-obo` vs main: discovery found 15 language roots (5 ts, 10 py),
+all indexed and merged (~20 s cold). The Python MCP half produced 5 affected
+flows — `main → config.from_env → create_server → _build_obo_token_provider
+→ exchange` plus the four MCP tools (`executeSql` etc.) each flowing through
+`backend_client` into shared `_get_headers` — and the plan UI rendered flow
+tracks, entry evidence, and node-scoped Python diffs (screenshot:
+`phase1-python-flows.png`). All 19 Java files landed residual-only, grouped
+into orphan units. Cache split verified: touching one Python file re-indexed
+only `mcp/introspector-jdbc` (2.4 s warm session vs 20 s cold), the other 14
+roots served from the per-root cache. Full plan coverage 47/47, zero
+unassigned.
+
+**Known limitation (final review, 2026-07-16):** the per-root cache split
+degrades when a language root sits at `""` (repo root) above nested roots of
+another language — `subtreeFingerprint("")` hashes `git diff HEAD -- .` (the
+whole repo), so editing a nested Python file also moves the repo-root TS
+job's key and re-indexes TS even though nothing TS-relevant changed. This is
+an efficiency limitation, not a correctness bug (the cache never serves stale
+data — it just over-invalidates). The known remedy, if it bites in practice,
+is a language-scoped subtree fingerprint that filters `git diff` /
+untracked-file listing by the job's language `SOURCE_EXTS` instead of the
+raw pathspec; candidate for Phase 2.
+
 ## Phase 2 — Per-language heuristics (~1–2 days)
 
 Two TS-chauvinist functions gain language variants, keyed off file
@@ -121,7 +145,8 @@ Decision gate before committing to Phase 4. Produce a short findings note
 
 ~1–1.5 weeks of implementation across phases 1–4, phased so each lands
 independently: after Phase 1 Python reviews work end-to-end; Phases 2–4
-each improve quality without blocking use.
+each improve quality without blocking use. Plugin packaging and Phase 5
+(Rust) add ~3–5 days on top — see the plugin-release section below.
 
 ## Open questions to resolve during detailed planning
 
@@ -134,3 +159,71 @@ each improve quality without blocking use.
    diagnostics" P2 item; consider folding a minimal version in.
 4. scip-python and virtualenvs: do we document "install deps first" or
    auto-detect `.venv` and pass it through?
+
+---
+
+## Release as a Claude Code plugin (findings, 2026-07-16)
+
+Assessed against current plugin docs
+(https://code.claude.com/docs/en/plugins-reference.md). Verdict: the
+architecture already fits the plugin model — packaging is ~2–4 days on top
+of this roadmap, not a rewrite.
+
+**Why it fits:**
+
+- A plugin bundles skills, MCP servers, hooks, and executables; distributed
+  via a git-repo marketplace (`/plugin marketplace add <user>/<repo>`,
+  private repos work). `packages/skill/skill.md` is already a plugin skill
+  in all but directory layout.
+- scip-typescript resolves from `node_modules` (`graph/scip.ts`) and
+  scip-python ships the same way — **TS and Python support bundle for
+  free**, no user-installed toolchain.
+- Long-lived local HTTP server + browser UI is an accepted pattern: a
+  skill/MCP tool starts the server and returns a localhost URL; server
+  lifetime is tied to the Claude Code session, matching our session model.
+- Java is the only heavy toolchain (JVM + coursier + build-wrap, can't be
+  bundled). Precedent: official LSP plugins require the binary
+  pre-installed. Phase 4's "detect on PATH, degrade per-language with a
+  visible warning" is exactly the plugin-required behavior.
+
+**Strategic implication:** per-language graceful degradation and session
+diagnostics (open question 3 above) stop being polish and become
+release-blocking — plugin users' toolchains are uncontrolled, and a missing
+JVM must read as "install scip-java via X", not a mysteriously flow-less
+plan.
+
+**Packaging tasks (new, on top of phases 1–4):**
+
+1. Publish the server to npm and launch via `npx @crw/server` (cleanest),
+   or a `SessionStart` hook installing into `${CLAUDE_PLUGIN_DATA}`.
+   Caveat: `better-sqlite3` is a native module — prebuilds cover common
+   platforms; consider migrating to Node 22's built-in `node:sqlite` to
+   remove the native-compile risk entirely.
+2. Serve the built web UI statically from the server (dev currently runs
+   Vite separately).
+3. Rework skill paths: `skill.md` invokes `npx tsx packages/skill/src/…`
+   (repo-relative source) — must become built JS via
+   `${CLAUDE_PLUGIN_ROOT}` or a published CLI. Add `plugin.json` +
+   marketplace skeleton.
+4. Relocate state: SQLite DB and index caches into
+   `${CLAUDE_PLUGIN_DATA}` (persists across plugin updates), not the
+   plugin dir or the reviewed repo.
+
+## Phase 5 — Rust via rust-analyzer (spike + integration)
+
+Lighter than Java: **rust-analyzer has a built-in `scip` subcommand**
+(`rust-analyzer scip .` emits `index.scip`) — no separate indexer to
+acquire, single static binary users typically have via
+`rustup component add rust-analyzer`. Same "external toolchain" class as
+Java but no JVM/coursier/build-wrap. Consider running its spike alongside
+or before the Java gate (Phase 3).
+
+- **Spike (~half day, same probe as Phase 3):** do definitions carry
+  `enclosingRange`? Do symbols parse in `labelOf`? First-party call
+  references at fn granularity? (Not verified — rust-analyzer isn't
+  installed on this machine; `rustup component add rust-analyzer` first.)
+- **Integration:** one more indexer job on Phase 1 orchestration — root
+  detection = `Cargo.toml`, skip nested workspace members; PATH detection
+  + per-language degradation like scip-java.
+- **Heuristics (Phase 2 additions):** `*_test.rs`, `tests/`,
+  `#[cfg(test)]`; exclude `target/`.
