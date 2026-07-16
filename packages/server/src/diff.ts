@@ -2,8 +2,8 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { LineRange } from "./types.js";
-export type { LineRange };
+import type { AnchorSide, CommentAnchor, LineRange } from "./types.js";
+export type { AnchorSide, CommentAnchor, LineRange };
 
 /**
  * Real diff content for a node, pulled from git.
@@ -264,6 +264,27 @@ export function getNodeDiff(
   // Changed file, but maybe no hunk inside this node's span (e.g. the change was
   // in a sibling). Then show the current source unchanged, not a misleading diff.
   return extractHunkDiff(raw, startLine, endLine) ?? sliceBoth(root, file, startLine, endLine);
+}
+
+/**
+ * Resolve a comment anchor's endpoints to row indexes in a node's rendered
+ * diff. Endpoints must be CHANGED lines — `added` addressed by newLine on
+ * side "new", `removed` by oldLine on side "old" — and the range must be
+ * ordered by row position. Null = anchor does not resolve (context line,
+ * absent line, wrong side, or inverted range).
+ */
+export function anchorRowRange(
+  lines: DiffLine[],
+  anchor: CommentAnchor
+): { startIdx: number; endIdx: number } | null {
+  const find = (line: number, side: AnchorSide) =>
+    lines.findIndex((l) =>
+      side === "new" ? l.type === "added" && l.newLine === line : l.type === "removed" && l.oldLine === line
+    );
+  const startIdx = find(anchor.startLine, anchor.startSide);
+  const endIdx = find(anchor.endLine, anchor.endSide);
+  if (startIdx === -1 || endIdx === -1 || startIdx > endIdx) return null;
+  return { startIdx, endIdx };
 }
 
 /**

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -865,6 +865,89 @@ describe("runtime validation", () => {
     const body = await res.json();
     expect(body.error).toBe("validation failed");
     expect(body.issues).toContainEqual({ path: "text", message: "comment text must be nonempty" });
+  });
+});
+
+describe("anchored comments", () => {
+  // The stub's fn:handleOrder points at src/orders.ts lines 10-30. Commit a
+  // 55-line base (advancing main = baseRef), then insert one line inside that
+  // span so `git diff main` yields an added line at new-file line 15, keeping
+  // the node "changed" with a real diff to anchor into.
+  const STUB_FILE = "src/orders.ts";
+  const BASE_LINES = Array.from({ length: 55 }, (_, i) => `line ${i + 1}`);
+  const BASE_CONTENT = BASE_LINES.join("\n") + "\n";
+  const MODIFIED_CONTENT =
+    [...BASE_LINES.slice(0, 14), "const inserted = true;", ...BASE_LINES.slice(14)].join("\n") + "\n";
+
+  async function makeSessionWithDiff() {
+    const g = (...a: string[]) => execFileSync("git", a, { cwd: fixtureRoot, encoding: "utf8" });
+    mkdirSync(join(fixtureRoot, "src"), { recursive: true });
+    writeFileSync(join(fixtureRoot, STUB_FILE), BASE_CONTENT);
+    g("add", ".");
+    g("commit", "-m", "base");
+    writeFileSync(join(fixtureRoot, STUB_FILE), MODIFIED_CONTENT); // adds a line inside the node span
+    const res = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session } = await res.json();
+    const nodesRes = await app.request(`/api/sessions/${session.id}/nodes`);
+    const { nodes } = await nodesRes.json();
+    return { session, node: nodes.find((n: { changeStatus: string }) => n.changeStatus === "changed") };
+  }
+
+  it("creates an anchored comment with a range-scoped snippet and exports the anchor", async () => {
+    const { session, node } = await makeSessionWithDiff();
+    // find an added line to anchor on via the node diff endpoint
+    const diffRes = await app.request(`/api/sessions/${session.id}/nodes/${node.id}`);
+    const { diff } = await diffRes.json();
+    const added = diff.lines.find((l: { type: string }) => l.type === "added");
+    expect(added).toBeDefined();
+    const anchor = { startLine: added.newLine, startSide: "new", endLine: added.newLine, endSide: "new" };
+    const res = await app.request(`/api/sessions/${session.id}/comments`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nodeId: node.id, text: "anchored!", anchor }),
+    });
+    expect(res.status).toBe(200);
+    const { comment } = await res.json();
+    expect(comment.anchor).toEqual(anchor);
+    expect(comment.hunkSnippet).toContain(added.text);
+    expect(comment.hunkSnippet.split("\n")).toHaveLength(1); // range-scoped: just the anchored row
+
+    const exportRes = await app.request(`/api/sessions/${session.id}/export`);
+    const exported = await exportRes.json();
+    expect(exported.comments.find((c: { id: string }) => c.id === comment.id).anchor).toEqual(anchor);
+  });
+
+  it("rejects an anchor that does not resolve (context line / absent line)", async () => {
+    const { session, node } = await makeSessionWithDiff();
+    const res = await app.request(`/api/sessions/${session.id}/comments`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nodeId: node.id, text: "bad", anchor: { startLine: 99999, startSide: "new", endLine: 99999, endSide: "new" } }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toMatch(/anchor/i);
+  });
+
+  it("rejects a half-specified anchor at the schema layer", async () => {
+    const { session, node } = await makeSessionWithDiff();
+    const res = await app.request(`/api/sessions/${session.id}/comments`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nodeId: node.id, text: "bad", anchor: { startLine: 1, startSide: "new" } }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("node-level comments still work with a whole-node snippet", async () => {
+    const { session, node } = await makeSessionWithDiff();
+    const res = await app.request(`/api/sessions/${session.id}/comments`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nodeId: node.id, text: "node-level" }),
+    });
+    expect(res.status).toBe(200);
+    const { comment } = await res.json();
+    expect(comment.anchor).toBeNull();
   });
 });
 

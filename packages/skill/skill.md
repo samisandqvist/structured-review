@@ -1,7 +1,7 @@
 <!-- packages/skill/skill.md -->
 ---
 name: code-review-walkthrough
-description: Walk a reviewer through code changes along the call/dependency graph instead of a file tree. Produces a structured review plan, launches a local web UI for graph-based navigation, and exports node-anchored comments.
+description: Walk a reviewer through code changes along the call/dependency graph instead of a file tree. Produces a structured review plan, launches a local web UI for graph-based navigation, and exports node- and line-anchored comments.
 ---
 
 # Code Review Walkthrough
