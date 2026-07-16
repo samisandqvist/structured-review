@@ -113,17 +113,17 @@ export function repoFingerprint(root: string = repoRoot()): string | null {
  * Content-sensitive fingerprint of one subtree (a language root), or null
  * when git is unavailable. Keyed on the subtree's tree object sha at HEAD —
  * not HEAD itself — so commits that don't touch the subtree leave the key
- * unchanged; plus `git diff HEAD -- <subdir>` (staged + unstaged) and each
- * untracked file's path and content under the subtree.
+ * unchanged; plus `git diff HEAD` (staged + unstaged) and each untracked
+ * file's path and content, both scoped to `pathspecs` when given (the
+ * caller's language-relevant files) and to the bare subdir otherwise.
  *
- * Known limitation: the `""` (repo root) subdir key spans the *whole* repo
- * (pathspec "."), so a language root that sits at the repo root above other
- * nested-language roots invalidates on any change anywhere in the tree, not
- * just changes relevant to its own language — see the Phase 1 roadmap
- * checkpoint note for the remedy (language-scoped fingerprint by SOURCE_EXTS).
+ * Known limitation: the HEAD component of the `""` (repo root) key is the
+ * whole-repo tree sha, so any *commit* still moves a repo-root job's key
+ * even when it touched nothing language-relevant. The working-tree parts —
+ * the edit loop — are fully language-scoped via `pathspecs`.
  */
-export function subtreeFingerprint(subdir: string, root: string = repoRoot()): string | null {
-  const pathspec = subdir === "" ? "." : subdir;
+export function subtreeFingerprint(subdir: string, root: string = repoRoot(), pathspecs?: string[]): string | null {
+  const specs = pathspecs ?? [subdir === "" ? "." : subdir];
   try {
     const h = createHash("sha256");
     try {
@@ -133,8 +133,8 @@ export function subtreeFingerprint(subdir: string, root: string = repoRoot()): s
       // Subtree absent at HEAD (brand-new root): untracked contents below cover it.
       h.update("<no-tree>");
     }
-    h.update(execFileSync("git", ["diff", "HEAD", "--", pathspec], { cwd: root, maxBuffer: 256 * 1024 * 1024, ...QUIET }));
-    const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard", "--", pathspec], { cwd: root, encoding: "utf8", ...QUIET })
+    h.update(execFileSync("git", ["diff", "HEAD", "--", ...specs], { cwd: root, maxBuffer: 256 * 1024 * 1024, ...QUIET }));
+    const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard", "--", ...specs], { cwd: root, encoding: "utf8", ...QUIET })
       .split("\n").filter(Boolean);
     for (const f of untracked) {
       h.update(f);

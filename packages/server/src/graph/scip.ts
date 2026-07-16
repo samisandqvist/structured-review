@@ -8,7 +8,7 @@ import protobuf from "protobufjs";
 import type { GraphProvider, GraphNode, GraphEdge, ChangeSubgraph, Flow } from "./provider.js";
 import type { ChangeStatus, EdgeType } from "../types.js";
 import { fileChangedRanges, rangesOverlap, repoFingerprint, repoRoot, subtreeFingerprint, type LineRange } from "../diff.js";
-import { discoverLanguageRoots, rootHasSources, type IndexerJob } from "./roots.js";
+import { discoverLanguageRoots, languagePathspecs, rootHasSources, type IndexerJob } from "./roots.js";
 import { isTestFile } from "../util.js";
 import { buildFlowTree, makeFlow, reachesChanged } from "./flow-tree.js";
 import { entryEvidence, isExportedAt, loadConfiguredEntries, pythonEntryReasons } from "./entry-points.js";
@@ -262,9 +262,9 @@ export class ScipGraphProvider implements GraphProvider {
     return buildGraphFromIndex({ documents: perJob.flat() }, this.repoRoot);
   }
 
-  /** Subtree-scoped cache key; any git failure yields a unique key (cache miss, never stale). */
+  /** Language-scoped subtree cache key; any git failure yields a unique key (cache miss, never stale). */
   protected jobStateKey(job: IndexerJob): string {
-    return subtreeFingerprint(job.root, this.repoRoot) ?? `no-git:${Math.random()}`;
+    return subtreeFingerprint(job.root, this.repoRoot, languagePathspecs(job.language, job.root)) ?? `no-git:${Math.random()}`;
   }
 
   /** Index a root at most once per subtree state; concurrent callers share the run. */
