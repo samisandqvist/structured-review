@@ -90,6 +90,7 @@ export function createSessionsRoute(ctx: AppContext) {
     let keptNodes: GraphNode[];
     let status: Map<string, ChangeStatus>;
     let residuals: ReturnType<typeof computeResiduals>;
+    let indexWarnings: string[] = [];
     try {
       subgraph = await ctx.graphProvider.getChangeSubgraph(body.branch, body.baseRef);
       ({ nodes: keptNodes, status } = reconcileSubgraph(subgraph, body.baseRef, ctx.repoRoot!));
@@ -103,6 +104,7 @@ export function createSessionsRoute(ctx: AppContext) {
         spansByFile.set(n.file, spans);
       }
       residuals = computeResiduals(body.baseRef, spansByFile, ctx.repoRoot!);
+      indexWarnings = (await ctx.graphProvider.getIndexWarnings?.()) ?? [];
     } catch (e) {
       if (e instanceof GitError) return c.json({ error: e.message, phase: e.phase }, 400);
       if (e instanceof IndexError) return c.json({ error: e.message, phase: e.phase }, 400);
@@ -110,7 +112,7 @@ export function createSessionsRoute(ctx: AppContext) {
     }
 
     const session = ctx.db.transaction(() => {
-      const session = createSession(ctx.db, body.branch, body.baseRef, headSha, repoFingerprint(ctx.repoRoot) ?? "");
+      const session = createSession(ctx.db, body.branch, body.baseRef, headSha, repoFingerprint(ctx.repoRoot) ?? "", indexWarnings);
       for (const gnode of keptNodes) {
         createNode(ctx.db, {
           sessionId: session.id, stableId: gnode.stableId,

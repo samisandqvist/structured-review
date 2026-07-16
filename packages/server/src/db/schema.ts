@@ -58,7 +58,7 @@ CREATE INDEX IF NOT EXISTS idx_comments_session ON comments(session_id);
 CREATE INDEX IF NOT EXISTS idx_comments_node ON comments(node_id);
 `;
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 /**
  * SQL applied when upgrading TO each version. Version 1 = baseline tables.
  * `repo_fingerprint` is deliberately NOT in the baseline SCHEMA_SQL: v2 adds it
@@ -70,4 +70,5 @@ export const MIGRATIONS: Record<number, string> = {
   2: `ALTER TABLE review_sessions ADD COLUMN repo_fingerprint TEXT NOT NULL DEFAULT '';`,
   3: `ALTER TABLE nodes ADD COLUMN residual_ranges TEXT;`,
   4: `ALTER TABLE comments ADD COLUMN anchor TEXT;`,
+  5: `ALTER TABLE review_sessions ADD COLUMN index_warnings TEXT NOT NULL DEFAULT '[]';`,
 };

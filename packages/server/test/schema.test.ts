@@ -97,9 +97,20 @@ describe("schema", () => {
 describe("v4 anchor column", () => {
   it("migrates to v4 and persists an anchor JSON round-trip", () => {
     const db = createMemoryDatabase();
-    expect(db.pragma("user_version", { simple: true })).toBe(4);
+    expect(db.pragma("user_version", { simple: true })).toBe(SCHEMA_VERSION);
     const cols = (db.prepare("PRAGMA table_info(comments)").all() as { name: string }[]).map((c) => c.name);
     expect(cols).toContain("anchor");
     db.close();
+  });
+
+  it("adds review_sessions.index_warnings via the v5 migration, '[]' for existing rows", () => {
+    const db = new Database(":memory:");
+    for (const v of [1, 2, 3, 4]) db.exec(MIGRATIONS[v]);
+    db.prepare(
+      "INSERT INTO review_sessions (id, branch, base_ref, status, created_at, head_sha) VALUES ('s1', 'b', 'main', 'planning', 0, '')"
+    ).run();
+    db.exec(MIGRATIONS[5]);
+    const row = db.prepare("SELECT index_warnings FROM review_sessions WHERE id = 's1'").get() as { index_warnings: string };
+    expect(row.index_warnings).toBe("[]");
   });
 });

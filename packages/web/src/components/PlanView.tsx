@@ -40,6 +40,13 @@ export function PlanView({
         <span style={{ fontFamily: "var(--display)", fontWeight: 700, fontSize: 17 }}>Plan</span>
         <span style={{ color: "var(--dim)", fontSize: 15 }}>{units.length} units</span>
       </div>
+      {(sessionData?.session?.indexWarnings?.length ?? 0) > 0 && (
+        <div style={warnBanner}>
+          {sessionData!.session.indexWarnings!.map((w, i) => (
+            <div key={i}>⚠ {w}</div>
+          ))}
+        </div>
+      )}
       <div style={{ overflow: "auto", flex: 1, padding: "4px 16px 20px" }}>
         {units.map((u) => (
           <UnitBlock
@@ -342,4 +349,13 @@ const head: React.CSSProperties = {
 };
 const empty: React.CSSProperties = {
   flex: 1, height: "100%", display: "grid", placeItems: "center", background: "var(--panel)",
+};
+const warnBanner: React.CSSProperties = {
+  margin: "8px 16px 0",
+  padding: "8px 12px",
+  borderRadius: 6,
+  background: "rgba(230, 160, 30, 0.12)",
+  border: "1px solid rgba(230, 160, 30, 0.35)",
+  fontSize: 13,
+  lineHeight: 1.5,
 };

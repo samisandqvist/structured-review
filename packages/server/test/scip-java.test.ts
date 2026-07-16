@@ -3,7 +3,8 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ScipGraphProvider, resolveScipJavaCommand } from "../src/graph/scip.js";
+import { ScipGraphProvider, resolveScipJavaCommand, type ScipJavaCommand, type BuiltGraph } from "../src/graph/scip.js";
+import type { IndexerJob } from "../src/graph/roots.js";
 
 describe("resolveScipJavaCommand", () => {
   it("honors the SCIP_JAVA_CMD override verbatim", () => {
@@ -90,4 +91,45 @@ describe("scip-java integration", () => {
       }
     }
   );
+});
+
+describe("java degradation (planJobs)", () => {
+  const JOBS: IndexerJob[] = [
+    { language: "ts", root: "", hasSources: true },
+    { language: "java", root: "introspector", hasSources: true },
+    { language: "py", root: "mcp/svc", hasSources: true },
+  ];
+  class Probe extends ScipGraphProvider {
+    java: ScipJavaCommand | null = null;
+    protected override discoverJobs(): IndexerJob[] { return JOBS; }
+    protected override resolveJavaCommand(): ScipJavaCommand | null { return this.java; }
+    plan() { return this.planJobs(); }
+  }
+
+  it("drops java jobs with a visible warning when the toolchain is missing", () => {
+    const p = new Probe({ repoRoot: "/tmp" });
+    const { jobs, warnings } = p.plan();
+    expect(jobs.map((j) => j.language)).toEqual(["ts", "py"]);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/Java indexing skipped/);
+    expect(warnings[0]).toMatch(/'introspector'/);
+    expect(warnings[0]).toMatch(/cs launch com\.sourcegraph:scip-java/);
+    expect(warnings[0]).toMatch(/SCIP_JAVA_CMD/);
+  });
+
+  it("keeps java jobs and emits no warning when the toolchain resolves", () => {
+    const p = new Probe({ repoRoot: "/tmp" });
+    p.java = { argv0: "scip-java", args: [] };
+    const { jobs, warnings } = p.plan();
+    expect(jobs.map((j) => j.language)).toEqual(["ts", "java", "py"]);
+    expect(warnings).toEqual([]);
+  });
+
+  it("emits no warning when no java roots exist", () => {
+    class NoJava extends Probe {
+      protected override discoverJobs(): IndexerJob[] { return JOBS.filter((j) => j.language !== "java"); }
+    }
+    const p = new NoJava({ repoRoot: "/tmp" });
+    expect(p.plan().warnings).toEqual([]);
+  });
 });

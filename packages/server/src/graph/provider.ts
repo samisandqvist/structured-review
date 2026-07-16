@@ -51,4 +51,7 @@ export interface GraphProvider {
   /** Execution flows (call trees from entry points). [] if unsupported.
    *  With changedStableIds, trees are pruned to change-relevant paths + one-hop context. */
   getFlows(changedStableIds?: Set<string>): Promise<Flow[]>;
+  /** Optional: per-language indexing degradation notices for the current build
+   *  (e.g. "Java indexing skipped: toolchain missing"). Absent/[] = none. */
+  getIndexWarnings?(): Promise<string[]>;
 }

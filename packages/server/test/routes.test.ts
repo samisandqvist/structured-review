@@ -138,6 +138,32 @@ describe("POST /api/sessions", () => {
     const { n } = db.prepare("SELECT COUNT(*) AS n FROM review_sessions").get() as { n: number };
     expect(n).toBe(0);
   });
+
+  it("persists and returns index warnings from the graph provider", async () => {
+    const warning = "Java indexing skipped for 1 root(s) ('introspector'): scip-java toolchain not found.";
+    const stub = new StubGraphProvider() as StubGraphProvider & { getIndexWarnings(): Promise<string[]> };
+    stub.getIndexWarnings = async () => [warning];
+    const warnApp = createApp({ db, graphProvider: stub, repoRoot: fixtureRoot });
+    const cr = await warnApp.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    expect(cr.status).toBe(200);
+    const { session } = await cr.json();
+    expect(session.indexWarnings).toEqual([warning]);
+    const res = await warnApp.request(`/api/sessions/${session.id}`);
+    const body = await res.json();
+    expect(body.session.indexWarnings).toEqual([warning]);
+  });
+
+  it("returns empty index warnings when the provider reports none", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    expect(session.indexWarnings).toEqual([]);
+  });
 });
 
 describe("GET /api/sessions/:id", () => {
