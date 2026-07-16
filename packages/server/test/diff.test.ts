@@ -3,8 +3,9 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { extractHunkDiff, extractLinesForRanges, getNodeDiff, nodeChangeStats, subtractRanges, resolveRef, changedFilesStrict, currentBranch, repoFingerprint, subtreeFingerprint, formatHunkSnippet, GitError } from "../src/diff.js";
+import { extractHunkDiff, extractLinesForRanges, getNodeDiff, nodeChangeStats, subtractRanges, resolveRef, changedFilesStrict, currentBranch, repoFingerprint, subtreeFingerprint, formatHunkSnippet, anchorRowRange, GitError } from "../src/diff.js";
 import type { DiffLine } from "../src/diff.js";
+import type { CommentAnchor } from "../src/types.js";
 
 let fixtureRepo: string;
 let emptyTmpDir: string;
@@ -286,6 +287,38 @@ describe("getNodeDiffForRanges", () => {
 
   it("returns null when no range matches", () => {
     expect(extractLinesForRanges(raw, [{ start: 100, end: 110 }])).toBeNull();
+  });
+});
+
+describe("anchorRowRange", () => {
+  const lines: DiffLine[] = [
+    { type: "context", oldLine: 10, newLine: 10, text: "ctx" },     // idx 0
+    { type: "removed", oldLine: 11, newLine: null, text: "gone" },  // idx 1
+    { type: "added", oldLine: null, newLine: 11, text: "new1" },    // idx 2
+    { type: "context", oldLine: 12, newLine: 12, text: "ctx" },     // idx 3
+    { type: "added", oldLine: null, newLine: 13, text: "new2" },    // idx 4
+  ];
+  const a = (startLine: number, startSide: "old" | "new", endLine: number, endSide: "old" | "new"): CommentAnchor =>
+    ({ startLine, startSide, endLine, endSide });
+
+  it("resolves a single added line", () => {
+    expect(anchorRowRange(lines, a(11, "new", 11, "new"))).toEqual({ startIdx: 2, endIdx: 2 });
+  });
+  it("resolves a mixed-side range (removed -> added) spanning context", () => {
+    expect(anchorRowRange(lines, a(11, "old", 13, "new"))).toEqual({ startIdx: 1, endIdx: 4 });
+  });
+  it("rejects a context line as endpoint", () => {
+    expect(anchorRowRange(lines, a(12, "new", 13, "new"))).toBeNull();
+  });
+  it("rejects a line not in the diff", () => {
+    expect(anchorRowRange(lines, a(99, "new", 99, "new"))).toBeNull();
+  });
+  it("rejects an inverted range (rendered order)", () => {
+    expect(anchorRowRange(lines, a(13, "new", 11, "old"))).toBeNull();
+  });
+  it("rejects a wrong-side endpoint (added line addressed as old)", () => {
+    expect(anchorRowRange(lines, a(11, "old", 11, "new"))).toEqual({ startIdx: 1, endIdx: 2 });
+    expect(anchorRowRange(lines, a(13, "old", 13, "old"))).toBeNull();
   });
 });
 
