@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, type Node } from "./client.js";
+import { api, type Node, type CommentAnchor } from "./client.js";
 
 export function useSession(sessionId: string) {
   return useQuery({ queryKey: ["session", sessionId], queryFn: () => api.getSession(sessionId) });
@@ -60,8 +60,8 @@ export function useUpdateUnit(sessionId: string) {
 export function useCreateComment(sessionId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ nodeId, text }: { nodeId: string; text: string }) =>
-      api.createComment(sessionId, nodeId, text),
+    mutationFn: ({ nodeId, text, anchor }: { nodeId: string; text: string; anchor?: CommentAnchor }) =>
+      api.createComment(sessionId, nodeId, text, anchor),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["comments", sessionId] });
       qc.invalidateQueries({ queryKey: ["nodes", sessionId] });
