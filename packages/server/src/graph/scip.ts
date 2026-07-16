@@ -396,7 +396,11 @@ const ROLE_DEFINITION = 0x1;
 const ROLE_IMPORT = 0x2;
 
 function labelOf(symbol: string): string | null {
-  const s = symbol.replace(/\(\)\.$/, "").replace(/[.#/]+$/, "");
+  // Strip any method descriptor suffix: `().` and java overloads `(+N).`.
+  const s = symbol.replace(/\([^)]*\)\.$/, "").replace(/[.#/]+$/, "");
+  // Java constructors (`Cls#`<init>``): label with the class name.
+  const ctor = s.match(/([A-Za-z0-9_$]+)#`<init>`$/);
+  if (ctor) return ctor[1];
   const m = s.match(/([A-Za-z0-9_$]+)`?$/);
   return m ? m[1] : null;
 }
@@ -417,6 +421,10 @@ export function buildGraphFromIndex(idx: ScipIndex, root: string): BuiltGraph {
       if (!((o.symbolRoles ?? 0) & ROLE_DEFINITION)) continue;
       if (!o.symbol || o.symbol.startsWith("local ")) continue;
       if (/[#/]$/.test(o.symbol)) continue; // skip types / namespaces
+      // scip-java attaches enclosingRange to fields/enum constants too (TS and
+      // Python indexers only give it to callables): in Java documents, only a
+      // method descriptor (`…(...).`) is a graph node.
+      if (file.endsWith(".java") && !/\)\.$/.test(o.symbol)) continue;
       const span = span1(o.enclosingRange);
       if (!span) continue; // require a body span -> function/method
       const label = labelOf(o.symbol);

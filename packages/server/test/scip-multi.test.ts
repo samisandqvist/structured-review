@@ -131,3 +131,65 @@ describe("python symbol shapes (audit lock-in)", () => {
     expect(g.callAdj.get(PY_FN)).toEqual([PY_METHOD]);
   });
 });
+
+describe("java symbol shapes (spike deltas)", () => {
+  const J = "semanticdb maven maven/org.example/demo 1.0.0 ";
+  const J_RUN = `${J}demo/App#run().`;
+  const J_OVERLOAD = `${J}demo/App#run(+1).`;
+  const J_CTOR = "semanticdb maven maven/org.example/demo 1.0.0 demo/App#`<init>`().";
+  const J_FIELD = `${J}demo/App#svc.`;
+  const J_GREET = `${J}demo/Svc#greet().`;
+
+  const javaDocs: ScipDocument[] = [
+    {
+      relativePath: "src/main/java/demo/App.java",
+      occurrences: [
+        // scip-java gives ALL of these an enclosingRange — fields included.
+        { symbol: J_CTOR, symbolRoles: 1, range: [2, 9, 12], enclosingRange: [2, 2, 4, 3] },
+        { symbol: J_RUN, symbolRoles: 1, range: [5, 16, 19], enclosingRange: [5, 2, 7, 3] },
+        { symbol: J_OVERLOAD, symbolRoles: 1, range: [8, 16, 19], enclosingRange: [8, 2, 10, 3] },
+        { symbol: J_FIELD, symbolRoles: 1, range: [1, 20, 23], enclosingRange: [1, 2, 1, 30] },
+        { symbol: J_FIELD, symbolRoles: 0, range: [6, 4, 7] },  // run() reads the field
+        { symbol: J_GREET, symbolRoles: 0, range: [6, 8, 13] }, // run() calls Svc#greet()
+      ],
+    },
+    {
+      relativePath: "src/main/java/demo/Svc.java",
+      occurrences: [{ symbol: J_GREET, symbolRoles: 1, range: [1, 16, 21], enclosingRange: [1, 2, 3, 3] }],
+    },
+  ];
+
+  it("keeps only method-descriptor symbols as nodes in .java documents", () => {
+    const g = buildGraphFromIndex({ documents: javaDocs }, "/repo");
+    expect(g.nodes.has(J_RUN)).toBe(true);
+    expect(g.nodes.has(J_GREET)).toBe(true);
+    expect(g.nodes.has(J_FIELD)).toBe(false); // field def carries enclosingRange but is not a node
+  });
+
+  it("keeps overloads ((+N). descriptors) and labels them", () => {
+    const g = buildGraphFromIndex({ documents: javaDocs }, "/repo");
+    expect(g.nodes.get(J_OVERLOAD)?.label).toBe("run");
+  });
+
+  it("labels constructors with the class name", () => {
+    const g = buildGraphFromIndex({ documents: javaDocs }, "/repo");
+    expect(g.nodes.get(J_CTOR)?.label).toBe("App");
+  });
+
+  it("derives method-level call edges and no field-read edges", () => {
+    const g = buildGraphFromIndex({ documents: javaDocs }, "/repo");
+    expect(g.callAdj.get(J_RUN)).toEqual([J_GREET]);
+  });
+
+  it("does not apply the java node filter to non-java documents", () => {
+    // A python term-shaped symbol with enclosingRange must still be dropped or
+    // kept exactly as before this change: the ts/py fixtures above prove
+    // labels/nodes are unchanged, this pins the filter's file scoping.
+    const tsDoc: ScipDocument[] = [{
+      relativePath: "src/a.ts",
+      occurrences: [{ symbol: TS_MAIN, symbolRoles: 1, range: [0, 9, 10], enclosingRange: [0, 0, 4, 1] }],
+    }];
+    const g = buildGraphFromIndex({ documents: tsDoc }, "/repo");
+    expect(g.nodes.has(TS_MAIN)).toBe(true);
+  });
+});
