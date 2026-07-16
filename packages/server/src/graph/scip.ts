@@ -298,6 +298,14 @@ export class ScipGraphProvider implements GraphProvider {
             encoding: "utf8",
             maxBuffer: 256 * 1024 * 1024,
           });
+        } else if (job.language === "py") {
+          const binJs = resolveIndexerBin("@sourcegraph/scip-python", "scip-python");
+          const projectName = job.root.replace(/[^A-Za-z0-9._-]+/g, "-") || "repo";
+          execFileSync(process.execPath, [binJs, "index", ".", "--output", indexPath, "--project-name", projectName], {
+            cwd: absRoot,
+            encoding: "utf8",
+            maxBuffer: 256 * 1024 * 1024,
+          });
         } else {
           throw new IndexError(`no indexer available for language '${job.language}' (root '${job.root || "."}')`);
         }
