@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { accessSync, constants as fsConstants, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createRequire } from "node:module";
@@ -309,6 +309,18 @@ export class ScipGraphProvider implements GraphProvider {
             encoding: "utf8",
             maxBuffer: 256 * 1024 * 1024,
           });
+        } else if (job.language === "java") {
+          const cmd = resolveScipJavaCommand();
+          if (!cmd) {
+            throw new IndexError(
+              `scip-java toolchain not found for root '${job.root || "."}': install coursier ('cs') plus a JDK and Maven, or set SCIP_JAVA_CMD`
+            );
+          }
+          execFileSync(cmd.argv0, [...cmd.args, "index", "--output", indexPath], {
+            cwd: absRoot,
+            encoding: "utf8",
+            maxBuffer: 256 * 1024 * 1024,
+          });
         } else {
           throw new IndexError(`no indexer available for language '${job.language}' (root '${job.root || "."}')`);
         }
@@ -337,6 +349,48 @@ function resolveIndexerBin(pkgName: string, binName: string): string {
   const pkg = require(`${pkgName}/package.json`) as { bin: string | Record<string, string> };
   const rel = typeof pkg.bin === "string" ? pkg.bin : pkg.bin[binName];
   return join(dirname(pkgPath), rel);
+}
+
+const SCIP_JAVA_DEFAULT_VERSION = "0.12.3";
+
+export interface ScipJavaCommand { argv0: string; args: string[] }
+
+/**
+ * Locate a way to run scip-java (a JVM tool we cannot bundle): SCIP_JAVA_CMD
+ * override, a `scip-java` launcher on PATH, or coursier (`cs`) launching the
+ * pinned coordinates. Null = unavailable — callers must degrade Java jobs
+ * with a visible warning, never silently. NOTE: `cs install scip-java` does
+ * not exist in coursier's default channel; only the launch-by-coordinates
+ * form is reliable.
+ */
+export function resolveScipJavaCommand(env: NodeJS.ProcessEnv = process.env): ScipJavaCommand | null {
+  const override = env.SCIP_JAVA_CMD?.trim();
+  if (override) {
+    const [argv0, ...args] = override.split(/\s+/);
+    return { argv0, args };
+  }
+  if (findOnPath("scip-java", env)) return { argv0: "scip-java", args: [] };
+  if (findOnPath("cs", env)) {
+    const version = env.SCIP_JAVA_VERSION ?? SCIP_JAVA_DEFAULT_VERSION;
+    return {
+      argv0: "cs",
+      args: ["launch", `com.sourcegraph:scip-java_2.13:${version}`, "-M", "com.sourcegraph.scip_java.ScipJava", "--"],
+    };
+  }
+  return null;
+}
+
+function findOnPath(bin: string, env: NodeJS.ProcessEnv): boolean {
+  for (const dir of (env.PATH ?? "").split(":")) {
+    if (!dir) continue;
+    try {
+      accessSync(join(dir, bin), fsConstants.X_OK);
+      return true;
+    } catch {
+      /* keep looking */
+    }
+  }
+  return false;
 }
 
 // ---- SCIP decoding -------------------------------------------------------
