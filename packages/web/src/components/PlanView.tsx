@@ -23,6 +23,13 @@ export function PlanView({
   if (units.length === 0) {
     return (
       <div style={empty}>
+        {(sessionData?.session?.indexWarnings?.length ?? 0) > 0 && (
+          <div style={warnBanner}>
+            {sessionData!.session.indexWarnings!.map((w, i) => (
+              <div key={i}>⚠ {w}</div>
+            ))}
+          </div>
+        )}
         <div style={{ maxWidth: 320, textAlign: "center" }}>
           <div style={{ fontSize: 26, marginBottom: 10, opacity: 0.5 }}>⌖</div>
           <h2 style={{ fontSize: 18, marginBottom: 6 }}>No review plan yet</h2>
