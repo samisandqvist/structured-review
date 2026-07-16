@@ -102,7 +102,7 @@ export function pythonEntryReasons(
   }
 
   // `if __name__ == "__main__":` block calling this node -> cli entry.
-  const guard = lines.findIndex((l) => /^if __name__ == ["']__main__["']\s*:/.test(l));
+  const guard = lines.findIndex((l) => /^if\s+__name__\s*==\s*["']__main__["']\s*:/.test(l));
   if (guard !== -1) {
     const callRe = new RegExp(`\\b${node.label}\\s*\\(`);
     for (let i = guard + 1; i < lines.length; i++) {

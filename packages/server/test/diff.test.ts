@@ -427,6 +427,7 @@ describe("subtreeFingerprint", () => {
       g("config", "user.name", "t");
       writeFileSync(join(dir, "package.json"), "{}");
       writeFileSync(join(dir, "a.ts"), "export const x = 1;\n");
+      writeFileSync(join(dir, "tsconfig.base.json"), "{}");
       mkdirSync(join(dir, "mcp", "svc"), { recursive: true });
       writeFileSync(join(dir, "mcp", "svc", "pyproject.toml"), "[project]\n");
       writeFileSync(join(dir, "mcp", "svc", "b.py"), "x = 1\n");
@@ -460,6 +461,12 @@ describe("subtreeFingerprint", () => {
       writeFileSync(join(dir, "mcp", "svc", "c.py"), "y = 1\n");
       expect(subtreeFingerprint("", dir, tsSpecs)).toBe(ts3);
       expect(subtreeFingerprint("mcp/svc", dir, pySpecs)).not.toBe(py3);
+
+      // Editing a fingerprint-only config chain file (tsconfig.base.json,
+      // not a marker) still moves the ts key — indexers follow `extends`.
+      const ts4 = subtreeFingerprint("", dir, tsSpecs);
+      writeFileSync(join(dir, "tsconfig.base.json"), '{"compilerOptions":{}}');
+      expect(subtreeFingerprint("", dir, tsSpecs)).not.toBe(ts4);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

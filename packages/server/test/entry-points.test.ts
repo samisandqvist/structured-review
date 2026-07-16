@@ -90,6 +90,11 @@ describe("pythonEntryReasons", () => {
     expect(pythonEntryReasons(dir, "app.py", { label: "main", startLine: 1 })).toEqual(["cli"]);
   });
 
+  it("detects a __main__ guard without PEP8 spacing", () => {
+    const dir = write('def main():\n    pass\n\n\nif __name__=="__main__":\n    main()\n');
+    expect(pythonEntryReasons(dir, "app.py", { label: "main", startLine: 1 })).toEqual(["cli"]);
+  });
+
   it("ignores unrelated decorators, other functions, and unreadable files", () => {
     const dir = write('@functools.lru_cache\ndef helper():\n    pass\n\n\nif __name__ == "__main__":\n    main()\n');
     expect(pythonEntryReasons(dir, "app.py", { label: "helper", startLine: 2 })).toEqual([]);
