@@ -43,16 +43,17 @@ describe("api client", () => {
 });
 
 describe("defaultPartition", () => {
-  it("makes one flow-unit per affected flow plus an orphan unit", () => {
+  it("makes one flow-unit per affected flow and leaves orphans to server attachment", () => {
     const flows = [
       { id: 1, name: "handleOrder", affected: true, entryStableId: "fn:handleOrder", steps: [] },
       { id: 2, name: "unused", affected: false, entryStableId: "fn:unused", steps: [] },
     ];
     const orphans = [{ stableId: "fn:helper", label: "helper", file: "h.ts" }];
     const units = defaultPartition(flows as any, orphans as any);
+    // No explicit orphan unit: explicit membership would block plan-time
+    // attachment; leftovers get swept into the auto Unassigned unit instead.
     expect(units).toEqual([
       { kind: "flow", flowEntryStableId: "fn:handleOrder", label: "handleOrder" },
-      { kind: "orphans", orphanStableIds: ["fn:helper"], label: "Other changes" },
     ]);
   });
 });

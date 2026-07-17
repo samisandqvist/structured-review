@@ -97,15 +97,14 @@ export async function exportComments(
   return fetchJson(`${base}/api/sessions/${sessionId}/export`);
 }
 
-/** Deterministic plan: one flow-unit per affected flow + one catch-all orphan unit. */
-export function defaultPartition(flows: FlowDTO[], orphans: OrphanDTO[]): UnitInput[] {
-  const flowUnits: UnitInput[] = flows
+/** Deterministic plan: one flow-unit per affected flow. Orphans are left out
+ *  on purpose — the server attaches tests/DTOs/residuals to the flow units at
+ *  plan write (explicit membership would block that), and sweeps true
+ *  leftovers into the auto "Unassigned changes" unit. */
+export function defaultPartition(flows: FlowDTO[], _orphans: OrphanDTO[]): UnitInput[] {
+  return flows
     .filter((f) => f.affected)
     .map((f) => ({ kind: "flow", flowEntryStableId: f.entryStableId, label: f.name }));
-  const orphanUnit: UnitInput[] = orphans.length
-    ? [{ kind: "orphans", orphanStableIds: orphans.map((o) => o.stableId), label: "Other changes" }]
-    : [];
-  return [...flowUnits, ...orphanUnit];
 }
 
 export function uiUrl(base: string, sessionId: string): string {
