@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # coursier (`cs`) lets the scip-java integration test run for real;
+      # without it the test self-skips and Java coverage silently drops.
+      # JDK + Maven are preinstalled on ubuntu runners.
+      - uses: coursier/setup-action@v1
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm typecheck
+
+      - run: pnpm test
+
+      - run: pnpm build
+
+      # The plugin ships as a committed bundle (plugin/dist + plugin/web).
+      # Fail when a runtime change was pushed without rebuilding it.
+      - name: Plugin bundle freshness
+        run: |
+          pnpm build:plugin
+          if ! git diff --exit-code plugin/ || [ -n "$(git status --porcelain plugin/)" ]; then
+            echo "::error::plugin/ bundle is stale — run 'pnpm build && pnpm build:plugin' and commit the result"
+            git status --porcelain plugin/
+            exit 1
+          fi
