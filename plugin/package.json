@@ -1,0 +1,13 @@
+{
+  "name": "crw-plugin-deps",
+  "private": true,
+  "type": "module",
+  "description": "Runtime indexer dependencies for the code-review-walkthrough plugin. The SessionStart hook npm-installs these into ${CLAUDE_PLUGIN_DATA}; the server resolves them via CRW_INDEXER_HOME.",
+  "dependencies": {
+    "@sourcegraph/scip-python": "^0.6.6",
+    "@sourcegraph/scip-typescript": "^0.4.0"
+  },
+  "engines": {
+    "node": ">=22.13"
+  }
+}

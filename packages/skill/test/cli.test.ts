@@ -1,8 +1,8 @@
 // packages/skill/test/cli.test.ts — pure pieces of the CLI: arg parsing and
 // the serve reuse/spawn/conflict decision.
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { parseCliArgs } from "../src/cli.js";
-import { decideServe } from "../src/serve.js";
+import { decideServe, statePaths } from "../src/serve.js";
 
 describe("parseCliArgs", () => {
   it("joins positionals into a command and collects value flags", () => {
@@ -20,6 +20,24 @@ describe("parseCliArgs", () => {
   it("parses flags that take values even when a boolean flag follows", () => {
     const { flags } = parseCliArgs(["serve", "--repo", "/tmp/x", "--port", "4000"]);
     expect(flags).toEqual({ repo: "/tmp/x", port: "4000" });
+  });
+});
+
+describe("statePaths", () => {
+  afterEach(() => { delete process.env.CRW_DATA_DIR; });
+
+  it("keeps state in the repo without CRW_DATA_DIR", () => {
+    expect(statePaths("/home/x/repo")).toEqual({ logDir: "/home/x/repo/.crw" });
+  });
+
+  it("keys DB and logs by repo name + path hash under the data dir", () => {
+    process.env.CRW_DATA_DIR = "/data";
+    const a = statePaths("/home/x/repo");
+    const b = statePaths("/home/y/repo"); // same basename, different path
+    expect(a.dbPath).toMatch(/^\/data\/db\/repo-[0-9a-f]+\.db$/);
+    expect(a.logDir).toMatch(/^\/data\/logs\/repo-[0-9a-f]+$/);
+    expect(a.dbPath).not.toBe(b.dbPath);
+    expect(statePaths("/home/x/repo")).toEqual(a); // deterministic
   });
 });
 

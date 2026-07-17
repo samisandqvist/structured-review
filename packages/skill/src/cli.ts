@@ -208,7 +208,16 @@ async function cmdWait(base: string, flags: Record<string, string | boolean>): P
   }
 }
 
+/** The server needs node:sqlite (unflagged since 22.13) — fail with a clear
+ *  message instead of a cryptic module error on the spawned server. */
+function checkNodeVersion(): void {
+  const [major, minor] = process.versions.node.split(".").map(Number);
+  if (major > 22 || (major === 22 && minor >= 13)) return;
+  throw new Error(`crw requires Node >= 22.13 (found ${process.versions.node})`);
+}
+
 export async function runCli(argv: string[]): Promise<void> {
+  checkNodeVersion();
   const { command, flags } = parseCliArgs(argv);
   const base = baseUrlFor(flags);
 

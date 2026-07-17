@@ -39,10 +39,28 @@ export function decideServe(health: Health | null, wantRoot: string): ServeActio
   return { action: "conflict", reason: `port is occupied by ${serving} — pick another --port or stop it (pid ${health.pid ?? "unknown"})` };
 }
 
-/** The server entry ships next to this package: packages/skill/{src,dist} → packages/server/dist. */
+/** Server entry: a bundled sibling (plugin layout: crw.js next to server.js)
+ *  or the monorepo build (packages/skill/{src,dist} → packages/server/dist). */
 export function serverEntryPath(): string {
   const here = dirname(fileURLToPath(import.meta.url));
+  const sibling = join(here, "server.js");
+  if (existsSync(sibling)) return sibling;
   return join(here, "..", "..", "server", "dist", "index.js");
+}
+
+/** Per-repo state paths. With CRW_DATA_DIR set (plugin mode:
+ *  ${CLAUDE_PLUGIN_DATA}), the DB and logs live there — keyed by repo name +
+ *  path hash so one hub per repo never collides — and the reviewed repo stays
+ *  untouched. Without it, state lands in the repo as before (review.db,
+ *  .crw/server.log). */
+export function statePaths(repoRoot: string): { dbPath?: string; logDir: string } {
+  const dataDir = process.env.CRW_DATA_DIR;
+  if (!dataDir) return { logDir: join(repoRoot, ".crw") };
+  const name = repoRoot.split("/").filter(Boolean).pop() ?? "repo";
+  let hash = 0;
+  for (let i = 0; i < repoRoot.length; i++) hash = (hash * 31 + repoRoot.charCodeAt(i)) >>> 0;
+  const key = `${name.replace(/[^A-Za-z0-9._-]+/g, "-")}-${hash.toString(16)}`;
+  return { dbPath: join(dataDir, "db", `${key}.db`), logDir: join(dataDir, "logs", key) };
 }
 
 export async function ensureServer(opts: { repo: string; port: number }): Promise<ServeResult> {
@@ -59,13 +77,18 @@ export async function ensureServer(opts: { repo: string; port: number }): Promis
   const entry = serverEntryPath();
   if (!existsSync(entry)) throw new Error(`server not built (${entry} missing) — run: pnpm build`);
 
-  const crwDir = join(repoRoot, ".crw");
-  mkdirSync(crwDir, { recursive: true });
-  const logFile = join(crwDir, "server.log");
+  const { dbPath, logDir } = statePaths(repoRoot);
+  mkdirSync(logDir, { recursive: true });
+  if (dbPath) mkdirSync(dirname(dbPath), { recursive: true });
+  const logFile = join(logDir, "server.log");
   const logFd = openSync(logFile, "a");
   const child = spawn(process.execPath, [entry], {
     cwd: repoRoot,
-    env: { ...process.env, PORT: String(opts.port) },
+    env: {
+      ...process.env,
+      PORT: String(opts.port),
+      ...(dbPath ? { CRW_DB_PATH: dbPath } : {}),
+    },
     detached: true,
     stdio: ["ignore", logFd, logFd],
   });
