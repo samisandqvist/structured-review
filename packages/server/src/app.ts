@@ -19,12 +19,18 @@ export interface AppContext {
   repoRoot?: string;
   /** Built web SPA dir. When set and it contains index.html, the app serves it after the API. */
   webDistPath?: string;
+  /** Graph provider name reported on /health (scip | crg | stub). */
+  providerName?: string;
 }
 
 export function createApp(ctx: AppContext) {
   const resolved: AppContext = { ...ctx, repoRoot: ctx.repoRoot ?? defaultRepoRoot() };
   const app = new Hono();
-  app.get("/health", (c) => c.json({ ok: true }));
+  // repoRoot + pid let a CLI tell "the right hub for this repo" apart from a
+  // stranger squatting on the port (crw serve reuse-or-error decision).
+  app.get("/health", (c) =>
+    c.json({ ok: true, repoRoot: resolved.repoRoot, pid: process.pid, provider: resolved.providerName ?? "unknown" })
+  );
   app.route("/api/sessions", createSessionsRoute(resolved));
   app.route("/api/sessions", createNodesRoute(resolved));
   app.route("/api/sessions", createCommentsRoute(resolved));

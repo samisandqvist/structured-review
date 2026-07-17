@@ -1,6 +1,7 @@
 {
   "name": "@crw/skill",
   "type": "module",
+  "bin": { "crw": "./dist/cli.js" },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",

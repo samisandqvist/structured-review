@@ -34,6 +34,24 @@ pnpm typecheck        # typecheck all packages
 pnpm lint             # lint all packages
 ```
 
+## Agent CLI (crw)
+
+`crw` (built: `packages/skill/dist/cli.js`, bin of `@crw/skill`; dev:
+`npx tsx packages/skill/src/cli.ts`) is the stable agent-facing surface for
+setting up and harvesting reviews — no curl or direct SQLite access. JSON on
+stdout; `--pretty` for humans.
+
+```bash
+crw serve [--repo <path>] [--port N]              # start or reuse the hub (checks /health repoRoot)
+crw session create --branch <b> --base <ref>      # prints sessionId, uiUrl, counts, indexWarnings
+crw context --session <id>                        # flows + orphans + change summaries for planning
+crw plan --session <id> (--auto | --units <f>)    # mechanical or LLM-authored plan
+crw diff --session <id> --node <stableId>         # single node diff
+crw status --session <id>                         # coverage, per-unit reviewed/total, unreviewed
+crw comments --session <id>                       # exported comments + review status (GitHub-mappable)
+crw wait --session <id> [--until reviewed|commented]
+```
+
 ## Graph provider (CRG)
 
 Without `CRG_COMMAND` set, the server uses `StubGraphProvider` (3 fixed fake
