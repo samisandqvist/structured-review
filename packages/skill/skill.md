@@ -60,9 +60,10 @@ Harvest flow (after the reviewer walks the plan):
 
 ## Building the review plan
 
-`crw plan --auto` is the mechanical baseline: one flow-unit per affected flow plus
-one catch-all orphan unit. Prefer an LLM-authored plan when the change warrants
-judgment. The plan is an ordered list of **units**, each either a **flow** or an
+`crw plan --auto` is the mechanical baseline: one flow-unit per affected flow;
+tests, DTOs and module-scope leftovers attach themselves to those units at
+submit, and anything truly homeless is swept into the auto "Unassigned changes"
+unit. Prefer an LLM-authored plan when the change warrants judgment. The plan is an ordered list of **units**, each either a **flow** or an
 **orphan group**:
 
 - **flow-unit** — `{ "kind": "flow", "flowEntryStableIds": ["<entry>", ...], "label": "...", "rationale": "..." }`
