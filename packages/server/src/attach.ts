@@ -112,6 +112,22 @@ export function deriveAttachments(
       .sort(byWalk);
     if (consumers.length > 0) {
       attach({ stableId, parentStableId: consumers[0], reason: "required-by", counted: true });
+      continue;
+    }
+
+    // Pass 4 — test imports: a test whose call edges didn't resolve (e.g.
+    // vitest `it()` bodies are anonymous callbacks, so no TESTED_BY edge
+    // forms) still names what it exercises via its file's imports. Nest it
+    // under the first covered node its file requires. Tests only — for
+    // production code this reversed direction would attach on far weaker
+    // evidence.
+    if (node.isTest) {
+      const imported = [...covered]
+        .filter((c) => fileRequires.get(node.file)?.has(byStable.get(c)?.file ?? ""))
+        .sort(byWalk);
+      if (imported.length > 0) {
+        attach({ stableId, parentStableId: imported[0], reason: "tested-by", counted: true });
+      }
     }
   }
   return attached;

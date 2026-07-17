@@ -96,6 +96,25 @@ describe("file-level requires map", () => {
     expect(g.fileRequires.has("src/dto.ts")).toBe(false); // same-file use is not a requires
     expect(g.nodes.has(DTO_TYPE)).toBe(false); // types still excluded as graph nodes
   });
+
+  it("includes function imports/references, so test files require what they import", () => {
+    const FN = "scip-typescript npm pkg 1.0 src/`a.ts`/f().";
+    const documents: ScipDocument[] = [
+      {
+        relativePath: "src/a.ts",
+        occurrences: [{ symbol: FN, symbolRoles: 1, range: [0, 9, 10], enclosingRange: [0, 0, 4, 1] }],
+      },
+      {
+        relativePath: "test/a.test.ts",
+        occurrences: [
+          { symbol: FN, symbolRoles: 2, range: [0, 9, 10] }, // import { f }
+          { symbol: FN, symbolRoles: 0, range: [3, 4, 5] },  // call inside an it() callback
+        ],
+      },
+    ];
+    const g = buildGraphFromIndex({ documents }, "/repo");
+    expect(g.fileRequires.get("test/a.test.ts")).toEqual(new Set(["src/a.ts"]));
+  });
 });
 
 describe("IndexError", () => {
