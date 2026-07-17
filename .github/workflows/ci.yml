@@ -11,14 +11,12 @@ concurrency:
 
 jobs:
   ci:
-    strategy:
-      fail-fast: false
-      # macOS is in the matrix so colleague installs on Macs rest on tested
-      # ground — the suite runs the real indexers, so this exercises the whole
-      # pipeline, not just unit logic.
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    # macOS support was verified on run 29583867228 (commit a972afb): the full
+    # suite incl. real indexers and the bundle rebuild passed on macos-latest.
+    # Removed from the matrix afterwards to save runner minutes — re-add
+    # `macos-latest` here if a platform-sensitive area changes (spawning,
+    # paths, indexer resolution).
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
