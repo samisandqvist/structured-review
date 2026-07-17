@@ -113,4 +113,18 @@ describe("v4 anchor column", () => {
     const row = db.prepare("SELECT index_warnings FROM review_sessions WHERE id = 's1'").get() as { index_warnings: string };
     expect(row.index_warnings).toBe("[]");
   });
+
+  it("adds units.attached via the v6 migration, '[]' for existing rows", () => {
+    const db = new Database(":memory:");
+    for (const v of [1, 2, 3, 4, 5]) db.exec(MIGRATIONS[v]);
+    db.prepare(
+      "INSERT INTO review_sessions (id, branch, base_ref, status, created_at, head_sha) VALUES ('s1', 'b', 'main', 'planning', 0, '')"
+    ).run();
+    db.prepare(
+      "INSERT INTO units (id, session_id, position, label) VALUES ('u1', 's1', 0, 'Unit')"
+    ).run();
+    db.exec(MIGRATIONS[6]);
+    const row = db.prepare("SELECT attached FROM units WHERE id = 'u1'").get() as { attached: string };
+    expect(row.attached).toBe("[]");
+  });
 });

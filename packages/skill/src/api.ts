@@ -27,7 +27,15 @@ export interface SessionNode {
   changeStatus: string; reviewStatus: string; isTest: boolean;
 }
 
-export interface Unit { id: string; label: string; kind: "flow" | "orphans"; memberStableIds: string[]; auto: boolean; }
+/** Server-derived nesting (tests/DTOs/residuals under covered nodes).
+ *  counted=false = cross-unit reference, render-only. */
+export interface AttachedMember {
+  stableId: string;
+  parentStableId: string;
+  reason: "tested-by" | "required-by" | "same-file";
+  counted: boolean;
+}
+export interface Unit { id: string; label: string; kind: "flow" | "orphans"; memberStableIds: string[]; auto: boolean; attached: AttachedMember[]; }
 export interface Coverage { changedTotal: number; covered: number; unassigned: number; }
 export interface SessionInfo {
   session: Session; units: Unit[]; coverage: Coverage;

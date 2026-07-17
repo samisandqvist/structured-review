@@ -139,13 +139,17 @@ async function cmdPlan(base: string, flags: Record<string, string | boolean>): P
   if (flags.open) launchUI(base, sessionId);
   const out = {
     coverage: result.coverage,
-    units: result.units.map((u) => ({ label: u.label, kind: u.kind, auto: u.auto, members: u.memberStableIds.length })),
+    units: result.units.map((u) => ({
+      label: u.label, kind: u.kind, auto: u.auto, members: u.memberStableIds.length,
+      attached: (u.attached ?? []).filter((m) => m.counted).length,
+    })),
   };
   return {
     json: out,
     pretty: [
       `coverage: ${out.coverage.covered}/${out.coverage.changedTotal} assigned, ${out.coverage.unassigned} unassigned`,
-      ...out.units.map((u) => `  ${u.label}${u.auto ? " (auto)" : ""} — ${u.kind}, ${u.members} member(s)`),
+      ...out.units.map((u) =>
+        `  ${u.label}${u.auto ? " (auto)" : ""} — ${u.kind}, ${u.members} member(s)${u.attached ? `, ${u.attached} attached` : ""}`),
     ].join("\n"),
   };
 }

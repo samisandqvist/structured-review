@@ -395,27 +395,60 @@ describe("GET /api/sessions/:id/comments", () => {
 });
 
 describe("coverage reconciliation", () => {
-  it("sweeps uncovered changed nodes into an auto Unassigned unit and reports coverage", async () => {
+  it("attaches same-file leftovers to their covered sibling and reports them covered", async () => {
     const cr = await app.request("/api/sessions", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
-    // Stub flows = [], so an orphan-unit covering one changed node leaves the rest unassigned.
+    // Stub flows = []; fn:validateOrder is unassigned but shares src/orders.ts
+    // with the covered fn:handleOrder, so it attaches instead of sweeping.
     const res = await app.request(`/api/sessions/${session.id}/plan`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ units: [{ kind: "orphans", orphanStableIds: ["fn:handleOrder"], label: "Orders" }] }),
     });
     const body = await res.json();
-    expect(body.coverage.changedTotal).toBe(2); // fn:handleOrder + fn:validateOrder are "changed" in the stub
-    expect(body.coverage.covered).toBe(1);
-    expect(body.coverage.unassigned).toBe(1);
-    const auto = body.units.find((u: any) => u.auto);
-    expect(auto.label).toBe("Unassigned changes");
-    expect(auto.memberStableIds).toEqual(["fn:validateOrder"]);
+    expect(body.coverage).toEqual({ changedTotal: 2, covered: 2, unassigned: 0 });
+    expect(body.units.find((u: any) => u.auto)).toBeUndefined();
+    expect(body.units[0].attached).toEqual([
+      { stableId: "fn:validateOrder", parentStableId: "fn:handleOrder", reason: "same-file", counted: true },
+    ]);
 
     const sres = await app.request(`/api/sessions/${session.id}`);
-    expect((await sres.json()).coverage).toEqual({ changedTotal: 2, covered: 1, unassigned: 1 });
+    expect((await sres.json()).coverage).toEqual({ changedTotal: 2, covered: 2, unassigned: 0 });
+  });
+
+  it("sweeps unattachable changed nodes into the auto Unassigned unit", async () => {
+    // A changed node in its own file with no test edge and no requires
+    // relation cannot attach anywhere — it must still be swept.
+    class LonelyStub extends StubGraphProvider {
+      async getChangeSubgraph(branch: string, baseRef: string) {
+        const sg = await super.getChangeSubgraph(branch, baseRef);
+        return {
+          ...sg,
+          nodes: [...sg.nodes, {
+            stableId: "fn:lonely", label: "lonely", file: "src/lonely.ts",
+            startLine: 1, endLine: 5, isEntryPoint: false,
+            changeStatus: "changed" as const, isTest: false,
+          }],
+        };
+      }
+    }
+    const lonelyApp = createApp({ db, graphProvider: new LonelyStub(), repoRoot: fixtureRoot });
+    const cr = await lonelyApp.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const res = await lonelyApp.request(`/api/sessions/${session.id}/plan`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ units: [{ kind: "orphans", orphanStableIds: ["fn:handleOrder"], label: "Orders" }] }),
+    });
+    const body = await res.json();
+    expect(body.coverage).toEqual({ changedTotal: 3, covered: 2, unassigned: 1 });
+    const auto = body.units.find((u: any) => u.auto);
+    expect(auto.label).toBe("Unassigned changes");
+    expect(auto.memberStableIds).toEqual(["fn:lonely"]);
   });
 });
 

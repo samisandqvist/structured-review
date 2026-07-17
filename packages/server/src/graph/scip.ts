@@ -44,6 +44,8 @@ export interface BuiltGraph {
   nodes: Map<string, RawNode>; // symbol -> node
   callAdj: Map<string, string[]>; // caller -> callees (deduped)
   callRev: Map<string, string[]>; // callee -> callers
+  /** consumer file -> files defining the type symbols it references/imports. */
+  fileRequires: Map<string, Set<string>>;
   /** Per-language degradation notices from job planning (e.g. java toolchain missing). */
   warnings?: string[];
 }
@@ -289,6 +291,10 @@ export class ScipGraphProvider implements GraphProvider {
     return (await this.buildGraph()).warnings ?? [];
   }
 
+  async getFileRequires(): Promise<Map<string, Set<string>>> {
+    return (await this.buildGraph()).fileRequires;
+  }
+
   /** Run every enabled indexer job (each cached per subtree) and merge the documents. */
   protected async indexAndBuild(): Promise<BuiltGraph> {
     this.proto ??= await protobuf.load(SCIP_PROTO);
@@ -531,6 +537,32 @@ export function buildGraphFromIndex(idx: ScipIndex, root: string): BuiltGraph {
     }
   }
 
+  // Type/class definitions (symbols ending `#`) are deliberately NOT graph
+  // nodes, but they carry the DTO→consumer relation: map each type symbol to
+  // its defining file, then every cross-file reference or import of it makes
+  // the referencing file "require" the defining file (plan-time required-by
+  // attachment for changed DTOs).
+  const typeDefFile = new Map<string, string>();
+  for (const d of idx.documents) {
+    const file = rel(d.relativePath ?? "");
+    for (const o of d.occurrences ?? []) {
+      if (!((o.symbolRoles ?? 0) & ROLE_DEFINITION)) continue;
+      if (!o.symbol || o.symbol.startsWith("local ")) continue;
+      if (o.symbol.endsWith("#")) typeDefFile.set(o.symbol, file);
+    }
+  }
+  const fileRequires = new Map<string, Set<string>>();
+  for (const d of idx.documents) {
+    const file = rel(d.relativePath ?? "");
+    for (const o of d.occurrences ?? []) {
+      if ((o.symbolRoles ?? 0) & ROLE_DEFINITION) continue;
+      if (!o.symbol) continue;
+      const def = typeDefFile.get(o.symbol);
+      if (!def || def === file) continue;
+      (fileRequires.get(file) ?? fileRequires.set(file, new Set()).get(file)!).add(def);
+    }
+  }
+
   const callSets = new Map<string, Set<string>>();
   for (const d of idx.documents) {
     const file = rel(d.relativePath ?? "");
@@ -562,5 +594,5 @@ export function buildGraphFromIndex(idx: ScipIndex, root: string): BuiltGraph {
     callAdj.set(src, [...tgts]);
     for (const t of tgts) (callRev.get(t) ?? callRev.set(t, []).get(t)!).push(src);
   }
-  return { nodes, callAdj, callRev };
+  return { nodes, callAdj, callRev, fileRequires };
 }

@@ -17,6 +17,16 @@ export interface SessionStatus {
 }
 
 function unitProgress(unit: Unit, flows: FlowDTO[], byStable: Map<string, SessionNode>): { reviewed: number; total: number } {
+  // Counted attachments (tests/DTOs/residuals nested by the server at plan
+  // time) join the unit's ledger; counted=false references never do.
+  const attachedNodes = (unit.attached ?? [])
+    .filter((m) => m.counted)
+    .map((m) => byStable.get(m.stableId))
+    .filter((n): n is SessionNode => !!n && n.changeStatus === "changed");
+  const withAttached = (reviewed: number, total: number) => ({
+    reviewed: reviewed + attachedNodes.filter((n) => n.reviewStatus !== "unreviewed").length,
+    total: total + attachedNodes.length,
+  });
   if (unit.kind === "flow") {
     const entries = new Set(unit.memberStableIds);
     const unitFlows = flows.filter((f) => entries.has(f.entryStableId));
@@ -28,13 +38,13 @@ function unitProgress(unit: Unit, flows: FlowDTO[], byStable: Map<string, Sessio
         }
       }
       const reviewed = [...changed].filter((id) => byStable.get(id)!.reviewStatus !== "unreviewed").length;
-      return { reviewed, total: changed.size };
+      return withAttached(reviewed, changed.size);
     }
   }
   const members = unit.memberStableIds
     .map((id) => byStable.get(id))
     .filter((n): n is SessionNode => !!n && n.changeStatus === "changed");
-  return { reviewed: members.filter((n) => n.reviewStatus !== "unreviewed").length, total: members.length };
+  return withAttached(members.filter((n) => n.reviewStatus !== "unreviewed").length, members.length);
 }
 
 export function computeStatus(info: SessionInfo, nodes: SessionNode[], flows: FlowDTO[]): SessionStatus {

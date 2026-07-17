@@ -81,19 +81,23 @@ Steps for an LLM-authored plan:
    changed set. Label a merged unit by the shared capability, not the entry names
    (e.g. "Order validation — via API, CLI and worker"). Never merge flows with
    disjoint changed sets just to shorten the plan.
-3. Group the orphans into orphan-units by shared purpose (e.g. "validation
-   helpers", "test fixtures"). Module-scope / non-code-graph changes (types,
-   imports, configs, dependency manifests) — group them by purpose (e.g.
-   "dependency & config changes", "type/contract edits") and order them early:
-   they are the foundations the flows sit on.
+3. Group the remaining orphans into orphan-units by shared purpose (e.g.
+   "validation helpers"). **Do not hand-author units for changed tests, DTOs,
+   or module-scope leftovers of files already in flows** — at plan submit the
+   server nests those under the covered node that gives them context
+   (tested-by / required-by / same-file), and they count toward that unit's
+   coverage. Non-code-graph changes with no such home (configs, dependency
+   manifests) still deserve explicit orphan-units, ordered early: they are the
+   foundations the flows sit on.
 4. Give each unit a `label` and an optional short `rationale` describing **what
    the unit does** (its functionality/purpose) — not why you ordered it.
 5. Order units for a sensible walk (foundational/helper changes first, then the
    flows that depend on them — your judgment).
 6. Write the units array to a JSON file and run
-   `crw plan --session <id> --units plan.json`. It prints `coverage`. If
-   `coverage.unassigned > 0`, add orphan-units for the leftovers (they were swept
-   into the auto "Unassigned changes" unit) and re-submit.
+   `crw plan --session <id> --units plan.json`. It prints `coverage` and
+   per-unit `attached` counts. `coverage.unassigned > 0` now means true
+   leftovers (nothing could attach them): add orphan-units for those and
+   re-submit.
 
 **Never run `git diff` for planning.** If you must read a node's code to decide
 grouping, use `crw diff --session <id> --node <stableId>` — it returns just that
