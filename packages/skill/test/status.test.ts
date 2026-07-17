@@ -41,16 +41,31 @@ describe("computeStatus", () => {
 
   it("counts flow-unit progress over distinct changed steps of its flows", () => {
     const status = computeStatus(
-      info([{ id: "u1", label: "Flow A", kind: "flow", memberStableIds: ["fn:a"], auto: false }]),
+      info([{ id: "u1", label: "Flow A", kind: "flow", memberStableIds: ["fn:a"], auto: false, attached: [] }]),
       nodes, flows
     );
     // fn:c is unchanged, so total = a + b; only a is reviewed.
     expect(status.units[0]).toMatchObject({ label: "Flow A", reviewed: 1, total: 2 });
   });
 
+  it("counts counted attachments in the unit ledger, ignores references", () => {
+    const status = computeStatus(
+      info([{
+        id: "u1", label: "Flow A", kind: "flow", memberStableIds: ["fn:a"], auto: false,
+        attached: [
+          { stableId: "fn:orphan", parentStableId: "fn:a", reason: "tested-by", counted: true },
+          { stableId: "fn:b", parentStableId: "fn:a", reason: "tested-by", counted: false },
+        ],
+      }]),
+      nodes, flows
+    );
+    // base 1/2 + attached fn:orphan (reviewed-commented) = 2/3; the reference adds nothing.
+    expect(status.units[0]).toMatchObject({ reviewed: 2, total: 3 });
+  });
+
   it("counts orphan-unit progress over its changed members", () => {
     const status = computeStatus(
-      info([{ id: "u2", label: "Other", kind: "orphans", memberStableIds: ["fn:orphan", "fn:c"], auto: false }]),
+      info([{ id: "u2", label: "Other", kind: "orphans", memberStableIds: ["fn:orphan", "fn:c"], auto: false, attached: [] }]),
       nodes, flows
     );
     expect(status.units[0]).toMatchObject({ reviewed: 1, total: 1 });
@@ -58,7 +73,7 @@ describe("computeStatus", () => {
 
   it("falls back to member nodes for a flow-unit whose flows did not resolve", () => {
     const status = computeStatus(
-      info([{ id: "u3", label: "Ghost", kind: "flow", memberStableIds: ["fn:b"], auto: false }]),
+      info([{ id: "u3", label: "Ghost", kind: "flow", memberStableIds: ["fn:b"], auto: false, attached: [] }]),
       nodes, [] // no flows resolved
     );
     expect(status.units[0]).toMatchObject({ reviewed: 0, total: 1 });

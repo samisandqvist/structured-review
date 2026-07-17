@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useBulkUpdateNodeStatus, useFlows, useNodes, useSession, useUpdateUnit } from "../api/hooks.js";
 import { useUIStore } from "../store/ui.js";
-import type { Flow, FlowStep, GraphEdgeDTO, Node, Unit } from "../api/client.js";
+import type { AttachedMember, Flow, FlowStep, GraphEdgeDTO, Node, Unit } from "../api/client.js";
 
 export function PlanView({
   sessionId, currentNodeId, onSelectNode,
@@ -115,11 +115,26 @@ function UnitBlock({
       if (s.changeStatus === "changed" && !changedByStable.has(s.stableId)) changedByStable.set(s.stableId, s);
     }
   }
+  // Server-derived attachments (tests / DTOs / residuals nested under covered
+  // nodes at plan-write time). Counted ones join this unit's walk and ledger;
+  // counted=false are cross-unit references, render-only.
+  const attachedByParent = new Map<string, AttachedMember[]>();
+  for (const m of unit.attached ?? []) {
+    const list = attachedByParent.get(m.parentStableId) ?? [];
+    list.push(m);
+    attachedByParent.set(m.parentStableId, list);
+  }
+  const attachedNodes = (unit.attached ?? [])
+    .filter((m) => m.counted)
+    .map((m) => nodeByStable.get(m.stableId))
+    .filter((n): n is Node => !!n && n.changeStatus === "changed");
+
   const useFlowProgress = unit.kind === "flow" && flows.length > 0;
-  const total = useFlowProgress ? changedByStable.size : memberNodes.length;
-  const reviewed = useFlowProgress
+  const total = (useFlowProgress ? changedByStable.size : memberNodes.length) + attachedNodes.length;
+  const reviewed = (useFlowProgress
     ? [...changedByStable.values()].filter((s) => s.reviewStatus && s.reviewStatus !== "unreviewed").length
-    : memberNodes.filter((n) => n.reviewStatus !== "unreviewed").length;
+    : memberNodes.filter((n) => n.reviewStatus !== "unreviewed").length)
+    + attachedNodes.filter((n) => n.reviewStatus !== "unreviewed").length;
 
   // Collapse: manual toggle wins; a fully reviewed unit auto-collapses until
   // deliberately re-expanded.
@@ -137,11 +152,12 @@ function UnitBlock({
   const bulkStatus = useBulkUpdateNodeStatus(sessionId);
   // Unreviewed changed nodeIds of this unit: flow-units from their tracks'
   // steps, orphan-units (or unresolved flows) from memberNodes.
-  const remaining: string[] = useFlowProgress
+  const remaining: string[] = (useFlowProgress
     ? [...changedByStable.values()]
         .filter((s) => s.nodeId && (!s.reviewStatus || s.reviewStatus === "unreviewed"))
         .map((s) => s.nodeId as string)
-    : memberNodes.filter((n) => n.reviewStatus === "unreviewed").map((n) => n.id);
+    : memberNodes.filter((n) => n.reviewStatus === "unreviewed").map((n) => n.id)
+  ).concat(attachedNodes.filter((n) => n.reviewStatus === "unreviewed").map((n) => n.id));
   const markRemaining = () => {
     if (!window.confirm(`Mark ${remaining.length} node${remaining.length === 1 ? "" : "s"} reviewed?`)) return;
     bulkStatus.mutate({ nodeIds: remaining, reviewStatus: "reviewed-clean" });
@@ -240,22 +256,38 @@ function UnitBlock({
         flows.map((f) => (
           <div key={f.entryStableId}>
             {flows.length > 1 && <div className="unit__track-caption">{f.name}</div>}
-            <FlowTrack flow={f} currentNodeId={currentNodeId} onSelectNode={onSelectNode} />
+            <FlowTrack
+              flow={f}
+              attachedByParent={attachedByParent}
+              nodeByStable={nodeByStable}
+              currentNodeId={currentNodeId}
+              onSelectNode={onSelectNode}
+            />
           </div>
         ))
       ) : (
         <div className="unit__chips">
           {memberNodes.map((n) => (
-            <StepChip
-              key={n.id}
-              step={{
-                stableId: n.stableId,
-                label: n.label, file: n.file, startLine: n.startLine, endLine: n.endLine,
-                isTest: n.isTest, depth: 0, nodeId: n.id, changeStatus: n.changeStatus, reviewStatus: n.reviewStatus,
-              }}
-              current={n.id === currentNodeId}
-              onSelect={onSelectNode}
-            />
+            <span key={n.id} style={{ display: "contents" }}>
+              <StepChip
+                step={{
+                  stableId: n.stableId,
+                  label: n.label, file: n.file, startLine: n.startLine, endLine: n.endLine,
+                  isTest: n.isTest, depth: 0, nodeId: n.id, changeStatus: n.changeStatus, reviewStatus: n.reviewStatus,
+                }}
+                current={n.id === currentNodeId}
+                onSelect={onSelectNode}
+              />
+              {(attachedByParent.get(n.stableId) ?? []).map((m) => (
+                <AttachedChip
+                  key={`${m.stableId}-${m.counted}`}
+                  member={m}
+                  node={nodeByStable.get(m.stableId)}
+                  current={nodeByStable.get(m.stableId)?.id === currentNodeId}
+                  onSelect={onSelectNode}
+                />
+              ))}
+            </span>
           ))}
         </div>
       )}
@@ -284,20 +316,43 @@ function trackRows(steps: FlowStep[]): TrackRow[] {
 }
 
 function FlowTrack({
-  flow, currentNodeId, onSelectNode,
+  flow, attachedByParent, nodeByStable, currentNodeId, onSelectNode,
 }: {
   flow: Flow;
+  attachedByParent?: Map<string, AttachedMember[]>;
+  nodeByStable?: Map<string, Node>;
   currentNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
 }) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
-  const renderStep = (s: FlowStep, key: string) => (
-    <div key={key} className="flow__row" style={{ paddingLeft: s.depth * 22 }}>
-      {s.depth > 0 && <span className="flow__branch">└</span>}
-      <StepChip step={s} current={!!s.nodeId && s.nodeId === currentNodeId} onSelect={onSelectNode} />
-    </div>
-  );
+  // Attachments render at their parent's first occurrence in this track only
+  // (a shared callee repeats under each caller; its nested test shouldn't).
+  const attachmentsRendered = new Set<string>();
+  const renderStep = (s: FlowStep, key: string) => {
+    const attached =
+      attachedByParent && !attachmentsRendered.has(s.stableId) ? (attachedByParent.get(s.stableId) ?? []) : [];
+    if (attached.length > 0) attachmentsRendered.add(s.stableId);
+    return (
+      <div key={key}>
+        <div className="flow__row" style={{ paddingLeft: s.depth * 22 }}>
+          {s.depth > 0 && <span className="flow__branch">└</span>}
+          <StepChip step={s} current={!!s.nodeId && s.nodeId === currentNodeId} onSelect={onSelectNode} />
+        </div>
+        {attached.map((m) => (
+          <div key={`${m.stableId}-${m.counted}`} className="flow__row" style={{ paddingLeft: (s.depth + 1) * 22 }}>
+            <span className="flow__branch">↳</span>
+            <AttachedChip
+              member={m}
+              node={nodeByStable?.get(m.stableId)}
+              current={nodeByStable?.get(m.stableId)?.id === currentNodeId}
+              onSelect={onSelectNode}
+            />
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div className="flow__tree">
@@ -316,6 +371,42 @@ function FlowTrack({
         );
       })}
     </div>
+  );
+}
+
+/** A server-attached member (test / DTO / residual) under its parent node.
+ *  counted=false renders dimmed as a cross-unit reference (jump link only). */
+function AttachedChip({
+  member, node, current, onSelect,
+}: {
+  member: AttachedMember;
+  node: Node | undefined;
+  current: boolean;
+  onSelect: (nodeId: string) => void;
+}) {
+  if (!node) return null;
+  const cls = [
+    "step",
+    "step--attached",
+    node.changeStatus === "changed" ? "step--changed" : "",
+    node.isTest ? "step--test" : "",
+    node.reviewStatus !== "unreviewed" ? "step--reviewed" : "",
+    member.counted ? "" : "step--ref",
+    current ? "step--current" : "",
+  ].filter(Boolean).join(" ");
+  const title = member.counted
+    ? `${node.file}:${node.startLine} — attached: ${member.reason}`
+    : `${node.file}:${node.startLine} — ${member.reason} reference; reviewed in its home unit`;
+  return (
+    <button
+      className={cls}
+      data-testid={`attached-${member.counted ? "member" : "ref"}`}
+      onClick={() => onSelect(node.id)}
+      title={title}
+    >
+      {node.label}
+      <span className="step__reason">{member.counted ? member.reason : `${member.reason} →`}</span>
+    </button>
   );
 }
 

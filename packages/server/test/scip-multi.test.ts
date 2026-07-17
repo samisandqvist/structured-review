@@ -67,6 +67,37 @@ describe("merged multi-root graph", () => {
   });
 });
 
+describe("file-level requires map", () => {
+  const DTO_TYPE = "scip-typescript npm pkg 1.0 src/`dto.ts`/OrderDto#";
+  it("maps cross-file type references and imports to the defining file", () => {
+    const documents: ScipDocument[] = [
+      {
+        relativePath: "src/dto.ts",
+        occurrences: [
+          { symbol: DTO_TYPE, symbolRoles: 1, range: [0, 13, 21] }, // type definition
+          { symbol: DTO_TYPE, symbolRoles: 0, range: [5, 2, 10] },  // same-file use: ignored
+        ],
+      },
+      {
+        relativePath: "src/ctrl.ts",
+        occurrences: [
+          { symbol: DTO_TYPE, symbolRoles: 2, range: [0, 9, 17] }, // ROLE_IMPORT
+          { symbol: "scip-typescript npm pkg 1.0 src/`ctrl.ts`/handle().", symbolRoles: 1, range: [2, 9, 15], enclosingRange: [2, 0, 6, 1] },
+        ],
+      },
+      {
+        relativePath: "src/svc.ts",
+        occurrences: [{ symbol: DTO_TYPE, symbolRoles: 0, range: [3, 4, 12] }], // plain reference
+      },
+    ];
+    const g = buildGraphFromIndex({ documents }, "/repo");
+    expect(g.fileRequires.get("src/ctrl.ts")).toEqual(new Set(["src/dto.ts"]));
+    expect(g.fileRequires.get("src/svc.ts")).toEqual(new Set(["src/dto.ts"]));
+    expect(g.fileRequires.has("src/dto.ts")).toBe(false); // same-file use is not a requires
+    expect(g.nodes.has(DTO_TYPE)).toBe(false); // types still excluded as graph nodes
+  });
+});
+
 describe("IndexError", () => {
   it("carries the index phase", () => {
     const e = new IndexError("scip-python failed");

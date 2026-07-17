@@ -3,12 +3,21 @@ export interface ReviewSession {
   status: "planning" | "walking" | "complete"; createdAt: number;
   indexWarnings?: string[];
 }
+/** A changed node the server nested under a covered node at plan-write time.
+ *  counted=false = cross-unit reference: render-only, not in walk/coverage. */
+export interface AttachedMember {
+  stableId: string;
+  parentStableId: string;
+  reason: "tested-by" | "required-by" | "same-file";
+  counted: boolean;
+}
 export interface Unit {
   id: string; sessionId: string; position: number; label: string;
   rationale: string;
   kind: "flow" | "orphans";
   memberStableIds: string[];
   auto: boolean;
+  attached: AttachedMember[];
 }
 export interface LineRange { start: number; end: number; }
 export interface Node {

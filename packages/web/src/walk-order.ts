@@ -6,7 +6,8 @@ export interface WalkEntry {
 }
 
 /** Canonical review sequence: units by position; flow steps in tree order;
- *  orphan members in listed order; changed nodes only; first occurrence wins. */
+ *  orphan members in listed order; changed nodes only; first occurrence wins.
+ *  Counted attachments walk immediately after their parent node. */
 export function buildWalkOrder(units: Unit[], flows: Flow[], nodes: Node[]): WalkEntry[] {
   const flowByEntry = new Map(flows.map((f) => [f.entryStableId, f]));
   const nodeByStable = new Map(nodes.map((n) => [n.stableId, n]));
@@ -18,16 +19,30 @@ export function buildWalkOrder(units: Unit[], flows: Flow[], nodes: Node[]): Wal
     order.push({ nodeId, stableId });
   };
   for (const u of [...units].sort((a, b) => a.position - b.position)) {
+    const attachedByParent = new Map<string, string[]>();
+    for (const m of u.attached ?? []) {
+      if (!m.counted) continue;
+      const list = attachedByParent.get(m.parentStableId) ?? [];
+      list.push(m.stableId);
+      attachedByParent.set(m.parentStableId, list);
+    }
+    const pushWithAttached = (stableId: string, nodeId: string | null) => {
+      push(stableId, nodeId);
+      for (const a of attachedByParent.get(stableId) ?? []) {
+        const an = nodeByStable.get(a);
+        if (an && an.changeStatus === "changed") push(a, an.id);
+      }
+    };
     if (u.kind === "flow") {
       for (const entry of u.memberStableIds) {
         for (const s of flowByEntry.get(entry)?.steps ?? []) {
-          if (s.changeStatus === "changed") push(s.stableId, s.nodeId);
+          if (s.changeStatus === "changed") pushWithAttached(s.stableId, s.nodeId);
         }
       }
     } else {
       for (const stableId of u.memberStableIds) {
         const n = nodeByStable.get(stableId);
-        if (n && n.changeStatus === "changed") push(stableId, n.id);
+        if (n && n.changeStatus === "changed") pushWithAttached(stableId, n.id);
       }
     }
   }

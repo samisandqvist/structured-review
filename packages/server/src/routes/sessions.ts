@@ -9,6 +9,7 @@ import { computeResiduals } from "../residuals.js";
 import type { ChangeSubgraph, GraphNode } from "../graph/provider.js";
 import type { ChangeStatus } from "../types.js";
 import { computeCoverage, flowEntries } from "../coverage.js";
+import { deriveAttachments, countedAttachmentIds } from "../attach.js";
 import { randomId } from "../util.js";
 import { parseBody, sessionCreateSchema, planSchema, unitPatchSchema } from "../validate.js";
 
@@ -182,30 +183,45 @@ export function createSessionsRoute(ctx: AppContext) {
     if (!parsed.ok) return parsed.res;
     const body = parsed.data;
 
-    const changedStableIds = getNodesBySession(ctx.db, sessionId)
+    const sessionNodes = getNodesBySession(ctx.db, sessionId);
+    const changedStableIds = sessionNodes
       .filter((n) => n.changeStatus === "changed")
       .map((n) => n.stableId);
     const flows = await ctx.graphProvider.getFlows(new Set(changedStableIds));
     const { unassigned } = computeCoverage(body.units, flows, changedStableIds);
 
+    // Attachment derivation (spec 2026-07-17): nest unassigned tests, DTOs and
+    // module-scope residuals under the covered node that gives them context.
+    // Derived here (not on read) so web, CLI and coverage share one truth.
+    const testEdges = (ctx.db.prepare(
+      `SELECT sn.stable_id AS prod, tn.stable_id AS test
+       FROM edges e JOIN nodes sn ON e.source_node_id = sn.id JOIN nodes tn ON e.target_node_id = tn.id
+       WHERE e.session_id = ? AND e.edge_type = 'test'`
+    ).all(sessionId) as { prod: string; test: string }[])
+      .map((r) => ({ productionStableId: r.prod, testStableId: r.test }));
+    const fileRequires = (await ctx.graphProvider.getFileRequires?.()) ?? new Map<string, Set<string>>();
+    const attachedPerUnit = deriveAttachments(body.units, flows, sessionNodes, testEdges, fileRequires);
+    const attachedIds = countedAttachmentIds(attachedPerUnit);
+    const leftovers = unassigned.filter((id) => !attachedIds.has(id));
+
     ctx.db.transaction(() => {
       for (const u of getUnitsBySession(ctx.db, sessionId)) deleteUnit(ctx.db, u.id);
       let pos = 0;
-      for (const u of body.units) {
+      body.units.forEach((u, i) => {
         const members = u.kind === "flow" ? flowEntries(u) : (u.orphanStableIds ?? []);
-        createUnit(ctx.db, sessionId, pos++, u.label, u.rationale ?? "", u.kind, members, false);
-      }
-      if (unassigned.length > 0) {
+        createUnit(ctx.db, sessionId, pos++, u.label, u.rationale ?? "", u.kind, members, false, attachedPerUnit[i]);
+      });
+      if (leftovers.length > 0) {
         createUnit(ctx.db, sessionId, pos++, "Unassigned changes",
-          "Changes not covered by any chosen unit.", "orphans", unassigned, true);
+          "Changes not covered by any chosen unit.", "orphans", leftovers, true);
       }
       updateSessionStatus(ctx.db, sessionId, "walking");
     })();
 
     const coverage = {
       changedTotal: changedStableIds.length,
-      covered: changedStableIds.length - unassigned.length,
-      unassigned: unassigned.length,
+      covered: changedStableIds.length - leftovers.length,
+      unassigned: leftovers.length,
     };
     return c.json({ units: getUnitsBySession(ctx.db, sessionId), coverage });
   });

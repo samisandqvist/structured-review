@@ -54,4 +54,8 @@ export interface GraphProvider {
   /** Optional: per-language indexing degradation notices for the current build
    *  (e.g. "Java indexing skipped: toolchain missing"). Absent/[] = none. */
   getIndexWarnings?(): Promise<string[]>;
+  /** Optional: file-level requires relation — consumer file -> files defining
+   *  the type symbols it references/imports. Used to attach changed DTOs to
+   *  their consumers at plan time. Absent/empty = required-by pass finds nothing. */
+  getFileRequires?(): Promise<Map<string, Set<string>>>;
 }

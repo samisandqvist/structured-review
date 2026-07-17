@@ -25,6 +25,18 @@ export interface ReviewSession {
   indexWarnings: string[];
 }
 
+export type AttachReason = "tested-by" | "required-by" | "same-file";
+
+/** A changed node the server nested under a covered node at plan-write time.
+ *  counted=false is a cross-unit reference entry: render-only, never in walk
+ *  order or coverage. */
+export interface AttachedMember {
+  stableId: string;
+  parentStableId: string;
+  reason: AttachReason;
+  counted: boolean;
+}
+
 export interface Unit {
   id: string;
   sessionId: string;
@@ -34,6 +46,7 @@ export interface Unit {
   kind: UnitKind;
   memberStableIds: string[];
   auto: boolean;
+  attached: AttachedMember[];
 }
 
 export interface Node {

@@ -10,8 +10,11 @@ const step = (id: string, changed = true): FlowStep => ({
   stableId: id, label: id, file: "f.ts", startLine: 1, endLine: 2, isTest: false, depth: 0,
   nodeId: changed ? `n-${id}` : null, changeStatus: changed ? "changed" : null, reviewStatus: null,
 });
-const unit = (id: string, kind: "flow" | "orphans", members: string[], position: number): Unit => ({
-  id, sessionId: "s", position, label: id, rationale: "", kind, memberStableIds: members, auto: false,
+const unit = (
+  id: string, kind: "flow" | "orphans", members: string[], position: number,
+  attached: Unit["attached"] = []
+): Unit => ({
+  id, sessionId: "s", position, label: id, rationale: "", kind, memberStableIds: members, auto: false, attached,
 });
 
 describe("buildWalkOrder", () => {
@@ -24,6 +27,27 @@ describe("buildWalkOrder", () => {
     const units = [unit("u2", "orphans", ["shared", "orphan1"], 1), unit("u1", "flow", ["e"], 0)];
     const nodes = [node("e"), node("shared"), node("orphan1")];
     expect(buildWalkOrder(units, flows, nodes).map((w) => w.stableId)).toEqual(["e", "shared", "orphan1"]);
+  });
+
+  it("walks counted attachments right after their parent; references never walk", () => {
+    const flows: Flow[] = [{
+      id: 1, name: "f", criticality: 0, depth: 1, affected: true, entryStableId: "e",
+      changedStableIds: ["e", "next"],
+      steps: [step("e"), step("next")],
+    }];
+    const units = [
+      unit("u1", "flow", ["e"], 0, [
+        { stableId: "t", parentStableId: "e", reason: "tested-by", counted: true },
+      ]),
+      unit("u2", "orphans", ["orphan1"], 1, [
+        { stableId: "t", parentStableId: "orphan1", reason: "tested-by", counted: false },
+        { stableId: "dto", parentStableId: "orphan1", reason: "required-by", counted: true },
+      ]),
+    ];
+    const nodes = [node("e"), node("next"), node("t"), node("orphan1"), node("dto")];
+    expect(buildWalkOrder(units, flows, nodes).map((w) => w.stableId)).toEqual([
+      "e", "t", "next", "orphan1", "dto",
+    ]);
   });
 });
 

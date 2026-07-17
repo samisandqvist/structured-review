@@ -708,6 +708,19 @@ textarea:focus {
   box-shadow: 0 0 0 1px var(--trace), 0 0 14px -3px var(--trace-glow);
   color: var(--trace);
 }
+/* Server-attached members (tests/DTOs/residuals nested under a covered node). */
+.step--attached .step__reason {
+  margin-left: 7px;
+  font-size: 11px;
+  color: var(--faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+/* Cross-unit reference: render-only pointer to a node reviewed elsewhere. */
+.step--ref {
+  opacity: 0.45;
+  border-style: dotted;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .tnode--current {

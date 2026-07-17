@@ -10,8 +10,10 @@ vi.mock("../src/api/hooks.js", () => ({
   useBulkUpdateNodeStatus: () => ({ mutate: mockBulkMutate }),
   useUpdateUnit: () => ({ mutate: mockUpdateUnit }),
   useSession: () => ({ data: { units: [
-    { id: "u1", position: 0, kind: "flow", label: "Order handling", rationale: "the order path", memberStableIds: ["fn:handleOrder"], auto: false },
-    { id: "u2", position: 1, kind: "orphans", label: "Validation helpers", rationale: "", memberStableIds: ["fn:validateOrder"], auto: false },
+    { id: "u1", position: 0, kind: "flow", label: "Order handling", rationale: "the order path", memberStableIds: ["fn:handleOrder"], auto: false,
+      attached: [{ stableId: "fn:testOrder", parentStableId: "fn:handleOrder", reason: "tested-by", counted: false }] },
+    { id: "u2", position: 1, kind: "orphans", label: "Validation helpers", rationale: "", memberStableIds: ["fn:validateOrder"], auto: false,
+      attached: [{ stableId: "fn:testOrder", parentStableId: "fn:validateOrder", reason: "tested-by", counted: true }] },
     { id: "u3", position: 2, kind: "orphans", label: "Unassigned changes", rationale: "", memberStableIds: ["fn:lonely"], auto: true },
     { id: "u4", position: 3, kind: "flow", label: "Merged unit", rationale: "", memberStableIds: ["fn:entryA", "fn:entryB"], auto: false },
   ], coverage: { changedTotal: 3, covered: 2, unassigned: 1 } } }),
@@ -78,6 +80,28 @@ describe("PlanView", () => {
     const progress = orderUnit.querySelector(".unit__progress");
     expect(progress).not.toBeNull();
     expect(progress!.textContent).toBe("1/2");
+  });
+
+  it("renders a counted attachment in the unit, adds it to the ledger, and selects it on click", () => {
+    const onSelect = vi.fn();
+    render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={onSelect} />);
+    // u2: 1 member (unreviewed) + 1 counted attached test (unreviewed) → 0/2
+    const valUnit = screen.getByText("Validation helpers").closest(".unit")!;
+    expect(valUnit.querySelector(".unit__progress")!.textContent).toBe("0/2");
+    const member = screen.getByTestId("attached-member");
+    expect(member.textContent).toContain("testOrder");
+    expect(member.textContent).toContain("tested-by");
+    fireEvent.click(member);
+    expect(onSelect).toHaveBeenCalledWith("n-t1");
+  });
+
+  it("renders a cross-unit reference dimmed and keeps it out of the ledger", () => {
+    render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={() => {}} />);
+    const ref = screen.getByTestId("attached-ref"); // u1: testOrder counts in u2, references here
+    expect(ref.className).toContain("step--ref");
+    // u1 progress stays 1/2 — the reference adds nothing.
+    const orderUnit = screen.getByText("Order handling").closest(".unit")!;
+    expect(orderUnit.querySelector(".unit__progress")!.textContent).toBe("1/2");
   });
 
   it("shows a test chip counting changed/total linked tests and selects a test on click", () => {
