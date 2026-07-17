@@ -36,7 +36,7 @@ if (hostname !== "127.0.0.1" && hostname !== "localhost") {
   console.warn(`WARNING: binding to ${hostname} — the review API is unauthenticated; keep it loopback-only unless you know why`);
 }
 
-const app = createApp({ db, graphProvider, webDistPath: webBuilt ? webDistPath : undefined });
+const app = createApp({ db, graphProvider, webDistPath: webBuilt ? webDistPath : undefined, providerName: which });
 const port = Number(process.env.PORT) || 3456;
 serve({ fetch: app.fetch, port, hostname }, (info) => {
   console.log(`review hub on http://localhost:${info.port} (graph provider: ${which}${webBuilt ? "" : "; web UI not built — run pnpm build"})`);

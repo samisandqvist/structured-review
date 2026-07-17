@@ -1,4 +1,5 @@
 .superpowers/
+.crw/
 node_modules/
 dist/
 *.db
