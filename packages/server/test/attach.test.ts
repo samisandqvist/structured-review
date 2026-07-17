@@ -86,6 +86,35 @@ describe("deriveAttachments — required-by", () => {
   });
 });
 
+describe("deriveAttachments — test imports (pass 4)", () => {
+  it("nests an edge-less test under the first covered node its file imports", () => {
+    const nodes = [node("a"), node("helper", { isTest: true, file: "a.test.ts" })];
+    const flows = [flow(1, ["a"])];
+    // No TESTED_BY edge (vitest anonymous callbacks) — but a.test.ts imports a.ts.
+    const requires = new Map([["a.test.ts", new Set(["a.ts"])]]);
+    const [attached] = deriveAttachments([flowUnit("a")], flows, nodes, [], requires);
+    expect(attached).toEqual([{ stableId: "helper", parentStableId: "a", reason: "tested-by", counted: true }]);
+  });
+
+  it("does not apply the import direction to production nodes", () => {
+    const nodes = [node("a"), node("consumer", { file: "consumer.ts" })];
+    const flows = [flow(1, ["a"])];
+    // consumer.ts imports a.ts, but consumer is not a test: evidence too weak.
+    const requires = new Map([["consumer.ts", new Set(["a.ts"])]]);
+    const attached = deriveAttachments([flowUnit("a")], flows, nodes, [], requires);
+    expect(attached.flat()).toEqual([]);
+  });
+
+  it("prefers a real TESTED_BY edge over imports", () => {
+    const nodes = [node("a"), node("b"), node("t", { isTest: true, file: "t.test.ts" })];
+    const flows = [flow(1, ["a", "b"])];
+    const edges: TestEdge[] = [{ productionStableId: "b", testStableId: "t" }];
+    const requires = new Map([["t.test.ts", new Set(["a.ts"])]]); // imports point at a
+    const [attached] = deriveAttachments([flowUnit("a")], flows, nodes, edges, requires);
+    expect(attached).toEqual([{ stableId: "t", parentStableId: "b", reason: "tested-by", counted: true }]);
+  });
+});
+
 describe("deriveAttachments — precedence and explicit membership", () => {
   it("tested-by wins over same-file and required-by", () => {
     const nodes = [node("a", { file: "shared.ts" }), node("t", { isTest: true, file: "shared.ts" })];

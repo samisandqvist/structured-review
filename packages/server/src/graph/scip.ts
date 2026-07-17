@@ -537,18 +537,19 @@ export function buildGraphFromIndex(idx: ScipIndex, root: string): BuiltGraph {
     }
   }
 
-  // Type/class definitions (symbols ending `#`) are deliberately NOT graph
-  // nodes, but they carry the DTO→consumer relation: map each type symbol to
-  // its defining file, then every cross-file reference or import of it makes
-  // the referencing file "require" the defining file (plan-time required-by
-  // attachment for changed DTOs).
-  const typeDefFile = new Map<string, string>();
+  // File-level requires: map every non-local definition (types `#`, functions
+  // `().`, methods, fields) to its defining file, then every cross-file
+  // reference or import makes the referencing file "require" the defining
+  // file. Types are deliberately NOT graph nodes but carry the DTO→consumer
+  // relation (required-by attachment); function/value entries let changed
+  // tests attach to the covered files they import (test-import attachment).
+  const defFile = new Map<string, string>();
   for (const d of idx.documents) {
     const file = rel(d.relativePath ?? "");
     for (const o of d.occurrences ?? []) {
       if (!((o.symbolRoles ?? 0) & ROLE_DEFINITION)) continue;
       if (!o.symbol || o.symbol.startsWith("local ")) continue;
-      if (o.symbol.endsWith("#")) typeDefFile.set(o.symbol, file);
+      defFile.set(o.symbol, file);
     }
   }
   const fileRequires = new Map<string, Set<string>>();
@@ -557,7 +558,7 @@ export function buildGraphFromIndex(idx: ScipIndex, root: string): BuiltGraph {
     for (const o of d.occurrences ?? []) {
       if ((o.symbolRoles ?? 0) & ROLE_DEFINITION) continue;
       if (!o.symbol) continue;
-      const def = typeDefFile.get(o.symbol);
+      const def = defFile.get(o.symbol);
       if (!def || def === file) continue;
       (fileRequires.get(file) ?? fileRequires.set(file, new Set()).get(file)!).add(def);
     }
