@@ -2,6 +2,7 @@
   "name": "code-review-walkthrough",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.15.1",
   "scripts": {
     "dev": "concurrently -n server,web -c blue,green \"pnpm --filter @crw/server dev\" \"pnpm --filter @crw/web dev\"",
     "build": "pnpm -r build",
