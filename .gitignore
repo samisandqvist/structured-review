@@ -2,6 +2,11 @@
 .crw/
 node_modules/
 dist/
+# The plugin bundle is a committed release artifact (built by scripts/build-plugin.mjs).
+!plugin/dist/
+!plugin/dist/**
+!plugin/web/
+!plugin/web/**
 *.db
 *.db-journal
 *.db-shm

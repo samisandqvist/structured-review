@@ -27,9 +27,14 @@ switch (which) {
 }
 
 const here = dirname(fileURLToPath(import.meta.url));
-// dist/index.js -> ../../web/dist ; src/index.ts (dev) resolves the same way.
-const webDistPath = process.env.CRW_WEB_DIST ?? join(here, "..", "..", "web", "dist");
-const webBuilt = existsSync(join(webDistPath, "index.html"));
+// Candidates: env override; monorepo layout (dist/index.js -> ../../web/dist,
+// same from src in dev); plugin bundle layout (plugin/dist/server.js -> ../web).
+const webDistPath = [
+  process.env.CRW_WEB_DIST,
+  join(here, "..", "..", "web", "dist"),
+  join(here, "..", "web"),
+].find((p) => p && existsSync(join(p, "index.html")));
+const webBuilt = webDistPath !== undefined;
 
 const hostname = process.env.CRW_HOST || "127.0.0.1";
 if (hostname !== "127.0.0.1" && hostname !== "localhost") {

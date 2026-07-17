@@ -5,7 +5,29 @@ changed hunk of a diff by execution flow — walking a call graph instead of a
 file tree — and tracks review coverage per unit so nothing changed goes
 unseen. **Status: alpha.**
 
-## Quick start (production)
+## Install as a Claude Code plugin (recommended)
+
+Requires **Node >= 22.13** and npm on PATH. In Claude Code:
+
+```
+/plugin marketplace add samisandqvist/structured-review
+/plugin install code-review-walkthrough@crw
+```
+
+The first session start npm-installs the TypeScript/Python indexers into the
+plugin data dir (give it a minute once). Then ask Claude to review a branch —
+the `code-review-walkthrough` skill drives everything and hands you a local
+web UI URL to walk the review. Java additionally needs the scip-java
+toolchain on PATH (coursier `cs` + JDK + Maven); without it Java changes
+degrade to residual-only with a visible warning. All state (DB, logs,
+indexers) lives under `~/.claude/plugins/data/`, never in the reviewed repo.
+
+Update later with `/plugin update code-review-walkthrough@crw` — every push
+to main is a new version (commit-SHA versioning). Maintainers: rebuild the
+committed bundle with `pnpm build && pnpm build:plugin` before pushing
+runtime changes.
+
+## Quick start (from source)
 
 ```bash
 pnpm install
@@ -21,13 +43,17 @@ nothing to review yet — create a session first.
 ## Create a review session
 
 ```bash
-node packages/skill/dist/orchestrate.js --base main
+node packages/skill/dist/cli.js serve
+node packages/skill/dist/cli.js session create --branch HEAD --base main
+node packages/skill/dist/cli.js plan --session <id> --auto --open
 ```
 
 This reviews the **current working tree** (staged and unstaged changes
-included) against `--base` (default `main`), writes a deterministic plan (one
-unit per affected execution flow, plus one catch-all unit for anything left
-over), and opens the UI to that session.
+included) against `--base`, writes a deterministic plan (one unit per
+affected execution flow; tests/DTOs/residuals attach themselves to those
+units at submit), and opens the UI to that session. Run
+`node packages/skill/dist/cli.js` with no arguments for the full command
+list (`context`, `diff`, `status`, `comments`, `wait`).
 
 `--branch` defaults to `HEAD`. If you pass an explicit branch name, it must be
 the branch that is actually checked out — the server reviews the working tree

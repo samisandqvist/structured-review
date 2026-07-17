@@ -395,8 +395,12 @@ export class ScipGraphProvider implements GraphProvider {
 }
 
 function resolveIndexerBin(pkgName: string, binName: string): string {
-  const pkgPath = require.resolve(`${pkgName}/package.json`);
-  const pkg = require(`${pkgName}/package.json`) as { bin: string | Record<string, string> };
+  // CRW_INDEXER_HOME points at a directory whose node_modules holds the
+  // indexer packages (plugin mode: ${CLAUDE_PLUGIN_DATA}, npm-installed by the
+  // SessionStart hook). Unset = resolve from our own node_modules (dev mode).
+  const home = process.env.CRW_INDEXER_HOME;
+  const pkgPath = require.resolve(`${pkgName}/package.json`, home ? { paths: [home] } : undefined);
+  const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { bin: string | Record<string, string> };
   const rel = typeof pkg.bin === "string" ? pkg.bin : pkg.bin[binName];
   return join(dirname(pkgPath), rel);
 }
