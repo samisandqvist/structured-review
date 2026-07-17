@@ -11,7 +11,14 @@ concurrency:
 
 jobs:
   ci:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # macOS is in the matrix so colleague installs on Macs rest on tested
+      # ground — the suite runs the real indexers, so this exercises the whole
+      # pipeline, not just unit logic.
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
 
