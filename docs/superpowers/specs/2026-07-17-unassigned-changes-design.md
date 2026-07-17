@@ -88,6 +88,15 @@ first match wins; a parent must be a covered (assigned) node:
    requires B (see decoder work) → attach under the first such consumer node
    in walk order.
 
+4. **test imports** (fast-follow, same day) — a test node with no resolvable
+   TESTED_BY edge (vitest `it()` bodies are anonymous callbacks, so calls
+   inside them attribute to no graph node) attaches under the first covered
+   node its *file* imports (requires map, reversed direction). Reason stays
+   `tested-by` — to the reviewer it is the same relationship. Tests only:
+   the reversed direction is too weak evidence for production code. To feed
+   this, the requires map covers every non-local definition (functions,
+   methods), not just type symbols.
+
 Parents are always plan-covered nodes, never other attachments — no chaining
 (a DTO required only by an attached test stays unassigned). Explicit plan
 membership wins: a test or DTO listed in an orphan-unit is covered, so the
