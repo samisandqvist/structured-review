@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import Database from "better-sqlite3";
-import { createMemoryDatabase, migrate } from "../src/db/connection.js";
+
+import { createMemoryDatabase, createUnmigratedMemoryDatabase, migrate } from "../src/db/connection.js";
 import { SCHEMA_VERSION, MIGRATIONS } from "../src/db/schema.js";
 
 describe("schema", () => {
@@ -35,7 +35,7 @@ describe("schema", () => {
   });
 
   it("migrates a version-0 database with existing tables to current", () => {
-    const db = new Database(":memory:");
+    const db = createUnmigratedMemoryDatabase();
     db.exec(
       "CREATE TABLE IF NOT EXISTS review_sessions (id TEXT PRIMARY KEY, branch TEXT NOT NULL, base_ref TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'planning', created_at INTEGER NOT NULL, head_sha TEXT NOT NULL DEFAULT '')"
     );
@@ -56,7 +56,7 @@ describe("schema", () => {
     const saved = MIGRATIONS[SCHEMA_VERSION];
     delete MIGRATIONS[SCHEMA_VERSION];
     try {
-      const db = new Database(":memory:");
+      const db = createUnmigratedMemoryDatabase();
       expect(() => migrate(db)).toThrow(new RegExp(`migration.*${SCHEMA_VERSION}`, "i"));
       db.close();
     } finally {
@@ -65,14 +65,14 @@ describe("schema", () => {
   });
 
   it("rejects a database newer than the application", () => {
-    const db = new Database(":memory:");
+    const db = createUnmigratedMemoryDatabase();
     db.pragma(`user_version = ${SCHEMA_VERSION + 1}`);
     expect(() => migrate(db)).toThrow(/newer/i);
     db.close();
   });
 
   it("adds nodes.residual_ranges via the v3 migration, NULL for existing rows", () => {
-    const db = new Database(":memory:");
+    const db = createUnmigratedMemoryDatabase();
     db.exec(MIGRATIONS[1]);
     db.exec(MIGRATIONS[2]);
     db.pragma("user_version = 2");
@@ -104,7 +104,7 @@ describe("v4 anchor column", () => {
   });
 
   it("adds review_sessions.index_warnings via the v5 migration, '[]' for existing rows", () => {
-    const db = new Database(":memory:");
+    const db = createUnmigratedMemoryDatabase();
     for (const v of [1, 2, 3, 4]) db.exec(MIGRATIONS[v]);
     db.prepare(
       "INSERT INTO review_sessions (id, branch, base_ref, status, created_at, head_sha) VALUES ('s1', 'b', 'main', 'planning', 0, '')"
@@ -115,7 +115,7 @@ describe("v4 anchor column", () => {
   });
 
   it("adds units.attached via the v6 migration, '[]' for existing rows", () => {
-    const db = new Database(":memory:");
+    const db = createUnmigratedMemoryDatabase();
     for (const v of [1, 2, 3, 4, 5]) db.exec(MIGRATIONS[v]);
     db.prepare(
       "INSERT INTO review_sessions (id, branch, base_ref, status, created_at, head_sha) VALUES ('s1', 'b', 'main', 'planning', 0, '')"
