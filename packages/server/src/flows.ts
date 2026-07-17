@@ -1,4 +1,4 @@
-import Database from "better-sqlite3";
+import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import { repoRoot } from "./diff.js";
 import type { Flow } from "./graph/provider.js";
@@ -31,9 +31,10 @@ interface NodeRow {
 
 export function readFlows(root: string = repoRoot(), changedStableIds?: Set<string>): Flow[] {
   const dbPath = process.env.CRG_GRAPH_DB || join(root, ".code-review-graph", "graph.db");
-  let db: Database.Database;
+  let db: DatabaseSync;
   try {
-    db = new Database(dbPath, { readonly: true, fileMustExist: true });
+    // Read-only open throws on a missing file, same as fileMustExist did.
+    db = new DatabaseSync(dbPath, { readOnly: true });
   } catch {
     return []; // no CRG graph built — flows unavailable
   }
@@ -43,13 +44,13 @@ export function readFlows(root: string = repoRoot(), changedStableIds?: Set<stri
     // ourselves from the edges, so shared nodes show at each call site.
     const flows = db
       .prepare("SELECT id, name, criticality, entry_point_id FROM flows ORDER BY criticality DESC")
-      .all() as FlowRow[];
+      .all() as unknown as FlowRow[];
 
     const nodeById = new Map<number, NodeRow>();
     const nodeByQn = new Map<string, NodeRow>();
     for (const n of db
       .prepare("SELECT id, name, qualified_name, file_path, line_start, line_end, is_test FROM nodes")
-      .all() as NodeRow[]) {
+      .all() as unknown as NodeRow[]) {
       nodeById.set(n.id, n);
       nodeByQn.set(n.qualified_name, n);
     }
