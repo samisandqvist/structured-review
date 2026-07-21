@@ -1,7 +1,9 @@
 {
-  "name": "crw",
+  "name": "structured-review",
   "description": "Code Review Walkthrough — graph-based review sessions with a local web UI.",
-  "owner": { "name": "Sami Sandqvist" },
+  "owner": {
+    "name": "Sami Sandqvist"
+  },
   "plugins": [
     {
       "name": "code-review-walkthrough",
