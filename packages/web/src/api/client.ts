@@ -52,6 +52,9 @@ export interface DiffLine {
   oldLine: number | null;
   newLine: number | null;
   text: string;
+  /** Client-side: revealed via context expansion — outside the node's own
+   *  diff, so never selectable as a comment anchor. */
+  expanded?: boolean;
 }
 export interface NodeDiff { oldText: string; newText: string; lines: DiffLine[]; }
 export interface FlowStep {
@@ -125,6 +128,10 @@ export const api = {
   getNode: (sessionId: string, nodeId: string) =>
     fetchJson<{ node: Node; callers: Node[]; callees: Node[]; diff: NodeDiff }>(
       `/sessions/${sessionId}/nodes/${nodeId}`
+    ),
+  getNodeContext: (sessionId: string, nodeId: string, start: number, end: number) =>
+    fetchJson<{ lines: DiffLine[] }>(
+      `/sessions/${sessionId}/nodes/${nodeId}/context?start=${start}&end=${end}`
     ),
   updateNodeStatus: (sessionId: string, nodeId: string, reviewStatus: Node["reviewStatus"], reviewedInUnit?: number) =>
     fetchJson<{ node: Node }>(`/sessions/${sessionId}/nodes/${nodeId}`, {
