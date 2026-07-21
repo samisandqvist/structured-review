@@ -42,6 +42,9 @@ crw diff --session <id> --node <stableId>       # one node's diff, for grouping 
 crw status --session <id>                       # coverage, per-unit reviewed/total, unreviewed list
 crw comments --session <id>                     # exported comments, GitHub-mappable
 crw wait --session <id> [--until reviewed|commented] [--interval s] [--timeout s]
+crw session list                                # sessions in this repo's hub, newest first
+crw session delete --session <id>               # remove one session's state (cascades)
+crw gc [--repo <path>] [--all]                  # remove a repo's DB/logs (stops the hub first); --all sweeps dead repos
 ```
 
 Language support: TypeScript and Python indexers are installed automatically

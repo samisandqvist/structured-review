@@ -2,7 +2,7 @@
 // Probe /health; reuse a healthy hub serving the same repo, refuse a port
 // occupied by anything else, otherwise spawn the built server detached.
 import { execFileSync, spawn } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, openSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -53,13 +53,19 @@ export function serverEntryPath(): string {
  *  path hash so one hub per repo never collides — and the reviewed repo stays
  *  untouched. Without it, state lands in the repo as before (review.db,
  *  .crw/server.log). */
-export function statePaths(repoRoot: string): { dbPath?: string; logDir: string } {
-  const dataDir = process.env.CRW_DATA_DIR;
-  if (!dataDir) return { logDir: join(repoRoot, ".crw") };
+/** State key for one repo under CRW_DATA_DIR: repo name + path hash. Shared by
+ *  serve and gc so the two can never disagree on which files belong to a repo. */
+export function repoStateKey(repoRoot: string): string {
   const name = repoRoot.split("/").filter(Boolean).pop() ?? "repo";
   let hash = 0;
   for (let i = 0; i < repoRoot.length; i++) hash = (hash * 31 + repoRoot.charCodeAt(i)) >>> 0;
-  const key = `${name.replace(/[^A-Za-z0-9._-]+/g, "-")}-${hash.toString(16)}`;
+  return `${name.replace(/[^A-Za-z0-9._-]+/g, "-")}-${hash.toString(16)}`;
+}
+
+export function statePaths(repoRoot: string): { dbPath?: string; logDir: string } {
+  const dataDir = process.env.CRW_DATA_DIR;
+  if (!dataDir) return { logDir: join(repoRoot, ".crw") };
+  const key = repoStateKey(repoRoot);
   return { dbPath: join(dataDir, "db", `${key}.db`), logDir: join(dataDir, "logs", key) };
 }
 
@@ -80,6 +86,9 @@ export async function ensureServer(opts: { repo: string; port: number }): Promis
   const { dbPath, logDir } = statePaths(repoRoot);
   mkdirSync(logDir, { recursive: true });
   if (dbPath) mkdirSync(dirname(dbPath), { recursive: true });
+  // Sidecar for `crw gc --all`: maps a state key back to the repo it serves,
+  // so the sweep can tell "repo is gone" from "repo still exists".
+  writeFileSync(join(logDir, "repo-root"), `${repoRoot}\n`);
   const logFile = join(logDir, "server.log");
   const logFd = openSync(logFile, "a");
   const child = spawn(process.execPath, [entry], {

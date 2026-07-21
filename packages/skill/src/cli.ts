@@ -4,24 +4,29 @@
 // the HTTP API (api.ts) and server lifecycle (serve.ts) — never SQLite.
 import { readFileSync } from "node:fs";
 import {
-  DEFAULT_BASE_URL, createSession, defaultPartition, exportComments, getChanges, getFlows,
-  getNodeDiff, getNodes, getSessionInfo, launchUI, uiUrl, writePlan, type UnitInput,
+  DEFAULT_BASE_URL, createSession, defaultPartition, deleteSession, exportComments, getChanges,
+  getFlows, getNodeDiff, getNodes, getSessionInfo, launchUI, listSessions, uiUrl, writePlan,
+  type UnitInput,
 } from "./api.js";
 import { computeStatus, waitConditionMet, type SessionStatus } from "./status.js";
 import { ensureServer } from "./serve.js";
+import { gcRepo, gcSweep } from "./gc.js";
 
 const USAGE = `usage:
   crw serve [--repo <path>] [--port N]
   crw session create --branch <b> --base <ref> [--open]
+  crw session list
+  crw session delete --session <id>
   crw context --session <id>
   crw plan --session <id> (--auto | --units <file.json>) [--open]
   crw diff --session <id> --node <stableId>
   crw status --session <id>
   crw comments --session <id>
   crw wait --session <id> [--until reviewed|commented] [--interval sec] [--timeout sec]
+  crw gc [--repo <path>] [--all]
 global flags: --port N (hub port), --pretty (human-readable output)`;
 
-const BOOL_FLAGS = new Set(["auto", "open", "pretty"]);
+const BOOL_FLAGS = new Set(["auto", "open", "pretty", "all"]);
 
 export interface CliArgs { command: string; flags: Record<string, string | boolean>; }
 
@@ -109,6 +114,53 @@ async function cmdSessionCreate(base: string, flags: Record<string, string | boo
       `ui: ${out.uiUrl}`,
       `nodes: ${out.changedNodes} changed / ${out.totalNodes} total; flows: ${out.affectedFlows} affected / ${out.totalFlows} total`,
       ...(out.indexWarnings.length ? ["index warnings:", ...out.indexWarnings.map((w: string) => `  ! ${w}`)] : []),
+    ].join("\n"),
+  };
+}
+
+async function cmdSessionList(base: string): Promise<CommandResult> {
+  const { sessions } = await listSessions(base);
+  return {
+    json: { sessions },
+    pretty: sessions.length === 0
+      ? "no sessions"
+      : sessions
+          .map((s) => `${s.id} (${s.status}) — ${s.branch} vs ${s.baseRef}, created ${new Date(s.createdAt).toISOString()}`)
+          .join("\n"),
+  };
+}
+
+async function cmdSessionDelete(base: string, flags: Record<string, string | boolean>): Promise<CommandResult> {
+  const sessionId = required(flags, "session");
+  const result = await deleteSession(base, sessionId);
+  return { json: result, pretty: `deleted session ${result.deleted}` };
+}
+
+// Cleanup is file-level on purpose: gc exists for state whose hub/repo is
+// already gone. It stops the hub first so SQLite WAL files are never removed
+// under a live process.
+async function cmdGc(base: string, flags: Record<string, string | boolean>): Promise<CommandResult> {
+  if (flags.all) {
+    const dataDir = process.env.CRW_DATA_DIR;
+    if (!dataDir) throw new Error("crw gc --all needs CRW_DATA_DIR (plugin mode); use crw gc --repo <path> instead");
+    const result = gcSweep(dataDir);
+    return {
+      json: result,
+      pretty: [
+        ...result.swept.map((s) => `swept ${s.key} (${s.repoRoot}):\n${s.removed.map((p) => `  - ${p}`).join("\n")}`),
+        ...result.skipped.map((s) => `skipped ${s.key}: ${s.reason}`),
+        ...(result.swept.length + result.skipped.length === 0 ? ["nothing to sweep"] : []),
+      ].join("\n"),
+    };
+  }
+  const repo = typeof flags.repo === "string" ? flags.repo : process.cwd();
+  const result = await gcRepo(repo, base);
+  return {
+    json: result,
+    pretty: [
+      `repo: ${result.repoRoot}`,
+      result.hubStopped ? "hub stopped" : "no hub running for this repo",
+      ...(result.removed.length ? ["removed:", ...result.removed.map((p) => `  - ${p}`)] : ["nothing to remove"]),
     ].join("\n"),
   };
 }
@@ -225,6 +277,9 @@ export async function runCli(argv: string[]): Promise<void> {
   switch (command) {
     case "serve": result = await cmdServe(flags); break;
     case "session create": result = await cmdSessionCreate(base, flags); break;
+    case "session list": result = await cmdSessionList(base); break;
+    case "session delete": result = await cmdSessionDelete(base, flags); break;
+    case "gc": result = await cmdGc(base, flags); break;
     case "context": result = await cmdContext(base, flags); break;
     case "plan": result = await cmdPlan(base, flags); break;
     case "diff": result = await cmdDiff(base, flags); break;

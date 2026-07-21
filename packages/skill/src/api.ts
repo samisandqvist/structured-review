@@ -69,6 +69,18 @@ export async function getSessionInfo(base: string, sessionId: string): Promise<S
   return fetchJson(`${base}/api/sessions/${sessionId}`);
 }
 
+export async function listSessions(base: string): Promise<{ sessions: Session[] }> {
+  return fetchJson(`${base}/api/sessions`);
+}
+
+export async function deleteSession(base: string, sessionId: string): Promise<{ deleted: string }> {
+  return fetchJson(`${base}/api/sessions/${sessionId}`, { method: "DELETE" });
+}
+
+export async function shutdownHub(base: string): Promise<{ ok: boolean; pid?: number }> {
+  return fetchJson(`${base}/api/shutdown`, { method: "POST" });
+}
+
 export async function getFlows(base: string, sessionId: string): Promise<{ flows: FlowDTO[]; orphans: OrphanDTO[] }> {
   return fetchJson(`${base}/api/sessions/${sessionId}/flows`);
 }
