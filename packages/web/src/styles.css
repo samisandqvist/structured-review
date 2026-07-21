@@ -67,6 +67,9 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* Reviewed code must show literal characters — never !== as one glyph. */
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
 }
 
 /* A faint instrument-screen wash behind everything */
