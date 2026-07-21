@@ -226,13 +226,16 @@ async function cmdComments(base: string, flags: Record<string, string | boolean>
   const statusByNode = new Map(nodes.map((n) => [n.id, n.reviewStatus]));
   const out = {
     ...exported,
-    comments: exported.comments.map((c) => ({ ...c, reviewStatus: statusByNode.get(c.nodeId) ?? "unknown" })),
+    comments: exported.comments.map((c) =>
+      c.scope === "session" ? c : { ...c, reviewStatus: statusByNode.get(c.nodeId) ?? "unknown" }
+    ),
   };
   return {
     json: out,
     pretty: out.comments.length === 0
       ? "no comments"
       : out.comments.map((c) => {
+          if (c.scope === "session") return `[review-wide]\n  ${c.text.replace(/\n/g, "\n  ")}`;
           const where = c.anchor ? `${c.file}:${c.anchor.startLine}-${c.anchor.endLine}` : `${c.file}:${c.startLine}-${c.endLine}`;
           return `${where} (${c.label}, ${c.reviewStatus})\n  ${c.text.replace(/\n/g, "\n  ")}`;
         }).join("\n"),

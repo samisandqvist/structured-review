@@ -9,6 +9,8 @@ const mockUpdateUnit = vi.fn();
 vi.mock("../src/api/hooks.js", () => ({
   useBulkUpdateNodeStatus: () => ({ mutate: mockBulkMutate }),
   useUpdateUnit: () => ({ mutate: mockUpdateUnit }),
+  useComments: () => ({ data: { comments: [] }, isLoading: false }),
+  useCreateComment: () => ({ mutate: vi.fn() }),
   useSession: () => ({ data: { units: [
     { id: "u1", position: 0, kind: "flow", label: "Order handling", rationale: "the order path", memberStableIds: ["fn:handleOrder"], auto: false,
       attached: [{ stableId: "fn:testOrder", parentStableId: "fn:handleOrder", reason: "tested-by", counted: false }] },

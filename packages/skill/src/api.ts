@@ -46,12 +46,23 @@ export type UnitInput =
   | { kind: "flow"; flowEntryStableId?: string; flowEntryStableIds?: string[]; label: string; rationale?: string }
   | { kind: "orphans"; orphanStableIds: string[]; label: string; rationale?: string };
 
-export interface ExportedComment {
+export interface CommentAnchor {
+  startLine: number; startSide: "old" | "new";
+  endLine: number; endSide: "old" | "new";
+}
+export interface ExportedNodeComment {
+  scope: "node";
   id: string; nodeId: string; stableId: string; label: string; file: string;
   startLine: number; endLine: number;
   hunkSnippet: string; text: string; structuralContext: string; createdAt: number;
-  anchor: { startLine: number; endLine: number; side: string } | null;
+  anchor: CommentAnchor | null;
 }
+/** Session-wide remark; maps to a GitHub PR review body, not an inline comment. */
+export interface ExportedSessionComment {
+  scope: "session";
+  id: string; text: string; createdAt: number;
+}
+export type ExportedComment = ExportedNodeComment | ExportedSessionComment;
 
 async function fetchJson(url: string, init?: RequestInit) {
   const res = await fetch(url, {

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useBulkUpdateNodeStatus, useFlows, useNodes, useSession, useUpdateUnit } from "../api/hooks.js";
 import { useUIStore } from "../store/ui.js";
 import { RESIDUAL_KIND } from "../residual-kind.js";
+import { SessionNotes } from "./SessionNotes.js";
 import type { AttachedMember, Flow, FlowStep, GraphEdgeDTO, Node, Unit } from "../api/client.js";
 
 export function PlanView({
@@ -55,6 +56,7 @@ export function PlanView({
           ))}
         </div>
       )}
+      <SessionNotes sessionId={sessionId} />
       <div style={{ overflow: "auto", flex: 1, padding: "4px 16px 20px" }}>
         {units.map((u) => (
           <UnitBlock

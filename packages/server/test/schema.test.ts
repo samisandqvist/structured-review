@@ -128,3 +128,40 @@ describe("v4 anchor column", () => {
     expect(row.attached).toBe("[]");
   });
 });
+
+describe("v8 nullable comments.node_id", () => {
+  it("rebuilds comments preserving existing rows and allows NULL node_id after", () => {
+    const db = createUnmigratedMemoryDatabase();
+    db.pragma("foreign_keys = ON");
+    for (const v of [1, 2, 3, 4, 5, 6, 7]) db.exec(MIGRATIONS[v]);
+    db.prepare(
+      "INSERT INTO review_sessions (id, branch, base_ref, status, created_at, head_sha) VALUES ('s1', 'b', 'main', 'planning', 0, '')"
+    ).run();
+    db.prepare(
+      "INSERT INTO nodes (id, session_id, stable_id, label, file, start_line, end_line, change_status, review_status, reviewed_in_unit, is_test) VALUES ('n1', 's1', 'fn:x', 'x', 'x.ts', 1, 2, 'changed', 'unreviewed', NULL, 0)"
+    ).run();
+    db.prepare(
+      "INSERT INTO comments (id, session_id, node_id, hunk_snippet, text, structural_context, created_at, anchor) VALUES ('c1', 's1', 'n1', 'snip', 'existing', '', 1, '{\"startLine\":1,\"startSide\":\"new\",\"endLine\":1,\"endSide\":\"new\"}')"
+    ).run();
+    // pre-v8 the NOT NULL constraint rejects a session-wide comment
+    expect(() =>
+      db.prepare(
+        "INSERT INTO comments (id, session_id, node_id, hunk_snippet, text, structural_context, created_at) VALUES ('c2', 's1', NULL, '', 'nope', '', 2)"
+      ).run()
+    ).toThrow();
+
+    db.exec(MIGRATIONS[8]);
+
+    const kept = db.prepare("SELECT * FROM comments WHERE id = 'c1'").get() as { node_id: string; text: string; anchor: string };
+    expect(kept.node_id).toBe("n1");
+    expect(kept.text).toBe("existing");
+    expect(kept.anchor).toContain("startLine");
+    db.prepare(
+      "INSERT INTO comments (id, session_id, node_id, hunk_snippet, text, structural_context, created_at) VALUES ('c2', 's1', NULL, '', 'session-wide', '', 2)"
+    ).run();
+    // cascade on session delete still covers node-less comments
+    db.prepare("DELETE FROM review_sessions WHERE id = 's1'").run();
+    expect((db.prepare("SELECT COUNT(*) AS c FROM comments").get() as { c: number }).c).toBe(0);
+    db.close();
+  });
+});

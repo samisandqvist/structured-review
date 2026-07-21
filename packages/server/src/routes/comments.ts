@@ -21,6 +21,10 @@ export function createCommentsRoute(ctx: AppContext) {
     const body = parsed.data;
     const session = getSession(ctx.db, sessionId);
     if (!session) return c.json({ error: "not found" }, 404);
+    if (!body.nodeId) {
+      // Session-wide comment: nothing to anchor, no snippet to derive.
+      return c.json({ comment: createComment(ctx.db, sessionId, null, "", body.text, "") });
+    }
     const node = getNode(ctx.db, body.nodeId);
     if (!node || node.sessionId !== sessionId) return c.json({ error: "node not found in session" }, 404);
     // The snippet is derived server-side from what the diff pane shows for this

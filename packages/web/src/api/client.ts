@@ -40,7 +40,10 @@ export interface CommentAnchor {
   endSide: AnchorSide;
 }
 export interface Comment {
-  id: string; sessionId: string; nodeId: string; hunkSnippet: string;
+  id: string; sessionId: string;
+  /** null = session-wide comment (no node, no anchor). */
+  nodeId: string | null;
+  hunkSnippet: string;
   text: string; structuralContext: string; createdAt: number;
   anchor: CommentAnchor | null;
 }
@@ -133,9 +136,10 @@ export const api = {
     }),
   getComments: (id: string) =>
     fetchJson<{ comments: Comment[] }>(`/sessions/${id}/comments`),
-  createComment: (id: string, nodeId: string, text: string, anchor?: CommentAnchor) =>
+  createComment: (id: string, nodeId: string | null, text: string, anchor?: CommentAnchor) =>
     fetchJson<{ comment: Comment }>(`/sessions/${id}/comments`, {
-      method: "POST", body: JSON.stringify(anchor ? { nodeId, text, anchor } : { nodeId, text }),
+      method: "POST",
+      body: JSON.stringify({ ...(nodeId ? { nodeId } : {}), text, ...(anchor ? { anchor } : {}) }),
     }),
   updateUnit: (sessionId: string, unitId: string, patch: { label?: string; position?: number }) =>
     fetchJson<{ units: Unit[] }>(`/sessions/${sessionId}/units/${unitId}`, {
