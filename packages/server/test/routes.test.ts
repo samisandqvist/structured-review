@@ -641,6 +641,47 @@ describe("GET /api/sessions/:id/export", () => {
   });
 });
 
+describe("GET /api/sessions/:id/nodes/:nodeId/context", () => {
+  async function sessionWithFile() {
+    // Real file on disk so the working-tree read has content to serve.
+    mkdirSync(join(fixtureRoot, "src"), { recursive: true });
+    writeFileSync(
+      join(fixtureRoot, "src", "orders.ts"),
+      Array.from({ length: 40 }, (_, i) => `line${i + 1}`).join("\n") + "\n"
+    );
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const { nodes } = await (await app.request(`/api/sessions/${session.id}/nodes`)).json();
+    return { session, node: nodes.find((n: any) => n.stableId === "fn:handleOrder") };
+  }
+
+  it("serves working-tree context lines for a range", async () => {
+    const { session, node } = await sessionWithFile();
+    const res = await app.request(`/api/sessions/${session.id}/nodes/${node.id}/context?start=1&end=3`);
+    expect(res.status).toBe(200);
+    const { lines } = await res.json();
+    expect(lines.map((l: any) => l.text)).toEqual(["line1", "line2", "line3"]);
+    expect(lines[0]).toMatchObject({ type: "context", newLine: 1 });
+  });
+
+  it("rejects bad ranges and oversized ranges", async () => {
+    const { session, node } = await sessionWithFile();
+    for (const q of ["start=0&end=3", "start=5&end=2", "start=abc&end=3", "start=1&end=6000"]) {
+      const res = await app.request(`/api/sessions/${session.id}/nodes/${node.id}/context?${q}`);
+      expect(res.status).toBe(400);
+    }
+  });
+
+  it("404s for a node outside the session", async () => {
+    const { session } = await sessionWithFile();
+    const res = await app.request(`/api/sessions/${session.id}/nodes/nope/context?start=1&end=2`);
+    expect(res.status).toBe(404);
+  });
+});
+
 describe("GET /api/sessions/:id/flows", () => {
   it("returns flows and the orphan set (changed nodes in no flow)", async () => {
     const cr = await app.request("/api/sessions", {
