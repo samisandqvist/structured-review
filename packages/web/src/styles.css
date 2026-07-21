@@ -724,6 +724,20 @@ textarea:focus {
   opacity: 0.45;
   border-style: dotted;
 }
+/* Residual pseudo-node: changed lines outside the call graph. */
+.step--residual {
+  border-style: dotted;
+}
+.step__kind {
+  margin-left: 7px;
+  font-size: 11px;
+  color: var(--faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px dotted var(--line-bright);
+  border-radius: 3px;
+  padding: 0 4px;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .tnode--current {

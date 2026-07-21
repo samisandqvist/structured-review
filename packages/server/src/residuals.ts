@@ -1,5 +1,6 @@
 import { basename } from "node:path";
 import { changedFilesStrict, fileChangedRanges, subtractRanges, type LineRange } from "./diff.js";
+import type { ResidualKind } from "./types.js";
 import { isTestFile } from "./util.js";
 
 export interface ResidualNode {
@@ -10,6 +11,7 @@ export interface ResidualNode {
   endLine: number;
   isTest: boolean;
   ranges: LineRange[];
+  kind: ResidualKind;
 }
 
 /**
@@ -32,16 +34,19 @@ export function computeResiduals(
     const start = Math.min(...residual.map((r) => r.start));
     const end = Math.max(...residual.map((r) => r.end));
     const deleted = end === 0; // pure deletion: hunks attribute to new line 0
-    const suffix = deleted ? " (deleted)" : spans.length > 0 ? " (module scope)" : "";
+    // The kind travels as structured data, not a label suffix — the UI decides
+    // how to communicate "not reachable through the call graph".
+    const kind: ResidualKind = deleted ? "deleted" : spans.length > 0 ? "module-scope" : "whole-file";
     const sorted = residual.slice().sort((a, b) => a.start - b.start);
     out.push({
       stableId: `file-residual:${file}`,
-      label: `${basename(file)}${suffix}`,
+      label: basename(file),
       file,
       startLine: start,
       endLine: end,
       isTest: isTestFile(file),
       ranges: sorted,
+      kind,
     });
   }
   return out;

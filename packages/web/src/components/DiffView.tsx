@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import { useEffect } from "react";
 import type { AnchorSide, CommentAnchor, DiffLine, Node, NodeDiff } from "../api/client.js";
 import { useUIStore } from "../store/ui.js";
+import { RESIDUAL_KIND } from "../residual-kind.js";
 import { NodeBadge } from "./NodeBadge.js";
 
 /** Side+line of a changed row; null for context rows. */
@@ -163,6 +164,22 @@ export function DiffView({ node, diff }: { node: Node; diff?: NodeDiff }) {
           {node.label}
         </h2>
         <NodeBadge status={node.reviewStatus} />
+        {node.residualKind && (
+          <span
+            data-testid="residual-badge"
+            title={RESIDUAL_KIND[node.residualKind].title}
+            style={{
+              fontSize: 15,
+              color: "var(--dim)",
+              border: "1px dotted var(--line-bright)",
+              borderRadius: 4,
+              padding: "1px 6px",
+              letterSpacing: "0.04em",
+            }}
+          >
+            {RESIDUAL_KIND[node.residualKind].badge} · off-graph
+          </span>
+        )}
         {node.changeStatus === "unchanged" && (
           <span
             style={{
