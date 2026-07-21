@@ -4,7 +4,7 @@ import { createRequire as __createRequire } from 'node:module';
 const require = __createRequire(import.meta.url);
 
 // packages/skill/src/cli.ts
-import { readFileSync } from "node:fs";
+import { readFileSync as readFileSync2 } from "node:fs";
 
 // packages/skill/src/api.ts
 import { spawn } from "node:child_process";
@@ -22,6 +22,15 @@ async function createSession(base, branch, baseRef) {
 }
 async function getSessionInfo(base, sessionId) {
   return fetchJson(`${base}/api/sessions/${sessionId}`);
+}
+async function listSessions(base) {
+  return fetchJson(`${base}/api/sessions`);
+}
+async function deleteSession(base, sessionId) {
+  return fetchJson(`${base}/api/sessions/${sessionId}`, { method: "DELETE" });
+}
+async function shutdownHub(base) {
+  return fetchJson(`${base}/api/shutdown`, { method: "POST" });
 }
 async function getFlows(base, sessionId) {
   return fetchJson(`${base}/api/sessions/${sessionId}/flows`);
@@ -102,7 +111,7 @@ function waitConditionMet(until, status, commentCount) {
 
 // packages/skill/src/serve.ts
 import { execFileSync, spawn as spawn2 } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, openSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 function resolveGitRoot(dir) {
@@ -133,13 +142,16 @@ function serverEntryPath() {
   if (existsSync(sibling)) return sibling;
   return join(here, "..", "..", "server", "dist", "index.js");
 }
-function statePaths(repoRoot) {
-  const dataDir = process.env.CRW_DATA_DIR;
-  if (!dataDir) return { logDir: join(repoRoot, ".crw") };
+function repoStateKey(repoRoot) {
   const name = repoRoot.split("/").filter(Boolean).pop() ?? "repo";
   let hash = 0;
   for (let i = 0; i < repoRoot.length; i++) hash = hash * 31 + repoRoot.charCodeAt(i) >>> 0;
-  const key = `${name.replace(/[^A-Za-z0-9._-]+/g, "-")}-${hash.toString(16)}`;
+  return `${name.replace(/[^A-Za-z0-9._-]+/g, "-")}-${hash.toString(16)}`;
+}
+function statePaths(repoRoot) {
+  const dataDir = process.env.CRW_DATA_DIR;
+  if (!dataDir) return { logDir: join(repoRoot, ".crw") };
+  const key = repoStateKey(repoRoot);
   return { dbPath: join(dataDir, "db", `${key}.db`), logDir: join(dataDir, "logs", key) };
 }
 async function ensureServer(opts) {
@@ -156,6 +168,8 @@ async function ensureServer(opts) {
   const { dbPath, logDir } = statePaths(repoRoot);
   mkdirSync(logDir, { recursive: true });
   if (dbPath) mkdirSync(dirname(dbPath), { recursive: true });
+  writeFileSync(join(logDir, "repo-root"), `${repoRoot}
+`);
   const logFile = join(logDir, "server.log");
   const logFd = openSync(logFile, "a");
   const child = spawn2(process.execPath, [entry], {
@@ -184,18 +198,81 @@ async function ensureServer(opts) {
   throw new Error(`hub did not become healthy within 15s \u2014 see ${logFile}`);
 }
 
+// packages/skill/src/gc.ts
+import { existsSync as existsSync2, readdirSync, readFileSync, rmSync } from "node:fs";
+import { join as join2 } from "node:path";
+function removePaths(paths) {
+  const removed = [];
+  for (const p of paths) {
+    if (!existsSync2(p)) continue;
+    rmSync(p, { recursive: true, force: true });
+    removed.push(p);
+  }
+  return removed;
+}
+function repoStateFiles(repoRoot) {
+  const { dbPath, logDir } = statePaths(repoRoot);
+  const db = dbPath ?? join2(repoRoot, "review.db");
+  return [db, `${db}-wal`, `${db}-shm`, logDir];
+}
+async function stopHubIfServing(baseUrl, repoRoot) {
+  const health = await probeHealth(baseUrl);
+  if (!health?.ok || health.repoRoot !== repoRoot) return false;
+  try {
+    await shutdownHub(baseUrl);
+  } catch {
+    if (!health.pid) throw new Error(`hub at ${baseUrl} has no shutdown endpoint and /health reported no pid \u2014 stop it manually`);
+    process.kill(health.pid, "SIGTERM");
+  }
+  const deadline = Date.now() + 5e3;
+  while (Date.now() < deadline) {
+    if (await probeHealth(baseUrl) === null) return true;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  throw new Error(`hub at ${baseUrl} did not stop within 5s \u2014 its DB was left in place`);
+}
+async function gcRepo(repoPath, baseUrl) {
+  const repoRoot = resolveGitRoot(repoPath);
+  const hubStopped = await stopHubIfServing(baseUrl, repoRoot);
+  return { repoRoot, hubStopped, removed: removePaths(repoStateFiles(repoRoot)) };
+}
+function gcSweep(dataDir) {
+  const dbDir = join2(dataDir, "db");
+  const result = { swept: [], skipped: [] };
+  const entries = existsSync2(dbDir) ? readdirSync(dbDir).filter((f) => f.endsWith(".db")).map((f) => f.slice(0, -3)) : [];
+  for (const key of entries) {
+    const logDir = join2(dataDir, "logs", key);
+    const sidecar = join2(logDir, "repo-root");
+    if (!existsSync2(sidecar)) {
+      result.skipped.push({ key, reason: "no repo-root sidecar (state predates crw gc) \u2014 use crw gc --repo <path>" });
+      continue;
+    }
+    const repoRoot = readFileSync(sidecar, "utf8").trim();
+    if (existsSync2(repoRoot)) {
+      result.skipped.push({ key, reason: `repo still exists: ${repoRoot}` });
+      continue;
+    }
+    const db = join2(dbDir, `${key}.db`);
+    result.swept.push({ key, repoRoot, removed: removePaths([db, `${db}-wal`, `${db}-shm`, logDir]) });
+  }
+  return result;
+}
+
 // packages/skill/src/cli.ts
 var USAGE = `usage:
   crw serve [--repo <path>] [--port N]
   crw session create --branch <b> --base <ref> [--open]
+  crw session list
+  crw session delete --session <id>
   crw context --session <id>
   crw plan --session <id> (--auto | --units <file.json>) [--open]
   crw diff --session <id> --node <stableId>
   crw status --session <id>
   crw comments --session <id>
   crw wait --session <id> [--until reviewed|commented] [--interval sec] [--timeout sec]
+  crw gc [--repo <path>] [--all]
 global flags: --port N (hub port), --pretty (human-readable output)`;
-var BOOL_FLAGS = /* @__PURE__ */ new Set(["auto", "open", "pretty"]);
+var BOOL_FLAGS = /* @__PURE__ */ new Set(["auto", "open", "pretty", "all"]);
 function parseCliArgs(argv) {
   const positionals = [];
   const flags = {};
@@ -279,6 +356,44 @@ async function cmdSessionCreate(base, flags) {
     ].join("\n")
   };
 }
+async function cmdSessionList(base) {
+  const { sessions } = await listSessions(base);
+  return {
+    json: { sessions },
+    pretty: sessions.length === 0 ? "no sessions" : sessions.map((s) => `${s.id} (${s.status}) \u2014 ${s.branch} vs ${s.baseRef}, created ${new Date(s.createdAt).toISOString()}`).join("\n")
+  };
+}
+async function cmdSessionDelete(base, flags) {
+  const sessionId = required(flags, "session");
+  const result = await deleteSession(base, sessionId);
+  return { json: result, pretty: `deleted session ${result.deleted}` };
+}
+async function cmdGc(base, flags) {
+  if (flags.all) {
+    const dataDir = process.env.CRW_DATA_DIR;
+    if (!dataDir) throw new Error("crw gc --all needs CRW_DATA_DIR (plugin mode); use crw gc --repo <path> instead");
+    const result2 = gcSweep(dataDir);
+    return {
+      json: result2,
+      pretty: [
+        ...result2.swept.map((s) => `swept ${s.key} (${s.repoRoot}):
+${s.removed.map((p) => `  - ${p}`).join("\n")}`),
+        ...result2.skipped.map((s) => `skipped ${s.key}: ${s.reason}`),
+        ...result2.swept.length + result2.skipped.length === 0 ? ["nothing to sweep"] : []
+      ].join("\n")
+    };
+  }
+  const repo = typeof flags.repo === "string" ? flags.repo : process.cwd();
+  const result = await gcRepo(repo, base);
+  return {
+    json: result,
+    pretty: [
+      `repo: ${result.repoRoot}`,
+      result.hubStopped ? "hub stopped" : "no hub running for this repo",
+      ...result.removed.length ? ["removed:", ...result.removed.map((p) => `  - ${p}`)] : ["nothing to remove"]
+    ].join("\n")
+  };
+}
 async function cmdContext(base, flags) {
   const sessionId = required(flags, "session");
   const [{ flows, orphans }, { changes }] = await Promise.all([
@@ -294,7 +409,7 @@ async function cmdPlan(base, flags) {
     const { flows, orphans } = await getFlows(base, sessionId);
     units = defaultPartition(flows, orphans);
   } else if (typeof flags.units === "string") {
-    units = JSON.parse(readFileSync(flags.units, "utf8"));
+    units = JSON.parse(readFileSync2(flags.units, "utf8"));
   } else {
     throw new Error(`plan needs --auto or --units <file.json>
 ${USAGE}`);
@@ -337,11 +452,15 @@ async function cmdComments(base, flags) {
   const statusByNode = new Map(nodes.map((n) => [n.id, n.reviewStatus]));
   const out = {
     ...exported,
-    comments: exported.comments.map((c) => ({ ...c, reviewStatus: statusByNode.get(c.nodeId) ?? "unknown" }))
+    comments: exported.comments.map(
+      (c) => c.scope === "session" ? c : { ...c, reviewStatus: statusByNode.get(c.nodeId) ?? "unknown" }
+    )
   };
   return {
     json: out,
     pretty: out.comments.length === 0 ? "no comments" : out.comments.map((c) => {
+      if (c.scope === "session") return `[review-wide]
+  ${c.text.replace(/\n/g, "\n  ")}`;
       const where = c.anchor ? `${c.file}:${c.anchor.startLine}-${c.anchor.endLine}` : `${c.file}:${c.startLine}-${c.endLine}`;
       return `${where} (${c.label}, ${c.reviewStatus})
   ${c.text.replace(/\n/g, "\n  ")}`;
@@ -386,6 +505,15 @@ async function runCli(argv) {
       break;
     case "session create":
       result = await cmdSessionCreate(base, flags);
+      break;
+    case "session list":
+      result = await cmdSessionList(base);
+      break;
+    case "session delete":
+      result = await cmdSessionDelete(base, flags);
+      break;
+    case "gc":
+      result = await cmdGc(base, flags);
       break;
     case "context":
       result = await cmdContext(base, flags);
