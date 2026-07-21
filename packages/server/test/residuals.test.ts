@@ -52,16 +52,18 @@ describe("computeResiduals", () => {
     const types = res.find((r) => r.file === "types.ts")!;
     expect(types.stableId).toBe("file-residual:types.ts");
     expect(types.label).toBe("types.ts");
+    expect(types.kind).toBe("whole-file");
     expect(types.startLine).toBeGreaterThan(0);
     expect(types.isTest).toBe(false);
   });
 
-  it("subtracts node spans and labels module-scope residuals", () => {
+  it("subtracts node spans and marks module-scope residuals", () => {
     // orders.ts change: import line 1 (residual) + body change inside the node span 2–4
     const spans = new Map([["orders.ts", [{ start: 2, end: 4 }]]]);
     const res = computeResiduals("main", spans, dir);
     const orders = res.find((r) => r.file === "orders.ts")!;
-    expect(orders.label).toBe("orders.ts (module scope)");
+    expect(orders.label).toBe("orders.ts");
+    expect(orders.kind).toBe("module-scope");
     expect(orders.startLine).toBe(1);
     expect(orders.endLine).toBe(1);
   });
@@ -75,7 +77,8 @@ describe("computeResiduals", () => {
   it("marks a deleted file", () => {
     const res = computeResiduals("main", new Map(), dir);
     const gone = res.find((r) => r.file === "gone.ts")!;
-    expect(gone.label).toBe("gone.ts (deleted)");
+    expect(gone.label).toBe("gone.ts");
+    expect(gone.kind).toBe("deleted");
     expect(gone.startLine).toBe(0);
     expect(gone.endLine).toBe(0);
   });

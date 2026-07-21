@@ -20,6 +20,8 @@ export interface Unit {
   attached: AttachedMember[];
 }
 export interface LineRange { start: number; end: number; }
+/** Why a residual pseudo-node sits outside the call graph. */
+export type ResidualKind = "module-scope" | "whole-file" | "deleted";
 export interface Node {
   id: string; sessionId: string; stableId: string;
   label: string; file: string; startLine: number; endLine: number;
@@ -28,6 +30,7 @@ export interface Node {
   reviewedInUnit: number | null;
   isTest: boolean;
   residualRanges?: LineRange[] | null;
+  residualKind?: ResidualKind | null;
 }
 export type AnchorSide = "old" | "new";
 export interface CommentAnchor {
@@ -58,6 +61,8 @@ export interface FlowStep {
   depth: number;
   /** One-hop context on a pruned tree, not on a path to a change. */
   offPath?: boolean;
+  /** Set when the step is a residual pseudo-node (orphan-unit members only). */
+  residualKind?: ResidualKind | null;
   nodeId: string | null;
   changeStatus: "changed" | "unchanged" | null;
   reviewStatus: Node["reviewStatus"] | null;

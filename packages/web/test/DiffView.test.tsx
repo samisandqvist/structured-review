@@ -29,6 +29,12 @@ describe("DiffView", () => {
     render(<DiffView node={{ ...baseNode, changeStatus: "unchanged" }} />);
     expect(screen.getByText(/unchanged/)).toBeInTheDocument();
   });
+  it("shows an off-graph badge with tooltip for residual nodes", () => {
+    render(<DiffView node={{ ...baseNode, residualKind: "module-scope" }} />);
+    const badge = screen.getByTestId("residual-badge");
+    expect(badge.textContent).toContain("off-graph");
+    expect(badge).toHaveAttribute("title", expect.stringContaining("call graph"));
+  });
 
   it("renders real file line numbers from hunk coordinates", () => {
     render(<DiffView node={baseNode} diff={diff} />);

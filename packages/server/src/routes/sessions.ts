@@ -127,7 +127,7 @@ export function createSessionsRoute(ctx: AppContext) {
           sessionId: session.id, stableId: r.stableId,
           label: r.label, file: r.file, startLine: r.startLine, endLine: r.endLine,
           changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null,
-          isTest: r.isTest, residualRanges: r.ranges,
+          isTest: r.isTest, residualRanges: r.ranges, residualKind: r.kind,
         });
       }
       const idByStable = new Map(getNodesBySession(ctx.db, session.id).map((n) => [n.stableId, n.id]));

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useBulkUpdateNodeStatus, useFlows, useNodes, useSession, useUpdateUnit } from "../api/hooks.js";
 import { useUIStore } from "../store/ui.js";
+import { RESIDUAL_KIND } from "../residual-kind.js";
 import type { AttachedMember, Flow, FlowStep, GraphEdgeDTO, Node, Unit } from "../api/client.js";
 
 export function PlanView({
@@ -274,6 +275,7 @@ function UnitBlock({
                   stableId: n.stableId,
                   label: n.label, file: n.file, startLine: n.startLine, endLine: n.endLine,
                   isTest: n.isTest, depth: 0, nodeId: n.id, changeStatus: n.changeStatus, reviewStatus: n.reviewStatus,
+                  residualKind: n.residualKind,
                 }}
                 current={n.id === currentNodeId}
                 onSelect={onSelectNode}
@@ -385,6 +387,7 @@ function AttachedChip({
   onSelect: (nodeId: string) => void;
 }) {
   if (!node) return null;
+  const residual = node.residualKind ? RESIDUAL_KIND[node.residualKind] : null;
   const cls = [
     "step",
     "step--attached",
@@ -392,11 +395,13 @@ function AttachedChip({
     node.isTest ? "step--test" : "",
     node.reviewStatus !== "unreviewed" ? "step--reviewed" : "",
     member.counted ? "" : "step--ref",
+    residual ? "step--residual" : "",
     current ? "step--current" : "",
   ].filter(Boolean).join(" ");
-  const title = member.counted
+  const base = member.counted
     ? `${node.file}:${node.startLine} — attached: ${member.reason}`
     : `${node.file}:${node.startLine} — ${member.reason} reference; reviewed in its home unit`;
+  const title = residual ? `${base}. ${residual.title}` : base;
   return (
     <button
       className={cls}
@@ -405,6 +410,7 @@ function AttachedChip({
       title={title}
     >
       {node.label}
+      {residual && <span className="step__kind">{residual.badge}</span>}
       <span className="step__reason">{member.counted ? member.reason : `${member.reason} →`}</span>
     </button>
   );
@@ -417,12 +423,14 @@ function StepChip({
   current: boolean;
   onSelect: (nodeId: string) => void;
 }) {
+  const residual = step.residualKind ? RESIDUAL_KIND[step.residualKind] : null;
   const cls = [
     "step",
     step.changeStatus === "changed" ? "step--changed" : "",
     step.changeStatus === null ? "step--ext" : "",
     step.isTest ? "step--test" : "",
     step.reviewStatus && step.reviewStatus !== "unreviewed" ? "step--reviewed" : "",
+    residual ? "step--residual" : "",
     current ? "step--current" : "",
   ].filter(Boolean).join(" ");
   return (
@@ -430,9 +438,10 @@ function StepChip({
       className={cls}
       disabled={!step.nodeId}
       onClick={() => step.nodeId && onSelect(step.nodeId)}
-      title={`${step.file}:${step.startLine}`}
+      title={residual ? `${step.file}:${step.startLine} — ${residual.title}` : `${step.file}:${step.startLine}`}
     >
       {step.label}
+      {residual && <span className="step__kind">{residual.badge}</span>}
     </button>
   );
 }

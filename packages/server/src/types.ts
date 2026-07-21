@@ -7,6 +7,11 @@ export type ReviewStatus =
   | "reviewed-commented"
   | "reviewed-elsewhere";
 export type EdgeType = "call" | "test";
+/** Why a residual pseudo-node exists outside the call graph:
+ *  module-scope = top-of-module changes (imports/types/constants) in a file
+ *  that also has indexed nodes; whole-file = no indexed nodes in the file at
+ *  all; deleted = the file only lost lines. */
+export type ResidualKind = "module-scope" | "whole-file" | "deleted";
 
 export interface LineRange {
   start: number;
@@ -62,6 +67,7 @@ export interface Node {
   reviewedInUnit: number | null;
   isTest: boolean;
   residualRanges: LineRange[] | null;
+  residualKind: ResidualKind | null;
 }
 
 export interface Edge {
