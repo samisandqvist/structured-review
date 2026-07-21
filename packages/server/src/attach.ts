@@ -12,6 +12,7 @@ export interface AttachNode {
   file: string;
   isTest: boolean;
   changeStatus: string;
+  residualKind?: string | null;
 }
 
 /** One session TESTED_BY edge, by stableId (production tested-by test). */
@@ -25,10 +26,47 @@ interface WalkPos {
   pos: number;
 }
 
+/** Orphan-unit member order (mirrors web orphan-layout.ts): a residual member
+ *  walks right after the first non-residual member of its file; the rest keep
+ *  listed order grouped by directory (order of first appearance). */
+export function orphanWalkIds(memberIds: string[], byStable: Map<string, AttachNode>): string[] {
+  const members = memberIds.map((id) => byStable.get(id)).filter((n): n is AttachNode => !!n);
+  const dirOf = (file: string) => file.slice(0, Math.max(0, file.lastIndexOf("/")));
+  const nestedByParent = new Map<string, string[]>();
+  const topLevel: AttachNode[] = [];
+  for (const m of members) {
+    const parent = m.residualKind
+      ? members.find((o) => !o.residualKind && o.file === m.file)
+      : undefined;
+    if (parent) {
+      const list = nestedByParent.get(parent.stableId) ?? [];
+      list.push(m.stableId);
+      nestedByParent.set(parent.stableId, list);
+    } else {
+      topLevel.push(m);
+    }
+  }
+  const byDir = new Map<string, string[]>();
+  for (const n of topLevel) {
+    const dir = dirOf(n.file);
+    const list = byDir.get(dir) ?? [];
+    list.push(n.stableId, ...(nestedByParent.get(n.stableId) ?? []));
+    byDir.set(dir, list);
+  }
+  const out = [...byDir.values()].flat();
+  for (const id of memberIds) if (!byStable.has(id)) out.push(id);
+  return out;
+}
+
 /** Covered changed nodes in canonical walk order (mirrors web buildWalkOrder:
- *  units in given order; flow steps in tree order; orphan members in listed
- *  order; changed only; first occurrence wins). */
-function walkPositions(units: PlanUnitInput[], flows: Flow[], changed: Set<string>): Map<string, WalkPos> {
+ *  units in given order; flow steps in tree order; orphan members in layout
+ *  order — see orphanWalkIds; changed only; first occurrence wins). */
+function walkPositions(
+  units: PlanUnitInput[],
+  flows: Flow[],
+  changed: Set<string>,
+  byStable: Map<string, AttachNode>
+): Map<string, WalkPos> {
   const flowByEntry = new Map(flows.map((f) => [f.steps[0]?.stableId ?? "", f]));
   const walk = new Map<string, WalkPos>();
   let pos = 0;
@@ -42,7 +80,7 @@ function walkPositions(units: PlanUnitInput[], flows: Flow[], changed: Set<strin
         for (const s of flowByEntry.get(entry)?.steps ?? []) push(s.stableId);
       }
     } else {
-      for (const stableId of u.orphanStableIds ?? []) push(stableId);
+      for (const stableId of orphanWalkIds(u.orphanStableIds ?? [], byStable)) push(stableId);
     }
   });
   return walk;
@@ -64,7 +102,7 @@ export function deriveAttachments(
   const byStable = new Map(nodes.map((n) => [n.stableId, n]));
   const changed = new Set(nodes.filter((n) => n.changeStatus === "changed").map((n) => n.stableId));
   const covered = new Set(units.flatMap((u) => unitCoverage(u, flows, changed)));
-  const walk = walkPositions(units, flows, changed);
+  const walk = walkPositions(units, flows, changed, byStable);
   const byWalk = (a: string, b: string) => walk.get(a)!.pos - walk.get(b)!.pos;
 
   const testsByTest = new Map<string, string[]>();
