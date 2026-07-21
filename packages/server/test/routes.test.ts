@@ -185,6 +185,71 @@ describe("GET /api/sessions/:id", () => {
   });
 });
 
+describe("GET /api/sessions (list)", () => {
+  it("lists sessions newest first", async () => {
+    const empty = await (await app.request("/api/sessions")).json();
+    expect(empty.sessions).toEqual([]);
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const body = await (await app.request("/api/sessions")).json();
+    expect(body.sessions.map((s: { id: string }) => s.id)).toContain(session.id);
+  });
+});
+
+describe("DELETE /api/sessions/:id", () => {
+  it("deletes the session and cascades its nodes and comments", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const { nodes } = await (await app.request(`/api/sessions/${session.id}/nodes`)).json();
+    expect(nodes.length).toBeGreaterThan(0);
+    await app.request(`/api/sessions/${session.id}/comments`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nodeId: nodes[0].id, text: "gone soon" }),
+    });
+
+    const del = await app.request(`/api/sessions/${session.id}`, { method: "DELETE" });
+    expect(del.status).toBe(200);
+    expect((await del.json()).deleted).toBe(session.id);
+
+    expect((await app.request(`/api/sessions/${session.id}`)).status).toBe(404);
+    const orphanRows = db.prepare("SELECT COUNT(*) AS c FROM nodes WHERE session_id = ?").get(session.id) as { c: number };
+    expect(orphanRows.c).toBe(0);
+    const commentRows = db.prepare("SELECT COUNT(*) AS c FROM comments WHERE session_id = ?").get(session.id) as { c: number };
+    expect(commentRows.c).toBe(0);
+  });
+
+  it("returns 404 for an unknown session", async () => {
+    const res = await app.request("/api/sessions/nonexistent", { method: "DELETE" });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("POST /api/shutdown", () => {
+  it("reports unsupported when no shutdown handler is wired (tests)", async () => {
+    const res = await app.request("/api/shutdown", { method: "POST" });
+    expect(res.status).toBe(501);
+  });
+
+  it("responds ok and invokes the handler when wired", async () => {
+    let called = false;
+    const stoppable = createApp({
+      db, graphProvider: new StubGraphProvider(), repoRoot: fixtureRoot,
+      onShutdown: () => { called = true; },
+    });
+    const res = await stoppable.request("/api/shutdown", { method: "POST" });
+    expect(res.status).toBe(200);
+    expect((await res.json()).ok).toBe(true);
+    await new Promise((r) => setTimeout(r, 250));
+    expect(called).toBe(true);
+  });
+});
+
 describe("PUT /api/sessions/:id/plan", () => {
   it("replaces the plan with kind-tagged units", async () => {
     const cr = await app.request("/api/sessions", {
