@@ -459,6 +459,64 @@ describe("GET /api/sessions/:id/comments", () => {
   });
 });
 
+describe("session-wide comments", () => {
+  async function makeSession() {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    return (await cr.json()).session;
+  }
+
+  it("creates a comment with no nodeId and lists it with nodeId null", async () => {
+    const session = await makeSession();
+    const res = await app.request(`/api/sessions/${session.id}/comments`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "missing tests for the retry path" }),
+    });
+    expect(res.status).toBe(200);
+    const { comment } = await res.json();
+    expect(comment.nodeId).toBeNull();
+    expect(comment.hunkSnippet).toBe("");
+    const list = await (await app.request(`/api/sessions/${session.id}/comments`)).json();
+    expect(list.comments[0].nodeId).toBeNull();
+  });
+
+  it("rejects an anchor without a nodeId", async () => {
+    const session = await makeSession();
+    const res = await app.request(`/api/sessions/${session.id}/comments`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: "anchored to nothing",
+        anchor: { startLine: 1, startSide: "new", endLine: 1, endSide: "new" },
+      }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("exports session comments with scope:'session' and node comments with scope:'node'", async () => {
+    const session = await makeSession();
+    const { nodes } = await (await app.request(`/api/sessions/${session.id}/nodes`)).json();
+    await app.request(`/api/sessions/${session.id}/comments`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nodeId: nodes[0].id, text: "inline" }),
+    });
+    await app.request(`/api/sessions/${session.id}/comments`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "review-wide" }),
+    });
+    const exported = await (await app.request(`/api/sessions/${session.id}/export`)).json();
+    expect(exported.comments).toHaveLength(2);
+    const inline = exported.comments.find((c: any) => c.scope === "node");
+    const wide = exported.comments.find((c: any) => c.scope === "session");
+    expect(inline.file).toBeDefined();
+    expect(inline.nodeId).toBe(nodes[0].id);
+    expect(wide.text).toBe("review-wide");
+    expect(wide.nodeId).toBeUndefined();
+    expect(wide.file).toBeUndefined();
+  });
+});
+
 describe("coverage reconciliation", () => {
   it("attaches same-file leftovers to their covered sibling and reports them covered", async () => {
     const cr = await app.request("/api/sessions", {

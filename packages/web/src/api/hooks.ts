@@ -60,7 +60,7 @@ export function useUpdateUnit(sessionId: string) {
 export function useCreateComment(sessionId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ nodeId, text, anchor }: { nodeId: string; text: string; anchor?: CommentAnchor }) =>
+    mutationFn: ({ nodeId, text, anchor }: { nodeId: string | null; text: string; anchor?: CommentAnchor }) =>
       api.createComment(sessionId, nodeId, text, anchor),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["comments", sessionId] });

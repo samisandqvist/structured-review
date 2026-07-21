@@ -4,7 +4,7 @@ import { randomId } from "../util.js";
 import { getNodeNeighbors } from "./nodes.js";
 
 interface CommentRow {
-  id: string; session_id: string; node_id: string; hunk_snippet: string;
+  id: string; session_id: string; node_id: string | null; hunk_snippet: string;
   text: string; structural_context: string; created_at: number; anchor: string | null;
 }
 
@@ -18,7 +18,7 @@ function rowToComment(row: CommentRow): Comment {
 }
 
 export function createComment(
-  db: DB, sessionId: string, nodeId: string, hunkSnippet: string,
+  db: DB, sessionId: string, nodeId: string | null, hunkSnippet: string,
   text: string, structuralContext: string, anchor: CommentAnchor | null = null
 ): Comment {
   const id = randomId("cmt");
@@ -53,20 +53,28 @@ export function structuralContextFor(db: DB, nodeId: string): string {
 }
 
 export function exportComments(db: DB, sessionId: string): ExportedComment[] {
+  // LEFT JOIN: a NULL node_id is a session-wide comment and must survive the
+  // export — it maps to a PR review body rather than an inline comment.
   const rows = db.prepare(
     `SELECT c.id, c.node_id, n.stable_id, n.label, n.file, n.start_line, n.end_line, c.hunk_snippet, c.text, c.structural_context, c.created_at, c.anchor
-     FROM comments c JOIN nodes n ON c.node_id = n.id WHERE c.session_id = ? ORDER BY c.created_at, c.rowid`
+     FROM comments c LEFT JOIN nodes n ON c.node_id = n.id WHERE c.session_id = ? ORDER BY c.created_at, c.rowid`
   ).all(sessionId) as {
-    id: string; node_id: string; stable_id: string; label: string; file: string;
-    start_line: number; end_line: number;
+    id: string; node_id: string | null; stable_id: string | null; label: string | null; file: string | null;
+    start_line: number | null; end_line: number | null;
     hunk_snippet: string; text: string; structural_context: string; created_at: number; anchor: string | null;
   }[];
-  return rows.map((row) => ({
-    id: row.id, nodeId: row.node_id, stableId: row.stable_id, label: row.label, file: row.file,
-    startLine: row.start_line, endLine: row.end_line,
-    hunkSnippet: row.hunk_snippet, text: row.text,
-    structuralContext: structuralContextFor(db, row.node_id),
-    createdAt: row.created_at,
-    anchor: row.anchor ? (JSON.parse(row.anchor) as CommentAnchor) : null,
-  }));
+  return rows.map((row): ExportedComment => {
+    if (row.node_id === null) {
+      return { scope: "session", id: row.id, text: row.text, createdAt: row.created_at };
+    }
+    return {
+      scope: "node",
+      id: row.id, nodeId: row.node_id, stableId: row.stable_id!, label: row.label!, file: row.file!,
+      startLine: row.start_line!, endLine: row.end_line!,
+      hunkSnippet: row.hunk_snippet, text: row.text,
+      structuralContext: structuralContextFor(db, row.node_id),
+      createdAt: row.created_at,
+      anchor: row.anchor ? (JSON.parse(row.anchor) as CommentAnchor) : null,
+    };
+  });
 }
