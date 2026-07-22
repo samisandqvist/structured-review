@@ -7,6 +7,11 @@ export type ReviewStatus =
   | "reviewed-commented"
   | "reviewed-elsewhere";
 export type EdgeType = "call" | "test";
+/** Why a residual pseudo-node exists outside the call graph:
+ *  module-scope = top-of-module changes (imports/types/constants) in a file
+ *  that also has indexed nodes; whole-file = no indexed nodes in the file at
+ *  all; deleted = the file only lost lines. */
+export type ResidualKind = "module-scope" | "whole-file" | "deleted";
 
 export interface LineRange {
   start: number;
@@ -62,6 +67,7 @@ export interface Node {
   reviewedInUnit: number | null;
   isTest: boolean;
   residualRanges: LineRange[] | null;
+  residualKind: ResidualKind | null;
 }
 
 export interface Edge {
@@ -75,7 +81,8 @@ export interface Edge {
 export interface Comment {
   id: string;
   sessionId: string;
-  nodeId: string;
+  /** null = session-wide comment: no node, no anchor, no snippet. */
+  nodeId: string | null;
   hunkSnippet: string;
   text: string;
   structuralContext: string;
@@ -94,7 +101,8 @@ export interface CommentAnchor {
   endSide: AnchorSide;
 }
 
-export interface ExportedComment {
+export interface ExportedNodeComment {
+  scope: "node";
   id: string;
   nodeId: string;
   stableId: string;
@@ -108,3 +116,13 @@ export interface ExportedComment {
   createdAt: number;
   anchor: CommentAnchor | null;
 }
+
+/** Session-wide remark; maps to a GitHub PR review body, not an inline comment. */
+export interface ExportedSessionComment {
+  scope: "session";
+  id: string;
+  text: string;
+  createdAt: number;
+}
+
+export type ExportedComment = ExportedNodeComment | ExportedSessionComment;

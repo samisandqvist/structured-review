@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppContext } from "../app.js";
-import { createSession, getSession, updateSessionStatus } from "../repo/sessions.js";
+import { createSession, getSession, listSessions, deleteSession, updateSessionStatus } from "../repo/sessions.js";
 import { createUnit, getUnitsBySession, deleteUnit, updateUnitLabel, setUnitPositions } from "../repo/units.js";
 import { createNode, getNodesBySession } from "../repo/nodes.js";
 import { fileChangedRanges, gitHeadSha, repoFingerprint, resolveRef, rangesOverlap, currentBranch, GitError, type LineRange } from "../diff.js";
@@ -127,7 +127,7 @@ export function createSessionsRoute(ctx: AppContext) {
           sessionId: session.id, stableId: r.stableId,
           label: r.label, file: r.file, startLine: r.startLine, endLine: r.endLine,
           changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null,
-          isTest: r.isTest, residualRanges: r.ranges,
+          isTest: r.isTest, residualRanges: r.ranges, residualKind: r.kind,
         });
       }
       const idByStable = new Map(getNodesBySession(ctx.db, session.id).map((n) => [n.stableId, n.id]));
@@ -142,6 +142,14 @@ export function createSessionsRoute(ctx: AppContext) {
       return session;
     })();
     return c.json({ session, subgraph });
+  });
+
+  router.get("/", (c) => c.json({ sessions: listSessions(ctx.db) }));
+
+  router.delete("/:id", (c) => {
+    const id = c.req.param("id");
+    if (!deleteSession(ctx.db, id)) return c.json({ error: "not found" }, 404);
+    return c.json({ deleted: id });
   });
 
   router.get("/:id", (c) => {

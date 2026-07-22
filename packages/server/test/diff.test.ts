@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { extractHunkDiff, extractLinesForRanges, getNodeDiff, nodeChangeStats, subtractRanges, resolveRef, changedFilesStrict, currentBranch, repoFingerprint, subtreeFingerprint, formatHunkSnippet, anchorRowRange, GitError } from "../src/diff.js";
+import { extractHunkDiff, extractLinesForRanges, expandedContextSlice, getNodeDiff, nodeChangeStats, subtractRanges, resolveRef, changedFilesStrict, currentBranch, repoFingerprint, subtreeFingerprint, formatHunkSnippet, anchorRowRange, GitError } from "../src/diff.js";
 import type { DiffLine } from "../src/diff.js";
 import type { CommentAnchor } from "../src/types.js";
 import { languagePathspecs } from "../src/graph/roots.js";
@@ -288,6 +288,64 @@ describe("getNodeDiffForRanges", () => {
 
   it("returns null when no range matches", () => {
     expect(extractLinesForRanges(raw, [{ start: 100, end: 110 }])).toBeNull();
+  });
+});
+
+describe("expandedContextSlice", () => {
+  let dir: string;
+  const git = (...a: string[]) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), "crw-expand-"));
+    git("init", "-b", "main");
+    git("config", "user.email", "t@t");
+    git("config", "user.name", "t");
+    // 20 lines at base
+    writeFileSync(join(dir, "f.ts"), Array.from({ length: 20 }, (_, i) => `line${i + 1}`).join("\n") + "\n");
+    git("add", ".");
+    git("commit", "-m", "base");
+    // working tree: replace line 5 with two lines (net +1), delete line 12 (net 0 after)
+    const lines = Array.from({ length: 20 }, (_, i) => `line${i + 1}`);
+    lines.splice(11, 1); // delete "line12"
+    lines.splice(4, 1, "line5 CHANGED", "line5b NEW");
+    writeFileSync(join(dir, "f.ts"), lines.join("\n") + "\n");
+  });
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("returns plain context with old == new above the first hunk", () => {
+    const slice = expandedContextSlice("main", "f.ts", 1, 2, dir);
+    expect(slice).toEqual([
+      { type: "context", oldLine: 1, newLine: 1, text: "line1" },
+      { type: "context", oldLine: 2, newLine: 2, text: "line2" },
+    ]);
+  });
+
+  it("reconstructs shifted old-side numbers below a hunk", () => {
+    // After +1 at line 5, new line 8 is old line 7.
+    const slice = expandedContextSlice("main", "f.ts", 8, 8, dir);
+    expect(slice).toEqual([{ type: "context", oldLine: 7, newLine: 8, text: "line7" }]);
+  });
+
+  it("emits real added/removed rows when the range crosses a hunk", () => {
+    const slice = expandedContextSlice("main", "f.ts", 4, 7, dir);
+    const types = slice.map((l) => `${l.type}:${l.text}`);
+    expect(types).toContain("removed:line5");
+    expect(types).toContain("added:line5 CHANGED");
+    expect(types).toContain("added:line5b NEW");
+    expect(types).toContain("context:line4");
+  });
+
+  it("clamps to EOF and returns [] past the end", () => {
+    // working tree has 20 lines (one replaced by two, one deleted)
+    const tail = expandedContextSlice("main", "f.ts", 19, 999, dir);
+    expect(tail.length).toBe(2);
+    expect(tail[tail.length - 1].newLine).toBe(20);
+    expect(expandedContextSlice("main", "f.ts", 21, 30, dir)).toEqual([]);
+  });
+
+  it("accounts for all hunks above when mapping old numbers near the file end", () => {
+    // +1 (line 5 split) then -1 (line 12 deleted) → old == new again below both.
+    const slice = expandedContextSlice("main", "f.ts", 18, 18, dir);
+    expect(slice).toEqual([{ type: "context", oldLine: 18, newLine: 18, text: "line18" }]);
   });
 });
 

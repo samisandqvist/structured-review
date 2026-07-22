@@ -21,6 +21,9 @@ export interface AppContext {
   webDistPath?: string;
   /** Graph provider name reported on /health (scip | crg | stub). */
   providerName?: string;
+  /** Called after POST /api/shutdown responds. index.ts exits the process;
+   *  tests leave it unset and the endpoint reports shutdown unsupported. */
+  onShutdown?: () => void;
 }
 
 export function createApp(ctx: AppContext) {
@@ -31,6 +34,14 @@ export function createApp(ctx: AppContext) {
   app.get("/health", (c) =>
     c.json({ ok: true, repoRoot: resolved.repoRoot, pid: process.pid, provider: resolved.providerName ?? "unknown" })
   );
+  // Sanctioned stop for `crw gc`: the hub must be down before its DB files are
+  // removed (WAL). The handler fires after the response is written.
+  app.post("/api/shutdown", (c) => {
+    if (!resolved.onShutdown) return c.json({ ok: false, error: "shutdown not supported" }, 501);
+    const onShutdown = resolved.onShutdown;
+    setTimeout(onShutdown, 150);
+    return c.json({ ok: true, pid: process.pid });
+  });
   app.route("/api/sessions", createSessionsRoute(resolved));
   app.route("/api/sessions", createNodesRoute(resolved));
   app.route("/api/sessions", createCommentsRoute(resolved));

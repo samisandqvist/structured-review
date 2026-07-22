@@ -78,11 +78,14 @@ export const commentAnchorSchema = z.object({
   endSide: anchorSide,
 });
 
-export const commentCreateSchema = z.object({
-  nodeId: z.string().min(1, "nodeId is required"),
-  text: z.string().trim().min(1, "comment text must be nonempty").max(10_000, "comment too long"),
-  anchor: commentAnchorSchema.optional(),
-});
+export const commentCreateSchema = z
+  .object({
+    // Omitted nodeId = session-wide comment (review body, not inline).
+    nodeId: z.string().min(1).optional(),
+    text: z.string().trim().min(1, "comment text must be nonempty").max(10_000, "comment too long"),
+    anchor: commentAnchorSchema.optional(),
+  })
+  .refine((b) => !(b.anchor && !b.nodeId), { message: "anchor requires nodeId" });
 
 export type Parsed<T> = { ok: true; data: T } | { ok: false; res: Response };
 

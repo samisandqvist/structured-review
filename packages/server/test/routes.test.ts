@@ -185,6 +185,71 @@ describe("GET /api/sessions/:id", () => {
   });
 });
 
+describe("GET /api/sessions (list)", () => {
+  it("lists sessions newest first", async () => {
+    const empty = await (await app.request("/api/sessions")).json();
+    expect(empty.sessions).toEqual([]);
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const body = await (await app.request("/api/sessions")).json();
+    expect(body.sessions.map((s: { id: string }) => s.id)).toContain(session.id);
+  });
+});
+
+describe("DELETE /api/sessions/:id", () => {
+  it("deletes the session and cascades its nodes and comments", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const { nodes } = await (await app.request(`/api/sessions/${session.id}/nodes`)).json();
+    expect(nodes.length).toBeGreaterThan(0);
+    await app.request(`/api/sessions/${session.id}/comments`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nodeId: nodes[0].id, text: "gone soon" }),
+    });
+
+    const del = await app.request(`/api/sessions/${session.id}`, { method: "DELETE" });
+    expect(del.status).toBe(200);
+    expect((await del.json()).deleted).toBe(session.id);
+
+    expect((await app.request(`/api/sessions/${session.id}`)).status).toBe(404);
+    const orphanRows = db.prepare("SELECT COUNT(*) AS c FROM nodes WHERE session_id = ?").get(session.id) as { c: number };
+    expect(orphanRows.c).toBe(0);
+    const commentRows = db.prepare("SELECT COUNT(*) AS c FROM comments WHERE session_id = ?").get(session.id) as { c: number };
+    expect(commentRows.c).toBe(0);
+  });
+
+  it("returns 404 for an unknown session", async () => {
+    const res = await app.request("/api/sessions/nonexistent", { method: "DELETE" });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("POST /api/shutdown", () => {
+  it("reports unsupported when no shutdown handler is wired (tests)", async () => {
+    const res = await app.request("/api/shutdown", { method: "POST" });
+    expect(res.status).toBe(501);
+  });
+
+  it("responds ok and invokes the handler when wired", async () => {
+    let called = false;
+    const stoppable = createApp({
+      db, graphProvider: new StubGraphProvider(), repoRoot: fixtureRoot,
+      onShutdown: () => { called = true; },
+    });
+    const res = await stoppable.request("/api/shutdown", { method: "POST" });
+    expect(res.status).toBe(200);
+    expect((await res.json()).ok).toBe(true);
+    await new Promise((r) => setTimeout(r, 250));
+    expect(called).toBe(true);
+  });
+});
+
 describe("PUT /api/sessions/:id/plan", () => {
   it("replaces the plan with kind-tagged units", async () => {
     const cr = await app.request("/api/sessions", {
@@ -394,6 +459,64 @@ describe("GET /api/sessions/:id/comments", () => {
   });
 });
 
+describe("session-wide comments", () => {
+  async function makeSession() {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    return (await cr.json()).session;
+  }
+
+  it("creates a comment with no nodeId and lists it with nodeId null", async () => {
+    const session = await makeSession();
+    const res = await app.request(`/api/sessions/${session.id}/comments`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "missing tests for the retry path" }),
+    });
+    expect(res.status).toBe(200);
+    const { comment } = await res.json();
+    expect(comment.nodeId).toBeNull();
+    expect(comment.hunkSnippet).toBe("");
+    const list = await (await app.request(`/api/sessions/${session.id}/comments`)).json();
+    expect(list.comments[0].nodeId).toBeNull();
+  });
+
+  it("rejects an anchor without a nodeId", async () => {
+    const session = await makeSession();
+    const res = await app.request(`/api/sessions/${session.id}/comments`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: "anchored to nothing",
+        anchor: { startLine: 1, startSide: "new", endLine: 1, endSide: "new" },
+      }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("exports session comments with scope:'session' and node comments with scope:'node'", async () => {
+    const session = await makeSession();
+    const { nodes } = await (await app.request(`/api/sessions/${session.id}/nodes`)).json();
+    await app.request(`/api/sessions/${session.id}/comments`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nodeId: nodes[0].id, text: "inline" }),
+    });
+    await app.request(`/api/sessions/${session.id}/comments`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "review-wide" }),
+    });
+    const exported = await (await app.request(`/api/sessions/${session.id}/export`)).json();
+    expect(exported.comments).toHaveLength(2);
+    const inline = exported.comments.find((c: any) => c.scope === "node");
+    const wide = exported.comments.find((c: any) => c.scope === "session");
+    expect(inline.file).toBeDefined();
+    expect(inline.nodeId).toBe(nodes[0].id);
+    expect(wide.text).toBe("review-wide");
+    expect(wide.nodeId).toBeUndefined();
+    expect(wide.file).toBeUndefined();
+  });
+});
+
 describe("coverage reconciliation", () => {
   it("attaches same-file leftovers to their covered sibling and reports them covered", async () => {
     const cr = await app.request("/api/sessions", {
@@ -515,6 +638,47 @@ describe("GET /api/sessions/:id/export", () => {
     const body = await res.json();
     expect(body.comments).toHaveLength(2);
     expect(body.comments.map((c: any) => c.text)).toEqual(["first", "second"]);
+  });
+});
+
+describe("GET /api/sessions/:id/nodes/:nodeId/context", () => {
+  async function sessionWithFile() {
+    // Real file on disk so the working-tree read has content to serve.
+    mkdirSync(join(fixtureRoot, "src"), { recursive: true });
+    writeFileSync(
+      join(fixtureRoot, "src", "orders.ts"),
+      Array.from({ length: 40 }, (_, i) => `line${i + 1}`).join("\n") + "\n"
+    );
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const { nodes } = await (await app.request(`/api/sessions/${session.id}/nodes`)).json();
+    return { session, node: nodes.find((n: any) => n.stableId === "fn:handleOrder") };
+  }
+
+  it("serves working-tree context lines for a range", async () => {
+    const { session, node } = await sessionWithFile();
+    const res = await app.request(`/api/sessions/${session.id}/nodes/${node.id}/context?start=1&end=3`);
+    expect(res.status).toBe(200);
+    const { lines } = await res.json();
+    expect(lines.map((l: any) => l.text)).toEqual(["line1", "line2", "line3"]);
+    expect(lines[0]).toMatchObject({ type: "context", newLine: 1 });
+  });
+
+  it("rejects bad ranges and oversized ranges", async () => {
+    const { session, node } = await sessionWithFile();
+    for (const q of ["start=0&end=3", "start=5&end=2", "start=abc&end=3", "start=1&end=6000"]) {
+      const res = await app.request(`/api/sessions/${session.id}/nodes/${node.id}/context?${q}`);
+      expect(res.status).toBe(400);
+    }
+  });
+
+  it("404s for a node outside the session", async () => {
+    const { session } = await sessionWithFile();
+    const res = await app.request(`/api/sessions/${session.id}/nodes/nope/context?start=1&end=2`);
+    expect(res.status).toBe(404);
   });
 });
 

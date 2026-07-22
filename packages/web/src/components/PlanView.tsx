@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { useBulkUpdateNodeStatus, useFlows, useNodes, useSession, useUpdateUnit } from "../api/hooks.js";
 import { useUIStore } from "../store/ui.js";
+import { RESIDUAL_KIND } from "../residual-kind.js";
+import { buildOrphanLayout } from "../orphan-layout.js";
+import { SessionNotes } from "./SessionNotes.js";
 import type { AttachedMember, Flow, FlowStep, GraphEdgeDTO, Node, Unit } from "../api/client.js";
 
 export function PlanView({
@@ -54,6 +57,7 @@ export function PlanView({
           ))}
         </div>
       )}
+      <SessionNotes sessionId={sessionId} />
       <div style={{ overflow: "auto", flex: 1, padding: "4px 16px 20px" }}>
         {units.map((u) => (
           <UnitBlock
@@ -266,31 +270,71 @@ function UnitBlock({
           </div>
         ))
       ) : (
-        <div className="unit__chips">
-          {memberNodes.map((n) => (
-            <span key={n.id} style={{ display: "contents" }}>
-              <StepChip
-                step={{
-                  stableId: n.stableId,
-                  label: n.label, file: n.file, startLine: n.startLine, endLine: n.endLine,
-                  isTest: n.isTest, depth: 0, nodeId: n.id, changeStatus: n.changeStatus, reviewStatus: n.reviewStatus,
-                }}
-                current={n.id === currentNodeId}
-                onSelect={onSelectNode}
-              />
-              {(attachedByParent.get(n.stableId) ?? []).map((m) => (
-                <AttachedChip
-                  key={`${m.stableId}-${m.counted}`}
-                  member={m}
-                  node={nodeByStable.get(m.stableId)}
-                  current={nodeByStable.get(m.stableId)?.id === currentNodeId}
-                  onSelect={onSelectNode}
-                />
-              ))}
-            </span>
+        <OrphanTree
+          unit={unit}
+          attachedByParent={attachedByParent}
+          nodeByStable={nodeByStable}
+          currentNodeId={currentNodeId}
+          onSelectNode={onSelectNode}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Orphan-unit members structured like flow tracks: directory groups when the
+ *  unit spans several directories, residual members nested under their file's
+ *  function node. Layout comes from buildOrphanLayout; the walk order flattens
+ *  the same structure (walk-order.ts). */
+function OrphanTree({
+  unit, attachedByParent, nodeByStable, currentNodeId, onSelectNode,
+}: {
+  unit: Unit;
+  attachedByParent: Map<string, AttachedMember[]>;
+  nodeByStable: Map<string, Node>;
+  currentNodeId: string | null;
+  onSelectNode: (nodeId: string) => void;
+}) {
+  const stepOf = (n: Node): FlowStep => ({
+    stableId: n.stableId,
+    label: n.label, file: n.file, startLine: n.startLine, endLine: n.endLine,
+    isTest: n.isTest, depth: 0, nodeId: n.id, changeStatus: n.changeStatus, reviewStatus: n.reviewStatus,
+    residualKind: n.residualKind,
+  });
+  const renderNode = (n: Node, depth: number) => (
+    <div key={n.id}>
+      <div className="flow__row" style={{ paddingLeft: depth * 22 }}>
+        {depth > 0 && <span className="flow__branch">└</span>}
+        <StepChip step={stepOf(n)} current={n.id === currentNodeId} onSelect={onSelectNode} />
+      </div>
+      {(attachedByParent.get(n.stableId) ?? []).map((m) => (
+        <div key={`${m.stableId}-${m.counted}`} className="flow__row" style={{ paddingLeft: (depth + 1) * 22 }}>
+          <span className="flow__branch">↳</span>
+          <AttachedChip
+            member={m}
+            node={nodeByStable.get(m.stableId)}
+            current={nodeByStable.get(m.stableId)?.id === currentNodeId}
+            onSelect={onSelectNode}
+          />
+        </div>
+      ))}
+    </div>
+  );
+  return (
+    <div className="flow__tree">
+      {buildOrphanLayout(unit.memberStableIds, nodeByStable).map((g) => (
+        <div key={g.dir ?? "(flat)"}>
+          {g.dir !== null && (
+            <div className="unit__dir" data-testid="orphan-dir">{g.dir}/</div>
+          )}
+          {g.entries.map((e) => (
+            <div key={e.node.id}>
+              {renderNode(e.node, g.dir !== null ? 1 : 0)}
+              {e.nested.map((r) => renderNode(r, g.dir !== null ? 2 : 1))}
+            </div>
           ))}
         </div>
-      )}
+      ))}
     </div>
   );
 }
@@ -385,6 +429,7 @@ function AttachedChip({
   onSelect: (nodeId: string) => void;
 }) {
   if (!node) return null;
+  const residual = node.residualKind ? RESIDUAL_KIND[node.residualKind] : null;
   const cls = [
     "step",
     "step--attached",
@@ -392,11 +437,13 @@ function AttachedChip({
     node.isTest ? "step--test" : "",
     node.reviewStatus !== "unreviewed" ? "step--reviewed" : "",
     member.counted ? "" : "step--ref",
+    residual ? "step--residual" : "",
     current ? "step--current" : "",
   ].filter(Boolean).join(" ");
-  const title = member.counted
+  const base = member.counted
     ? `${node.file}:${node.startLine} — attached: ${member.reason}`
     : `${node.file}:${node.startLine} — ${member.reason} reference; reviewed in its home unit`;
+  const title = residual ? `${base}. ${residual.title}` : base;
   return (
     <button
       className={cls}
@@ -405,6 +452,7 @@ function AttachedChip({
       title={title}
     >
       {node.label}
+      {residual && <span className="step__kind">{residual.badge}</span>}
       <span className="step__reason">{member.counted ? member.reason : `${member.reason} →`}</span>
     </button>
   );
@@ -417,12 +465,14 @@ function StepChip({
   current: boolean;
   onSelect: (nodeId: string) => void;
 }) {
+  const residual = step.residualKind ? RESIDUAL_KIND[step.residualKind] : null;
   const cls = [
     "step",
     step.changeStatus === "changed" ? "step--changed" : "",
     step.changeStatus === null ? "step--ext" : "",
     step.isTest ? "step--test" : "",
     step.reviewStatus && step.reviewStatus !== "unreviewed" ? "step--reviewed" : "",
+    residual ? "step--residual" : "",
     current ? "step--current" : "",
   ].filter(Boolean).join(" ");
   return (
@@ -430,9 +480,10 @@ function StepChip({
       className={cls}
       disabled={!step.nodeId}
       onClick={() => step.nodeId && onSelect(step.nodeId)}
-      title={`${step.file}:${step.startLine}`}
+      title={residual ? `${step.file}:${step.startLine} — ${residual.title}` : `${step.file}:${step.startLine}`}
     >
       {step.label}
+      {residual && <span className="step__kind">{residual.badge}</span>}
     </button>
   );
 }

@@ -1,4 +1,5 @@
 import type { Unit, Flow, Node } from "./api/client.js";
+import { orphanWalkIds } from "./orphan-layout.js";
 
 export interface WalkEntry {
   nodeId: string;
@@ -6,8 +7,10 @@ export interface WalkEntry {
 }
 
 /** Canonical review sequence: units by position; flow steps in tree order;
- *  orphan members in listed order; changed nodes only; first occurrence wins.
- *  Counted attachments walk immediately after their parent node. */
+ *  orphan members in layout order (residuals right after their file's function
+ *  node, then directory groups — see orphan-layout.ts); changed nodes only;
+ *  first occurrence wins. Counted attachments walk immediately after their
+ *  parent node. */
 export function buildWalkOrder(units: Unit[], flows: Flow[], nodes: Node[]): WalkEntry[] {
   const flowByEntry = new Map(flows.map((f) => [f.entryStableId, f]));
   const nodeByStable = new Map(nodes.map((n) => [n.stableId, n]));
@@ -40,7 +43,7 @@ export function buildWalkOrder(units: Unit[], flows: Flow[], nodes: Node[]): Wal
         }
       }
     } else {
-      for (const stableId of u.memberStableIds) {
+      for (const stableId of orphanWalkIds(u.memberStableIds, nodeByStable)) {
         const n = nodeByStable.get(stableId);
         if (n && n.changeStatus === "changed") pushWithAttached(stableId, n.id);
       }

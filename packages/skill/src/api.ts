@@ -46,12 +46,23 @@ export type UnitInput =
   | { kind: "flow"; flowEntryStableId?: string; flowEntryStableIds?: string[]; label: string; rationale?: string }
   | { kind: "orphans"; orphanStableIds: string[]; label: string; rationale?: string };
 
-export interface ExportedComment {
+export interface CommentAnchor {
+  startLine: number; startSide: "old" | "new";
+  endLine: number; endSide: "old" | "new";
+}
+export interface ExportedNodeComment {
+  scope: "node";
   id: string; nodeId: string; stableId: string; label: string; file: string;
   startLine: number; endLine: number;
   hunkSnippet: string; text: string; structuralContext: string; createdAt: number;
-  anchor: { startLine: number; endLine: number; side: string } | null;
+  anchor: CommentAnchor | null;
 }
+/** Session-wide remark; maps to a GitHub PR review body, not an inline comment. */
+export interface ExportedSessionComment {
+  scope: "session";
+  id: string; text: string; createdAt: number;
+}
+export type ExportedComment = ExportedNodeComment | ExportedSessionComment;
 
 async function fetchJson(url: string, init?: RequestInit) {
   const res = await fetch(url, {
@@ -67,6 +78,18 @@ export async function createSession(base: string, branch: string, baseRef: strin
 
 export async function getSessionInfo(base: string, sessionId: string): Promise<SessionInfo> {
   return fetchJson(`${base}/api/sessions/${sessionId}`);
+}
+
+export async function listSessions(base: string): Promise<{ sessions: Session[] }> {
+  return fetchJson(`${base}/api/sessions`);
+}
+
+export async function deleteSession(base: string, sessionId: string): Promise<{ deleted: string }> {
+  return fetchJson(`${base}/api/sessions/${sessionId}`, { method: "DELETE" });
+}
+
+export async function shutdownHub(base: string): Promise<{ ok: boolean; pid?: number }> {
+  return fetchJson(`${base}/api/shutdown`, { method: "POST" });
 }
 
 export async function getFlows(base: string, sessionId: string): Promise<{ flows: FlowDTO[]; orphans: OrphanDTO[] }> {

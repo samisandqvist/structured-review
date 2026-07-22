@@ -356,6 +356,74 @@ export function getNodeDiffForRanges(
   return extractLinesForRanges(raw, ranges);
 }
 
+/**
+ * Lines of a file's new-file range [startLine, endLine] for GitHub-style
+ * context expansion. Unchanged lines come from the working tree with old-side
+ * numbers reconstructed from the file's diff (cumulative hunk offset); lines
+ * that fall inside a diff hunk are emitted as their real added/removed/context
+ * rows — a node-scoped diff can have other nodes' changes in its gaps, and
+ * showing those as plain context would misrepresent the file. Clamped to EOF;
+ * returns [] when the range is entirely past the end.
+ */
+export function expandedContextSlice(
+  baseRef: string,
+  file: string,
+  startLine: number,
+  endLine: number,
+  root: string = repoRoot()
+): DiffLine[] {
+  let fileLines: string[];
+  try {
+    const content = readFileSync(join(root, file), "utf8");
+    fileLines = content.split("\n");
+    if (fileLines[fileLines.length - 1] === "") fileLines.pop(); // trailing newline
+  } catch {
+    return [];
+  }
+  const end = Math.min(endLine, fileLines.length);
+  const raw = fileUnifiedDiff(baseRef, file, root);
+  const hunks = raw ? parseHunks(raw) : [];
+
+  const out: DiffLine[] = [];
+  const fill = (from: number, to: number, offset: number) => {
+    for (let n = from; n <= to; n++) {
+      out.push({ type: "context", oldLine: n + offset, newLine: n, text: fileLines[n - 1] ?? "" });
+    }
+  };
+
+  let offset = 0; // (old - new) accumulated from hunks fully above the cursor
+  let cursor = startLine;
+  for (const h of hunks) {
+    if (cursor < h.newStart) {
+      fill(cursor, Math.min(h.newStart - 1, end), offset);
+      cursor = h.newStart;
+    }
+    let oldLine = h.oldStart;
+    let newLine = h.newStart;
+    for (const line of h.lines) {
+      const marker = line[0];
+      const text = line.slice(1);
+      const inRange = newLine >= startLine && newLine <= end;
+      if (marker === " ") {
+        if (inRange) out.push({ type: "context", oldLine, newLine, text });
+        oldLine++;
+        newLine++;
+      } else if (marker === "+") {
+        if (inRange) out.push({ type: "added", oldLine: null, newLine, text });
+        newLine++;
+      } else {
+        if (inRange) out.push({ type: "removed", oldLine, newLine: null, text });
+        oldLine++;
+      }
+    }
+    offset = oldLine - newLine;
+    cursor = Math.max(cursor, newLine);
+    if (cursor > end) break;
+  }
+  if (cursor <= end) fill(cursor, end, offset);
+  return out;
+}
+
 function withTexts(lines: DiffLine[]): NodeDiff {
   return {
     oldText: lines.filter((l) => l.type !== "added").map((l) => l.text).join("\n"),

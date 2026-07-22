@@ -67,6 +67,9 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* Reviewed code must show literal characters — never !== as one glyph. */
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
 }
 
 /* A faint instrument-screen wash behind everything */
@@ -721,6 +724,20 @@ textarea:focus {
   opacity: 0.45;
   border-style: dotted;
 }
+/* Residual pseudo-node: changed lines outside the call graph. */
+.step--residual {
+  border-style: dotted;
+}
+.step__kind {
+  margin-left: 7px;
+  font-size: 11px;
+  color: var(--faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px dotted var(--line-bright);
+  border-radius: 3px;
+  padding: 0 4px;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .tnode--current {
@@ -746,11 +763,11 @@ textarea:focus {
   background: var(--surface); color: var(--text);
   border: 1px solid var(--line-bright); border-radius: 4px; padding: 0 4px;
 }
+.unit__dir { font-size: 13px; color: var(--faint); letter-spacing: 0.04em; padding: 5px 0 2px; }
 .unit__tests { background: none; border: 1px solid var(--line-bright); border-radius: 4px; color: var(--dim); cursor: pointer; font-size: 13px; padding: 0 5px; }
 .unit__tests:hover { color: var(--text); border-color: var(--text); }
 .unit__tests--warn { color: var(--warn, #d98a2b); border-color: var(--warn, #d98a2b); }
 .unit__rationale { margin: 2px 0 8px; font-size: 14px; color: var(--dim); line-height: 1.5; }
-.unit__chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .unit__track-caption { font-size: 13px; color: var(--dim); font-family: var(--mono); letter-spacing: 0.05em; margin: 6px 0 2px; }
 .flow__collapsed {
   background: none; border: 1px dashed var(--line-bright); border-radius: 4px;

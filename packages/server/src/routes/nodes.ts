@@ -4,7 +4,7 @@ import { getNodesBySession, getNode, getNodeNeighbors, updateNodeReviewStatus } 
 import { getSession } from "../repo/sessions.js";
 import { nodeHasComments } from "../repo/comments.js";
 import { bulkUpdateNodeReviewStatus, BulkNodeError } from "../repo/bulk.js";
-import { getNodeDiff, getNodeDiffForRanges } from "../diff.js";
+import { getNodeDiff, getNodeDiffForRanges, expandedContextSlice } from "../diff.js";
 import { parseBody, nodePatchSchema, bulkNodeStatusSchema } from "../validate.js";
 
 export function createNodesRoute(ctx: AppContext) {
@@ -35,6 +35,23 @@ export function createNodesRoute(ctx: AppContext) {
           : getNodeDiff(session.baseRef, node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot))
       : { oldText: "", newText: "", lines: [] };
     return c.json({ node, callers, callees, diff });
+  });
+
+  // Context expansion for the diff viewer: working-tree lines of the node's
+  // file for a new-file range, old-side numbers reconstructed from the diff.
+  router.get("/:id/nodes/:nodeId/context", (c) => {
+    const sessionId = c.req.param("id");
+    const node = getNode(ctx.db, c.req.param("nodeId"));
+    if (!node || node.sessionId !== sessionId) return c.json({ error: "not found" }, 404);
+    const session = getSession(ctx.db, sessionId);
+    if (!session) return c.json({ error: "not found" }, 404);
+    const start = Number(c.req.query("start"));
+    const end = Number(c.req.query("end"));
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start) {
+      return c.json({ error: "start/end must be positive integers with start <= end" }, 400);
+    }
+    if (end - start > 5000) return c.json({ error: "range too large (max 5000 lines)" }, 400);
+    return c.json({ lines: expandedContextSlice(session.baseRef, node.file, start, end, ctx.repoRoot) });
   });
 
   router.patch("/:id/nodes", async (c) => {

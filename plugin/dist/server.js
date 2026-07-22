@@ -262,6 +262,56 @@ function getNodeDiffForRanges(baseRef, file2, ranges, root = repoRoot()) {
   }
   return extractLinesForRanges(raw2, ranges);
 }
+function expandedContextSlice(baseRef, file2, startLine, endLine, root = repoRoot()) {
+  let fileLines;
+  try {
+    const content = readFileSync(join(root, file2), "utf8");
+    fileLines = content.split("\n");
+    if (fileLines[fileLines.length - 1] === "") fileLines.pop();
+  } catch {
+    return [];
+  }
+  const end = Math.min(endLine, fileLines.length);
+  const raw2 = fileUnifiedDiff(baseRef, file2, root);
+  const hunks = raw2 ? parseHunks(raw2) : [];
+  const out = [];
+  const fill = (from, to, offset2) => {
+    for (let n = from; n <= to; n++) {
+      out.push({ type: "context", oldLine: n + offset2, newLine: n, text: fileLines[n - 1] ?? "" });
+    }
+  };
+  let offset = 0;
+  let cursor = startLine;
+  for (const h of hunks) {
+    if (cursor < h.newStart) {
+      fill(cursor, Math.min(h.newStart - 1, end), offset);
+      cursor = h.newStart;
+    }
+    let oldLine = h.oldStart;
+    let newLine = h.newStart;
+    for (const line of h.lines) {
+      const marker = line[0];
+      const text = line.slice(1);
+      const inRange = newLine >= startLine && newLine <= end;
+      if (marker === " ") {
+        if (inRange) out.push({ type: "context", oldLine, newLine, text });
+        oldLine++;
+        newLine++;
+      } else if (marker === "+") {
+        if (inRange) out.push({ type: "added", oldLine: null, newLine, text });
+        newLine++;
+      } else {
+        if (inRange) out.push({ type: "removed", oldLine, newLine: null, text });
+        oldLine++;
+      }
+    }
+    offset = oldLine - newLine;
+    cursor = Math.max(cursor, newLine);
+    if (cursor > end) break;
+  }
+  if (cursor <= end) fill(cursor, end, offset);
+  return out;
+}
 function withTexts(lines) {
   return {
     oldText: lines.filter((l) => l.type !== "added").map((l) => l.text).join("\n"),
@@ -17577,9 +17627,7 @@ function createSession(db2, branch, baseRef, headSha = "", repoFingerprint2 = ""
   ).run(id, branch, baseRef, createdAt, headSha, repoFingerprint2, JSON.stringify(indexWarnings));
   return { id, branch, baseRef, status: "planning", createdAt, headSha, repoFingerprint: repoFingerprint2, indexWarnings };
 }
-function getSession(db2, id) {
-  const row = db2.prepare("SELECT * FROM review_sessions WHERE id = ?").get(id);
-  if (!row) return void 0;
+function rowToSession(row) {
   return {
     id: row.id,
     branch: row.branch,
@@ -17590,6 +17638,16 @@ function getSession(db2, id) {
     repoFingerprint: row.repo_fingerprint,
     indexWarnings: JSON.parse(row.index_warnings)
   };
+}
+function getSession(db2, id) {
+  const row = db2.prepare("SELECT * FROM review_sessions WHERE id = ?").get(id);
+  return row ? rowToSession(row) : void 0;
+}
+function listSessions(db2) {
+  return db2.prepare("SELECT * FROM review_sessions ORDER BY created_at DESC").all().map(rowToSession);
+}
+function deleteSession(db2, id) {
+  return db2.prepare("DELETE FROM review_sessions WHERE id = ?").run(id).changes > 0;
 }
 function updateSessionStatus(db2, id, status) {
   db2.prepare("UPDATE review_sessions SET status = ? WHERE id = ?").run(status, id);
@@ -17645,15 +17703,17 @@ function rowToNode(row) {
     reviewStatus: row.review_status,
     reviewedInUnit: row.reviewed_in_unit,
     isTest: row.is_test === 1,
-    residualRanges: row.residual_ranges ? JSON.parse(row.residual_ranges) : null
+    residualRanges: row.residual_ranges ? JSON.parse(row.residual_ranges) : null,
+    residualKind: row.residual_kind
   };
 }
 function createNode(db2, node) {
   const id = randomId("node");
   const residualRanges = node.residualRanges ?? null;
+  const residualKind = node.residualKind ?? null;
   db2.prepare(
-    `INSERT INTO nodes (id, session_id, stable_id, label, file, start_line, end_line, change_status, review_status, reviewed_in_unit, is_test, residual_ranges)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO nodes (id, session_id, stable_id, label, file, start_line, end_line, change_status, review_status, reviewed_in_unit, is_test, residual_ranges, residual_kind)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     node.sessionId,
@@ -17666,9 +17726,10 @@ function createNode(db2, node) {
     node.reviewStatus,
     node.reviewedInUnit,
     node.isTest ? 1 : 0,
-    residualRanges ? JSON.stringify(residualRanges) : null
+    residualRanges ? JSON.stringify(residualRanges) : null,
+    residualKind
   );
-  return { ...node, id, residualRanges };
+  return { ...node, id, residualRanges, residualKind };
 }
 function getNodesBySession(db2, sessionId) {
   return db2.prepare("SELECT * FROM nodes WHERE session_id = ?").all(sessionId).map(rowToNode);
@@ -18310,16 +18371,17 @@ function computeResiduals(baseRef, nodeSpans, root) {
     const start = Math.min(...residual.map((r) => r.start));
     const end = Math.max(...residual.map((r) => r.end));
     const deleted = end === 0;
-    const suffix = deleted ? " (deleted)" : spans.length > 0 ? " (module scope)" : "";
+    const kind = deleted ? "deleted" : spans.length > 0 ? "module-scope" : "whole-file";
     const sorted = residual.slice().sort((a, b) => a.start - b.start);
     out.push({
       stableId: `file-residual:${file2}`,
-      label: `${basename(file2)}${suffix}`,
+      label: basename(file2),
       file: file2,
       startLine: start,
       endLine: end,
       isTest: isTestFile(file2),
-      ranges: sorted
+      ranges: sorted,
+      kind
     });
   }
   return out;
@@ -18354,7 +18416,33 @@ function computeCoverage(units, flows, changedStableIds) {
 }
 
 // packages/server/src/attach.ts
-function walkPositions(units, flows, changed) {
+function orphanWalkIds(memberIds, byStable) {
+  const members = memberIds.map((id) => byStable.get(id)).filter((n) => !!n);
+  const dirOf = (file2) => file2.slice(0, Math.max(0, file2.lastIndexOf("/")));
+  const nestedByParent = /* @__PURE__ */ new Map();
+  const topLevel = [];
+  for (const m of members) {
+    const parent = m.residualKind ? members.find((o) => !o.residualKind && o.file === m.file) : void 0;
+    if (parent) {
+      const list = nestedByParent.get(parent.stableId) ?? [];
+      list.push(m.stableId);
+      nestedByParent.set(parent.stableId, list);
+    } else {
+      topLevel.push(m);
+    }
+  }
+  const byDir = /* @__PURE__ */ new Map();
+  for (const n of topLevel) {
+    const dir = dirOf(n.file);
+    const list = byDir.get(dir) ?? [];
+    list.push(n.stableId, ...nestedByParent.get(n.stableId) ?? []);
+    byDir.set(dir, list);
+  }
+  const out = [...byDir.values()].flat();
+  for (const id of memberIds) if (!byStable.has(id)) out.push(id);
+  return out;
+}
+function walkPositions(units, flows, changed, byStable) {
   const flowByEntry = new Map(flows.map((f) => [f.steps[0]?.stableId ?? "", f]));
   const walk2 = /* @__PURE__ */ new Map();
   let pos = 0;
@@ -18368,7 +18456,7 @@ function walkPositions(units, flows, changed) {
         for (const s of flowByEntry.get(entry)?.steps ?? []) push(s.stableId);
       }
     } else {
-      for (const stableId of u.orphanStableIds ?? []) push(stableId);
+      for (const stableId of orphanWalkIds(u.orphanStableIds ?? [], byStable)) push(stableId);
     }
   });
   return walk2;
@@ -18377,7 +18465,7 @@ function deriveAttachments(units, flows, nodes, testEdges, fileRequires) {
   const byStable = new Map(nodes.map((n) => [n.stableId, n]));
   const changed = new Set(nodes.filter((n) => n.changeStatus === "changed").map((n) => n.stableId));
   const covered = new Set(units.flatMap((u) => unitCoverage(u, flows, changed)));
-  const walk2 = walkPositions(units, flows, changed);
+  const walk2 = walkPositions(units, flows, changed, byStable);
   const byWalk = (a, b) => walk2.get(a).pos - walk2.get(b).pos;
   const testsByTest = /* @__PURE__ */ new Map();
   for (const e of testEdges) {
@@ -33001,10 +33089,11 @@ var commentAnchorSchema = external_exports.object({
   endSide: anchorSide
 });
 var commentCreateSchema = external_exports.object({
-  nodeId: external_exports.string().min(1, "nodeId is required"),
+  // Omitted nodeId = session-wide comment (review body, not inline).
+  nodeId: external_exports.string().min(1).optional(),
   text: external_exports.string().trim().min(1, "comment text must be nonempty").max(1e4, "comment too long"),
   anchor: commentAnchorSchema.optional()
-});
+}).refine((b) => !(b.anchor && !b.nodeId), { message: "anchor requires nodeId" });
 async function parseBody2(c, schema) {
   let raw2;
   try {
@@ -33120,7 +33209,8 @@ function createSessionsRoute(ctx) {
           reviewStatus: "unreviewed",
           reviewedInUnit: null,
           isTest: r.isTest,
-          residualRanges: r.ranges
+          residualRanges: r.ranges,
+          residualKind: r.kind
         });
       }
       const idByStable = new Map(getNodesBySession(ctx.db, session2.id).map((n) => [n.stableId, n.id]));
@@ -33135,6 +33225,12 @@ function createSessionsRoute(ctx) {
       return session2;
     })();
     return c.json({ session, subgraph });
+  });
+  router.get("/", (c) => c.json({ sessions: listSessions(ctx.db) }));
+  router.delete("/:id", (c) => {
+    const id = c.req.param("id");
+    if (!deleteSession(ctx.db, id)) return c.json({ error: "not found" }, 404);
+    return c.json({ deleted: id });
   });
   router.get("/:id", (c) => {
     const session = getSession(ctx.db, c.req.param("id"));
@@ -33275,22 +33371,28 @@ function structuralContextFor(db2, nodeId) {
 function exportComments(db2, sessionId) {
   const rows = db2.prepare(
     `SELECT c.id, c.node_id, n.stable_id, n.label, n.file, n.start_line, n.end_line, c.hunk_snippet, c.text, c.structural_context, c.created_at, c.anchor
-     FROM comments c JOIN nodes n ON c.node_id = n.id WHERE c.session_id = ? ORDER BY c.created_at, c.rowid`
+     FROM comments c LEFT JOIN nodes n ON c.node_id = n.id WHERE c.session_id = ? ORDER BY c.created_at, c.rowid`
   ).all(sessionId);
-  return rows.map((row) => ({
-    id: row.id,
-    nodeId: row.node_id,
-    stableId: row.stable_id,
-    label: row.label,
-    file: row.file,
-    startLine: row.start_line,
-    endLine: row.end_line,
-    hunkSnippet: row.hunk_snippet,
-    text: row.text,
-    structuralContext: structuralContextFor(db2, row.node_id),
-    createdAt: row.created_at,
-    anchor: row.anchor ? JSON.parse(row.anchor) : null
-  }));
+  return rows.map((row) => {
+    if (row.node_id === null) {
+      return { scope: "session", id: row.id, text: row.text, createdAt: row.created_at };
+    }
+    return {
+      scope: "node",
+      id: row.id,
+      nodeId: row.node_id,
+      stableId: row.stable_id,
+      label: row.label,
+      file: row.file,
+      startLine: row.start_line,
+      endLine: row.end_line,
+      hunkSnippet: row.hunk_snippet,
+      text: row.text,
+      structuralContext: structuralContextFor(db2, row.node_id),
+      createdAt: row.created_at,
+      anchor: row.anchor ? JSON.parse(row.anchor) : null
+    };
+  });
 }
 
 // packages/server/src/repo/bulk.ts
@@ -33338,6 +33440,20 @@ function createNodesRoute(ctx) {
     const session = getSession(ctx.db, sessionId);
     const diff = session ? node.residualRanges && node.residualRanges.length > 0 ? getNodeDiffForRanges(session.baseRef, node.file, node.residualRanges, ctx.repoRoot) ?? getNodeDiff(session.baseRef, node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot) : getNodeDiff(session.baseRef, node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot) : { oldText: "", newText: "", lines: [] };
     return c.json({ node, callers, callees, diff });
+  });
+  router.get("/:id/nodes/:nodeId/context", (c) => {
+    const sessionId = c.req.param("id");
+    const node = getNode(ctx.db, c.req.param("nodeId"));
+    if (!node || node.sessionId !== sessionId) return c.json({ error: "not found" }, 404);
+    const session = getSession(ctx.db, sessionId);
+    if (!session) return c.json({ error: "not found" }, 404);
+    const start = Number(c.req.query("start"));
+    const end = Number(c.req.query("end"));
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start) {
+      return c.json({ error: "start/end must be positive integers with start <= end" }, 400);
+    }
+    if (end - start > 5e3) return c.json({ error: "range too large (max 5000 lines)" }, 400);
+    return c.json({ lines: expandedContextSlice(session.baseRef, node.file, start, end, ctx.repoRoot) });
   });
   router.patch("/:id/nodes", async (c) => {
     const parsed = await parseBody2(c, bulkNodeStatusSchema);
@@ -33389,6 +33505,9 @@ function createCommentsRoute(ctx) {
     const body = parsed.data;
     const session = getSession(ctx.db, sessionId);
     if (!session) return c.json({ error: "not found" }, 404);
+    if (!body.nodeId) {
+      return c.json({ comment: createComment(ctx.db, sessionId, null, "", body.text, "") });
+    }
     const node = getNode(ctx.db, body.nodeId);
     if (!node || node.sessionId !== sessionId) return c.json({ error: "node not found in session" }, 404);
     const diff = (node.residualRanges && node.residualRanges.length > 0 ? getNodeDiffForRanges(session.baseRef, node.file, node.residualRanges, ctx.repoRoot) : null) ?? getNodeDiff(session.baseRef, node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot);
@@ -33660,6 +33779,12 @@ function createApp(ctx) {
     "/health",
     (c) => c.json({ ok: true, repoRoot: resolved.repoRoot, pid: process.pid, provider: resolved.providerName ?? "unknown" })
   );
+  app2.post("/api/shutdown", (c) => {
+    if (!resolved.onShutdown) return c.json({ ok: false, error: "shutdown not supported" }, 501);
+    const onShutdown = resolved.onShutdown;
+    setTimeout(onShutdown, 150);
+    return c.json({ ok: true, pid: process.pid });
+  });
   app2.route("/api/sessions", createSessionsRoute(resolved));
   app2.route("/api/sessions", createNodesRoute(resolved));
   app2.route("/api/sessions", createCommentsRoute(resolved));
@@ -33735,14 +33860,37 @@ CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_node_id);
 CREATE INDEX IF NOT EXISTS idx_comments_session ON comments(session_id);
 CREATE INDEX IF NOT EXISTS idx_comments_node ON comments(node_id);
 `;
-var SCHEMA_VERSION = 6;
+var SCHEMA_VERSION = 8;
 var MIGRATIONS = {
   1: SCHEMA_SQL,
   2: `ALTER TABLE review_sessions ADD COLUMN repo_fingerprint TEXT NOT NULL DEFAULT '';`,
   3: `ALTER TABLE nodes ADD COLUMN residual_ranges TEXT;`,
   4: `ALTER TABLE comments ADD COLUMN anchor TEXT;`,
   5: `ALTER TABLE review_sessions ADD COLUMN index_warnings TEXT NOT NULL DEFAULT '[]';`,
-  6: `ALTER TABLE units ADD COLUMN attached TEXT NOT NULL DEFAULT '[]';`
+  6: `ALTER TABLE units ADD COLUMN attached TEXT NOT NULL DEFAULT '[]';`,
+  7: `ALTER TABLE nodes ADD COLUMN residual_kind TEXT;`,
+  // v8: node_id becomes nullable — a NULL node_id is a session-wide comment
+  // (maps to a GitHub PR review body, not an inline comment). SQLite can't
+  // drop NOT NULL via ALTER, so this is a table rebuild; DROP TABLE also drops
+  // the two comment indexes, hence the recreate.
+  8: `
+CREATE TABLE comments_v8 (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES review_sessions(id) ON DELETE CASCADE,
+  node_id TEXT REFERENCES nodes(id) ON DELETE CASCADE,
+  hunk_snippet TEXT NOT NULL,
+  text TEXT NOT NULL,
+  structural_context TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  anchor TEXT
+);
+INSERT INTO comments_v8 (id, session_id, node_id, hunk_snippet, text, structural_context, created_at, anchor)
+  SELECT id, session_id, node_id, hunk_snippet, text, structural_context, created_at, anchor FROM comments;
+DROP TABLE comments;
+ALTER TABLE comments_v8 RENAME TO comments;
+CREATE INDEX IF NOT EXISTS idx_comments_session ON comments(session_id);
+CREATE INDEX IF NOT EXISTS idx_comments_node ON comments(node_id);
+`
 };
 
 // packages/server/src/db/connection.ts
@@ -37555,7 +37703,13 @@ var hostname3 = process.env.CRW_HOST || "127.0.0.1";
 if (hostname3 !== "127.0.0.1" && hostname3 !== "localhost") {
   console.warn(`WARNING: binding to ${hostname3} \u2014 the review API is unauthenticated; keep it loopback-only unless you know why`);
 }
-var app = createApp({ db, graphProvider, webDistPath: webBuilt ? webDistPath : void 0, providerName: which });
+var app = createApp({
+  db,
+  graphProvider,
+  webDistPath: webBuilt ? webDistPath : void 0,
+  providerName: which,
+  onShutdown: () => process.exit(0)
+});
 var port = Number(process.env.PORT) || 3456;
 serve({ fetch: app.fetch, port, hostname: hostname3 }, (info) => {
   console.log(`review hub on http://localhost:${info.port} (graph provider: ${which}${webBuilt ? "" : "; web UI not built \u2014 run pnpm build"})`);
