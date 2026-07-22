@@ -42,6 +42,9 @@ crw diff --session <id> --node <stableId>       # one node's diff, for grouping 
 crw status --session <id>                       # coverage, per-unit reviewed/total, unreviewed list
 crw comments --session <id>                     # exported comments, GitHub-mappable
 crw wait --session <id> [--until reviewed|commented] [--interval s] [--timeout s]
+crw session list                                # sessions in this repo's hub, newest first
+crw session delete --session <id>               # remove one session's state (cascades)
+crw gc [--repo <path>] [--all]                  # remove a repo's DB/logs (stops the hub first); --all sweeps dead repos
 ```
 
 Language support: TypeScript and Python indexers are installed automatically
@@ -66,9 +69,11 @@ Harvest flow (after the reviewer walks the plan):
   tree moved under the session.
 - `crw wait --session <id>` — block until every changed node is reviewed
   (exit code 2 on timeout).
-- `crw comments --session <id>` — each comment carries node label, file, line
-  anchor (`anchor.startLine/endLine/side`), hunk snippet, and the node's review
-  status — ready to map onto a GitHub PR review or a report.
+- `crw comments --session <id>` — each `scope: "node"` comment carries node
+  label, file, line anchor (`anchor.startLine/startSide/endLine/endSide`), hunk
+  snippet, and the node's review status — ready to map onto GitHub PR inline
+  comments. `scope: "session"` comments are review-wide remarks (no node, no
+  anchor) — map those onto the PR review body.
 
 ## Building the review plan
 

@@ -1,6 +1,6 @@
 // Derivation passes for plan-time attachments (attach.ts).
 import { describe, it, expect } from "vitest";
-import { deriveAttachments, countedAttachmentIds, type AttachNode, type TestEdge } from "../src/attach.js";
+import { deriveAttachments, countedAttachmentIds, orphanWalkIds, type AttachNode, type TestEdge } from "../src/attach.js";
 import type { PlanUnitInput } from "../src/coverage.js";
 import type { Flow, FlowStep } from "../src/graph/provider.js";
 
@@ -138,6 +138,31 @@ describe("deriveAttachments — precedence and explicit membership", () => {
     const [attached] = deriveAttachments([orphanUnit(["helper"])], [], nodes, [], new Map());
     expect(attached).toEqual([
       { stableId: "helper (module scope)", parentStableId: "helper", reason: "same-file", counted: true },
+    ]);
+  });
+});
+
+describe("orphanWalkIds", () => {
+  const byStable = (nodes: AttachNode[]) => new Map(nodes.map((n) => [n.stableId, n]));
+
+  it("walks a residual member right after its file's function node", () => {
+    const nodes = [
+      node("file-residual:helper.ts", { file: "helper.ts", residualKind: "module-scope" }),
+      node("fn:helper", { file: "helper.ts" }),
+    ];
+    expect(orphanWalkIds(["file-residual:helper.ts", "fn:helper"], byStable(nodes))).toEqual([
+      "fn:helper", "file-residual:helper.ts",
+    ]);
+  });
+
+  it("groups by directory in order of first appearance", () => {
+    const nodes = [
+      node("res:a", { file: "drizzle/0001.sql", residualKind: "whole-file" }),
+      node("fn:svc", { file: "src/db/service.ts" }),
+      node("res:b", { file: "drizzle/0002.sql", residualKind: "whole-file" }),
+    ];
+    expect(orphanWalkIds(["res:a", "fn:svc", "res:b"], byStable(nodes))).toEqual([
+      "res:a", "res:b", "fn:svc",
     ]);
   });
 });

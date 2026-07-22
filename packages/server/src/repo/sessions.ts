@@ -18,16 +18,32 @@ export function createSession(
   return { id, branch, baseRef, status: "planning", createdAt, headSha, repoFingerprint, indexWarnings };
 }
 
-export function getSession(db: DB, id: string): ReviewSession | undefined {
-  const row = db.prepare("SELECT * FROM review_sessions WHERE id = ?").get(id) as
-    | { id: string; branch: string; base_ref: string; status: SessionStatus; created_at: number; head_sha: string; repo_fingerprint: string; index_warnings: string }
-    | undefined;
-  if (!row) return undefined;
+interface SessionRow {
+  id: string; branch: string; base_ref: string; status: SessionStatus; created_at: number;
+  head_sha: string; repo_fingerprint: string; index_warnings: string;
+}
+
+function rowToSession(row: SessionRow): ReviewSession {
   return {
     id: row.id, branch: row.branch, baseRef: row.base_ref, status: row.status,
     createdAt: row.created_at, headSha: row.head_sha, repoFingerprint: row.repo_fingerprint,
     indexWarnings: JSON.parse(row.index_warnings) as string[],
   };
+}
+
+export function getSession(db: DB, id: string): ReviewSession | undefined {
+  const row = db.prepare("SELECT * FROM review_sessions WHERE id = ?").get(id) as SessionRow | undefined;
+  return row ? rowToSession(row) : undefined;
+}
+
+export function listSessions(db: DB): ReviewSession[] {
+  return (db.prepare("SELECT * FROM review_sessions ORDER BY created_at DESC").all() as SessionRow[])
+    .map(rowToSession);
+}
+
+/** Cascades to units/nodes/edges/comments via ON DELETE CASCADE. */
+export function deleteSession(db: DB, id: string): boolean {
+  return db.prepare("DELETE FROM review_sessions WHERE id = ?").run(id).changes > 0;
 }
 
 export function updateSessionStatus(db: DB, id: string, status: SessionStatus): void {

@@ -58,7 +58,7 @@ CREATE INDEX IF NOT EXISTS idx_comments_session ON comments(session_id);
 CREATE INDEX IF NOT EXISTS idx_comments_node ON comments(node_id);
 `;
 
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 8;
 /**
  * SQL applied when upgrading TO each version. Version 1 = baseline tables.
  * `repo_fingerprint` is deliberately NOT in the baseline SCHEMA_SQL: v2 adds it
@@ -72,4 +72,27 @@ export const MIGRATIONS: Record<number, string> = {
   4: `ALTER TABLE comments ADD COLUMN anchor TEXT;`,
   5: `ALTER TABLE review_sessions ADD COLUMN index_warnings TEXT NOT NULL DEFAULT '[]';`,
   6: `ALTER TABLE units ADD COLUMN attached TEXT NOT NULL DEFAULT '[]';`,
+  7: `ALTER TABLE nodes ADD COLUMN residual_kind TEXT;`,
+  // v8: node_id becomes nullable — a NULL node_id is a session-wide comment
+  // (maps to a GitHub PR review body, not an inline comment). SQLite can't
+  // drop NOT NULL via ALTER, so this is a table rebuild; DROP TABLE also drops
+  // the two comment indexes, hence the recreate.
+  8: `
+CREATE TABLE comments_v8 (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES review_sessions(id) ON DELETE CASCADE,
+  node_id TEXT REFERENCES nodes(id) ON DELETE CASCADE,
+  hunk_snippet TEXT NOT NULL,
+  text TEXT NOT NULL,
+  structural_context TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  anchor TEXT
+);
+INSERT INTO comments_v8 (id, session_id, node_id, hunk_snippet, text, structural_context, created_at, anchor)
+  SELECT id, session_id, node_id, hunk_snippet, text, structural_context, created_at, anchor FROM comments;
+DROP TABLE comments;
+ALTER TABLE comments_v8 RENAME TO comments;
+CREATE INDEX IF NOT EXISTS idx_comments_session ON comments(session_id);
+CREATE INDEX IF NOT EXISTS idx_comments_node ON comments(node_id);
+`,
 };

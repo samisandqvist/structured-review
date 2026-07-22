@@ -57,7 +57,7 @@ Requires **Node >= 22.13** and npm on PATH. In Claude Code:
 
 ```
 /plugin marketplace add samisandqvist/structured-review
-/plugin install code-review-walkthrough@crw
+/plugin install code-review-walkthrough@structured-review
 ```
 
 The first session start npm-installs the TypeScript/Python indexers into the
@@ -66,7 +66,7 @@ the `code-review-walkthrough` skill drives everything and hands you a local
 web UI URL to walk the review. All state (DB, logs, indexers) lives under
 `~/.claude/plugins/data/`, never in the reviewed repo.
 
-Update later with `/plugin update code-review-walkthrough@crw` — every push
+Update later with `/plugin update code-review-walkthrough@structured-review` — every push
 to main is a new version (commit-SHA versioning). Verified on Linux and
 macOS; Windows is not supported. Maintainers: rebuild the committed bundle
 with `pnpm build && pnpm build:plugin` before pushing runtime changes (CI

@@ -20,6 +20,8 @@ export interface Unit {
   attached: AttachedMember[];
 }
 export interface LineRange { start: number; end: number; }
+/** Why a residual pseudo-node sits outside the call graph. */
+export type ResidualKind = "module-scope" | "whole-file" | "deleted";
 export interface Node {
   id: string; sessionId: string; stableId: string;
   label: string; file: string; startLine: number; endLine: number;
@@ -28,6 +30,7 @@ export interface Node {
   reviewedInUnit: number | null;
   isTest: boolean;
   residualRanges?: LineRange[] | null;
+  residualKind?: ResidualKind | null;
 }
 export type AnchorSide = "old" | "new";
 export interface CommentAnchor {
@@ -37,7 +40,10 @@ export interface CommentAnchor {
   endSide: AnchorSide;
 }
 export interface Comment {
-  id: string; sessionId: string; nodeId: string; hunkSnippet: string;
+  id: string; sessionId: string;
+  /** null = session-wide comment (no node, no anchor). */
+  nodeId: string | null;
+  hunkSnippet: string;
   text: string; structuralContext: string; createdAt: number;
   anchor: CommentAnchor | null;
 }
@@ -46,6 +52,9 @@ export interface DiffLine {
   oldLine: number | null;
   newLine: number | null;
   text: string;
+  /** Client-side: revealed via context expansion — outside the node's own
+   *  diff, so never selectable as a comment anchor. */
+  expanded?: boolean;
 }
 export interface NodeDiff { oldText: string; newText: string; lines: DiffLine[]; }
 export interface FlowStep {
@@ -58,6 +67,8 @@ export interface FlowStep {
   depth: number;
   /** One-hop context on a pruned tree, not on a path to a change. */
   offPath?: boolean;
+  /** Set when the step is a residual pseudo-node (orphan-unit members only). */
+  residualKind?: ResidualKind | null;
   nodeId: string | null;
   changeStatus: "changed" | "unchanged" | null;
   reviewStatus: Node["reviewStatus"] | null;
@@ -118,6 +129,10 @@ export const api = {
     fetchJson<{ node: Node; callers: Node[]; callees: Node[]; diff: NodeDiff }>(
       `/sessions/${sessionId}/nodes/${nodeId}`
     ),
+  getNodeContext: (sessionId: string, nodeId: string, start: number, end: number) =>
+    fetchJson<{ lines: DiffLine[] }>(
+      `/sessions/${sessionId}/nodes/${nodeId}/context?start=${start}&end=${end}`
+    ),
   updateNodeStatus: (sessionId: string, nodeId: string, reviewStatus: Node["reviewStatus"], reviewedInUnit?: number) =>
     fetchJson<{ node: Node }>(`/sessions/${sessionId}/nodes/${nodeId}`, {
       method: "PATCH", body: JSON.stringify({ reviewStatus, reviewedInUnit }),
@@ -128,9 +143,10 @@ export const api = {
     }),
   getComments: (id: string) =>
     fetchJson<{ comments: Comment[] }>(`/sessions/${id}/comments`),
-  createComment: (id: string, nodeId: string, text: string, anchor?: CommentAnchor) =>
+  createComment: (id: string, nodeId: string | null, text: string, anchor?: CommentAnchor) =>
     fetchJson<{ comment: Comment }>(`/sessions/${id}/comments`, {
-      method: "POST", body: JSON.stringify(anchor ? { nodeId, text, anchor } : { nodeId, text }),
+      method: "POST",
+      body: JSON.stringify({ ...(nodeId ? { nodeId } : {}), text, ...(anchor ? { anchor } : {}) }),
     }),
   updateUnit: (sessionId: string, unitId: string, patch: { label?: string; position?: number }) =>
     fetchJson<{ units: Unit[] }>(`/sessions/${sessionId}/units/${unitId}`, {
