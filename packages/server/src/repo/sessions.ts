@@ -15,19 +15,19 @@ export function createSession(
   db.prepare(
     "INSERT INTO review_sessions (id, branch, base_ref, status, created_at, head_sha, repo_fingerprint, index_warnings) VALUES (?, ?, ?, 'planning', ?, ?, ?, ?)"
   ).run(id, branch, baseRef, createdAt, headSha, repoFingerprint, JSON.stringify(indexWarnings));
-  return { id, branch, baseRef, status: "planning", createdAt, headSha, repoFingerprint, indexWarnings };
+  return { id, branch, baseRef, status: "planning", createdAt, headSha, repoFingerprint, indexWarnings, overview: "" };
 }
 
 interface SessionRow {
   id: string; branch: string; base_ref: string; status: SessionStatus; created_at: number;
-  head_sha: string; repo_fingerprint: string; index_warnings: string;
+  head_sha: string; repo_fingerprint: string; index_warnings: string; overview: string;
 }
 
 function rowToSession(row: SessionRow): ReviewSession {
   return {
     id: row.id, branch: row.branch, baseRef: row.base_ref, status: row.status,
     createdAt: row.created_at, headSha: row.head_sha, repoFingerprint: row.repo_fingerprint,
-    indexWarnings: JSON.parse(row.index_warnings) as string[],
+    indexWarnings: JSON.parse(row.index_warnings) as string[], overview: row.overview,
   };
 }
 
@@ -48,4 +48,8 @@ export function deleteSession(db: DB, id: string): boolean {
 
 export function updateSessionStatus(db: DB, id: string, status: SessionStatus): void {
   db.prepare("UPDATE review_sessions SET status = ? WHERE id = ?").run(status, id);
+}
+
+export function updateSessionOverview(db: DB, id: string, overview: string): void {
+  db.prepare("UPDATE review_sessions SET overview = ? WHERE id = ?").run(overview, id);
 }

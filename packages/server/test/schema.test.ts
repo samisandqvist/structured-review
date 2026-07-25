@@ -52,6 +52,13 @@ describe("schema", () => {
     db.close();
   });
 
+  it("adds overview via the v9 migration", () => {
+    const db = createMemoryDatabase();
+    const cols = (db.pragma("table_info(review_sessions)") as { name: string }[]).map((c) => c.name);
+    expect(cols).toContain("overview");
+    db.close();
+  });
+
   it("throws a clear error when a migration in the upgrade path is missing", () => {
     const saved = MIGRATIONS[SCHEMA_VERSION];
     delete MIGRATIONS[SCHEMA_VERSION];

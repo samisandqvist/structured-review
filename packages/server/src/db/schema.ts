@@ -58,7 +58,7 @@ CREATE INDEX IF NOT EXISTS idx_comments_session ON comments(session_id);
 CREATE INDEX IF NOT EXISTS idx_comments_node ON comments(node_id);
 `;
 
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 /**
  * SQL applied when upgrading TO each version. Version 1 = baseline tables.
  * `repo_fingerprint` is deliberately NOT in the baseline SCHEMA_SQL: v2 adds it
@@ -95,4 +95,7 @@ ALTER TABLE comments_v8 RENAME TO comments;
 CREATE INDEX IF NOT EXISTS idx_comments_session ON comments(session_id);
 CREATE INDEX IF NOT EXISTS idx_comments_node ON comments(node_id);
 `,
+  // v9: plan-narrative overview — replaced on every plan submit (cleared when
+  // the submitted plan omits it), so a replan never keeps a stale narrative.
+  9: `ALTER TABLE review_sessions ADD COLUMN overview TEXT NOT NULL DEFAULT '';`,
 };

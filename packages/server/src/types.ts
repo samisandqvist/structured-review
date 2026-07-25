@@ -28,6 +28,9 @@ export interface ReviewSession {
   repoFingerprint: string;
   /** Per-language indexing degradation notices captured at session creation. */
   indexWarnings: string[];
+  /** Plan-authored narrative: what the change does and how the plan decomposes
+   *  it. Empty until a plan carrying one is submitted; opaque to the server. */
+  overview: string;
 }
 
 export type AttachReason = "tested-by" | "required-by" | "same-file";
