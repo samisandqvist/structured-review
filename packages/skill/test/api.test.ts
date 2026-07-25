@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("node:child_process", () => ({ spawn: vi.fn(() => ({ unref: vi.fn() })), execFileSync: vi.fn() }));
 
-import { createSession, writePlan, exportComments, defaultPartition, uiUrl } from "../src/api.js";
+import { createSession, writePlan, exportComments, defaultPartition, uiUrl, parsePlanFile } from "../src/api.js";
 
 const BASE = "http://localhost:3456";
 const mockFetch = vi.fn();
@@ -60,9 +60,31 @@ describe("defaultPartition", () => {
 
 describe("writePlan", () => {
   it("PUTs kind-tagged units and returns coverage", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse({ units: [], coverage: { changedTotal: 1, covered: 1, unassigned: 0 } }));
+    mockFetch.mockResolvedValueOnce(mockResponse({ units: [], coverage: { changedTotal: 1, covered: 1, unassigned: 0 }, overview: "" }));
     const r = await writePlan(BASE, "s1", [{ kind: "flow", flowEntryStableId: "fn:a", label: "A" }]);
     expect(r.coverage.unassigned).toBe(0);
     expect(mockFetch).toHaveBeenCalledWith("http://localhost:3456/api/sessions/s1/plan", expect.objectContaining({ method: "PUT" }));
+  });
+});
+
+describe("parsePlanFile", () => {
+  it("accepts the legacy bare-array format with no overview", () => {
+    const parsed = parsePlanFile(JSON.stringify([{ kind: "flow", flowEntryStableId: "fn:a", label: "A" }]));
+    expect(parsed.units).toHaveLength(1);
+    expect(parsed.overview).toBeUndefined();
+  });
+
+  it("accepts { overview, units }", () => {
+    const parsed = parsePlanFile(JSON.stringify({
+      overview: "The change does X.",
+      units: [{ kind: "orphans", orphanStableIds: ["fn:b"], label: "B" }],
+    }));
+    expect(parsed.units).toHaveLength(1);
+    expect(parsed.overview).toBe("The change does X.");
+  });
+
+  it("rejects shapes that are neither", () => {
+    expect(() => parsePlanFile(JSON.stringify({ overview: "no units here" }))).toThrow(/units/);
+    expect(() => parsePlanFile(JSON.stringify("nope"))).toThrow(/units/);
   });
 });

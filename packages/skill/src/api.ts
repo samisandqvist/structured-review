@@ -7,7 +7,7 @@ export const DEFAULT_BASE_URL = process.env.CRW_SERVER_URL || "http://localhost:
 
 export interface Session {
   id: string; branch: string; baseRef: string; status: string; createdAt: number;
-  headSha?: string; indexWarnings?: string[];
+  headSha?: string; indexWarnings?: string[]; overview?: string;
 }
 export interface GraphNode { stableId: string; label: string; file: string; startLine: number; endLine: number; isEntryPoint: boolean; changeStatus: string; }
 export interface GraphEdge { sourceStableId: string; targetStableId: string; edgeType: string; }
@@ -45,6 +45,22 @@ export interface SessionInfo {
 export type UnitInput =
   | { kind: "flow"; flowEntryStableId?: string; flowEntryStableIds?: string[]; label: string; rationale?: string }
   | { kind: "orphans"; orphanStableIds: string[]; label: string; rationale?: string };
+
+/** Plan file for `crw plan --units`: either a bare UnitInput[] (legacy) or
+ *  { overview?, units }. The overview travels with the plan so a replan
+ *  always re-states (or clears) the narrative. */
+export function parsePlanFile(text: string): { units: UnitInput[]; overview?: string } {
+  const raw: unknown = JSON.parse(text);
+  if (Array.isArray(raw)) return { units: raw as UnitInput[] };
+  if (raw && typeof raw === "object" && Array.isArray((raw as { units?: unknown }).units)) {
+    const overview = (raw as { overview?: unknown }).overview;
+    return {
+      units: (raw as { units: UnitInput[] }).units,
+      ...(typeof overview === "string" && overview.trim() ? { overview } : {}),
+    };
+  }
+  throw new Error("plan file must be a units array or { overview?, units }");
+}
 
 export interface CommentAnchor {
   startLine: number; startSide: "old" | "new";
@@ -109,14 +125,17 @@ export async function getNodeDiff(base: string, sessionId: string, nodeId: strin
 }
 
 export async function writePlan(
-  base: string, sessionId: string, units: UnitInput[]
-): Promise<{ units: Unit[]; coverage: Coverage }> {
-  return fetchJson(`${base}/api/sessions/${sessionId}/plan`, { method: "PUT", body: JSON.stringify({ units }) });
+  base: string, sessionId: string, units: UnitInput[], overview?: string
+): Promise<{ units: Unit[]; coverage: Coverage; overview: string }> {
+  return fetchJson(`${base}/api/sessions/${sessionId}/plan`, {
+    method: "PUT",
+    body: JSON.stringify(overview === undefined ? { units } : { units, overview }),
+  });
 }
 
 export async function exportComments(
   base: string, sessionId: string
-): Promise<{ branch: string; baseRef: string; headSha: string; comments: ExportedComment[] }> {
+): Promise<{ branch: string; baseRef: string; headSha: string; overview: string; comments: ExportedComment[] }> {
   return fetchJson(`${base}/api/sessions/${sessionId}/export`);
 }
 
