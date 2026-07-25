@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppContext } from "../app.js";
-import { createSession, getSession, listSessions, deleteSession, updateSessionStatus } from "../repo/sessions.js";
+import { createSession, getSession, listSessions, deleteSession, updateSessionStatus, updateSessionOverview } from "../repo/sessions.js";
 import { createUnit, getUnitsBySession, deleteUnit, updateUnitLabel, setUnitPositions } from "../repo/units.js";
 import { createNode, getNodesBySession } from "../repo/nodes.js";
 import { fileChangedRanges, gitHeadSha, repoFingerprint, resolveRef, rangesOverlap, currentBranch, GitError, type LineRange } from "../diff.js";
@@ -191,6 +191,8 @@ export function createSessionsRoute(ctx: AppContext) {
     if (!parsed.ok) return parsed.res;
     const body = parsed.data;
 
+    const overview = (body.overview ?? "").trim();
+
     const sessionNodes = getNodesBySession(ctx.db, sessionId);
     const changedStableIds = sessionNodes
       .filter((n) => n.changeStatus === "changed")
@@ -224,6 +226,7 @@ export function createSessionsRoute(ctx: AppContext) {
           "Changes not covered by any chosen unit.", "orphans", leftovers, true);
       }
       updateSessionStatus(ctx.db, sessionId, "walking");
+      updateSessionOverview(ctx.db, sessionId, overview);
     })();
 
     const coverage = {
@@ -231,7 +234,7 @@ export function createSessionsRoute(ctx: AppContext) {
       covered: changedStableIds.length - leftovers.length,
       unassigned: leftovers.length,
     };
-    return c.json({ units: getUnitsBySession(ctx.db, sessionId), coverage });
+    return c.json({ units: getUnitsBySession(ctx.db, sessionId), coverage, overview });
   });
 
   router.patch("/:id/units/:unitId", async (c) => {

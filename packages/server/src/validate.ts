@@ -22,7 +22,10 @@ const orphanUnitSchema = z.object({
 });
 
 export const planSchema = z
-  .object({ units: z.array(z.discriminatedUnion("kind", [flowUnitSchema, orphanUnitSchema])) })
+  .object({
+    overview: z.string().optional(),
+    units: z.array(z.discriminatedUnion("kind", [flowUnitSchema, orphanUnitSchema])),
+  })
   .superRefine((body, ctx) => {
     const seen = new Set<string>();
     body.units.forEach((u, i) => {
