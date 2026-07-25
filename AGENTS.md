@@ -44,12 +44,14 @@ stdout; `--pretty` for humans.
 ```bash
 crw serve [--repo <path>] [--port N]              # start or reuse the hub (checks /health repoRoot)
 crw session create --branch <b> --base <ref>      # prints sessionId, uiUrl, counts, indexWarnings
-crw context --session <id>                        # flows + orphans + change summaries for planning
-crw plan --session <id> (--auto | --units <f>)    # mechanical or LLM-authored plan
+crw context --session <id> [--full]               # planning view: affected flows + orphans + change summaries
+crw plan --session <id> (--auto | --units <f>)    # mechanical or LLM-authored plan; lists unassigned leftovers
 crw diff --session <id> --node <stableId>         # single node diff
-crw status --session <id>                         # coverage, per-unit reviewed/total, unreviewed
+crw status --session <id>                         # coverage, overview, per-unit reviewed/total, unreviewed
 crw comments --session <id>                       # exported comments + review status (GitHub-mappable)
 crw wait --session <id> [--until reviewed|commented]
+crw gc [--repo <path>] [--all]                    # remove a repo's DB/logs (stops the hub first)
+crw shutdown                                      # stop the hub over HTTP
 ```
 
 ## Graph provider (CRG)
