@@ -85,6 +85,23 @@ describe("computeStatus", () => {
     expect(status.stale).toBe(true);
     expect(status.staleReason).toBe("head-moved");
   });
+
+  it("includes the session overview only when non-empty", () => {
+    const base = {
+      units: [], coverage: { changedTotal: 0, covered: 0, unassigned: 0 },
+    };
+    const withOverview = computeStatus(
+      { ...base, session: { id: "s1", branch: "b", baseRef: "main", status: "walking", createdAt: 0, overview: "Adds Redis rate limiting." } },
+      [], []
+    );
+    expect(withOverview.overview).toBe("Adds Redis rate limiting.");
+
+    const without = computeStatus(
+      { ...base, session: { id: "s1", branch: "b", baseRef: "main", status: "walking", createdAt: 0, overview: "" } },
+      [], []
+    );
+    expect(without.overview).toBeUndefined();
+  });
 });
 
 describe("waitConditionMet", () => {
