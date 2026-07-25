@@ -68,6 +68,7 @@ async function fetchStatus(base: string, sessionId: string): Promise<SessionStat
 function prettyStatus(s: SessionStatus): string {
   const lines = [
     `session ${s.sessionId} (${s.sessionStatus})${s.stale ? ` — STALE: ${s.staleReason}` : ""}`,
+    ...(s.overview ? [`overview: ${s.overview.length > 100 ? s.overview.slice(0, 100) + "…" : s.overview}`] : []),
     `coverage: ${s.coverage.covered}/${s.coverage.changedTotal} assigned, ${s.coverage.unassigned} unassigned`,
     ...s.units.map((u) => `  [${u.reviewed}/${u.total}] ${u.label}${u.auto ? " (auto)" : ""} — ${u.kind}`),
   ];

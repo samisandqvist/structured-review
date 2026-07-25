@@ -12,6 +12,7 @@ export interface SessionStatus {
   coverage: Coverage;
   stale?: boolean;
   staleReason?: string;
+  overview?: string;
   units: UnitStatus[];
   unreviewed: UnreviewedNode[];
 }
@@ -62,6 +63,7 @@ export function computeStatus(info: SessionInfo, nodes: SessionNode[], flows: Fl
     coverage: info.coverage,
     ...(info.stale === undefined ? {} : { stale: info.stale }),
     ...(info.staleReason ? { staleReason: info.staleReason } : {}),
+    ...(info.session.overview ? { overview: info.session.overview } : {}),
     units,
     unreviewed,
   };
