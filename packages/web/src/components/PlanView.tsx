@@ -57,6 +57,7 @@ export function PlanView({
           ))}
         </div>
       )}
+      {sessionData?.session?.overview && <OverviewBlock text={sessionData.session.overview} />}
       <SessionNotes sessionId={sessionId} />
       <div style={{ overflow: "auto", flex: 1, padding: "4px 16px 20px" }}>
         {units.map((u) => (
@@ -75,6 +76,26 @@ export function PlanView({
           />
         ))}
       </div>
+    </div>
+  );
+}
+
+/** Plan-authored narrative: what the change does and how the plan decomposes
+ *  it. Marked "from plan" so generated text is never mistaken for tool-derived
+ *  fact; collapsible because it is orientation, not workflow. */
+function OverviewBlock({ text }: { text: string }) {
+  const [collapsed, setCollapsed] = useState(false);
+  return (
+    <div className="plan__overview" data-testid="plan-overview">
+      <button
+        data-testid="plan-overview-toggle"
+        className="plan__overview-toggle"
+        onClick={() => setCollapsed(!collapsed)}
+      >
+        <span style={{ fontSize: 11 }}>{collapsed ? "▸" : "▾"}</span> Overview
+        <span className="plan__overview-badge">from plan</span>
+      </button>
+      {!collapsed && <p className="plan__overview-text">{text}</p>}
     </div>
   );
 }
