@@ -234,7 +234,14 @@ export function createSessionsRoute(ctx: AppContext) {
       covered: changedStableIds.length - leftovers.length,
       unassigned: leftovers.length,
     };
-    return c.json({ units: getUnitsBySession(ctx.db, sessionId), coverage, overview });
+    // Name the leftovers, not just count them: a planner fixing coverage needs
+    // the stableIds to author orphan-units without re-fetching the session.
+    const nodeByStable = new Map(sessionNodes.map((n) => [n.stableId, n]));
+    const unassignedNodes = leftovers.map((id) => {
+      const n = nodeByStable.get(id);
+      return { stableId: id, label: n?.label ?? id, file: n?.file ?? "" };
+    });
+    return c.json({ units: getUnitsBySession(ctx.db, sessionId), coverage, overview, unassigned: unassignedNodes });
   });
 
   router.patch("/:id/units/:unitId", async (c) => {

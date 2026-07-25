@@ -599,6 +599,24 @@ describe("coverage reconciliation", () => {
     const auto = body.units.find((u: any) => u.auto);
     expect(auto.label).toBe("Unassigned changes");
     expect(auto.memberStableIds).toEqual(["fn:lonely"]);
+    // The response names the leftovers so a planner can assign them without
+    // re-fetching the session and digging into the auto unit.
+    expect(body.unassigned).toEqual([
+      { stableId: "fn:lonely", label: "lonely", file: "src/lonely.ts" },
+    ]);
+  });
+
+  it("reports an empty unassigned list when everything is covered", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const res = await app.request(`/api/sessions/${session.id}/plan`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ units: [{ kind: "orphans", orphanStableIds: ["fn:handleOrder"], label: "Orders" }] }),
+    });
+    expect((await res.json()).unassigned).toEqual([]);
   });
 });
 
