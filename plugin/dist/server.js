@@ -17625,7 +17625,7 @@ function createSession(db2, branch, baseRef, headSha = "", repoFingerprint2 = ""
   db2.prepare(
     "INSERT INTO review_sessions (id, branch, base_ref, status, created_at, head_sha, repo_fingerprint, index_warnings) VALUES (?, ?, ?, 'planning', ?, ?, ?, ?)"
   ).run(id, branch, baseRef, createdAt, headSha, repoFingerprint2, JSON.stringify(indexWarnings));
-  return { id, branch, baseRef, status: "planning", createdAt, headSha, repoFingerprint: repoFingerprint2, indexWarnings };
+  return { id, branch, baseRef, status: "planning", createdAt, headSha, repoFingerprint: repoFingerprint2, indexWarnings, overview: "" };
 }
 function rowToSession(row) {
   return {
@@ -17636,7 +17636,8 @@ function rowToSession(row) {
     createdAt: row.created_at,
     headSha: row.head_sha,
     repoFingerprint: row.repo_fingerprint,
-    indexWarnings: JSON.parse(row.index_warnings)
+    indexWarnings: JSON.parse(row.index_warnings),
+    overview: row.overview
   };
 }
 function getSession(db2, id) {
@@ -17651,6 +17652,9 @@ function deleteSession(db2, id) {
 }
 function updateSessionStatus(db2, id, status) {
   db2.prepare("UPDATE review_sessions SET status = ? WHERE id = ?").run(status, id);
+}
+function updateSessionOverview(db2, id, overview) {
+  db2.prepare("UPDATE review_sessions SET overview = ? WHERE id = ?").run(overview, id);
 }
 
 // packages/server/src/repo/units.ts
@@ -33046,7 +33050,10 @@ var orphanUnitSchema = external_exports.object({
   rationale: external_exports.string().optional(),
   orphanStableIds: external_exports.array(external_exports.string().min(1))
 });
-var planSchema = external_exports.object({ units: external_exports.array(external_exports.discriminatedUnion("kind", [flowUnitSchema, orphanUnitSchema])) }).superRefine((body, ctx) => {
+var planSchema = external_exports.object({
+  overview: external_exports.string().optional(),
+  units: external_exports.array(external_exports.discriminatedUnion("kind", [flowUnitSchema, orphanUnitSchema]))
+}).superRefine((body, ctx) => {
   const seen = /* @__PURE__ */ new Set();
   body.units.forEach((u, i) => {
     if (!u.label.trim()) {
@@ -33267,6 +33274,7 @@ function createSessionsRoute(ctx) {
     const parsed = await parseBody2(c, planSchema);
     if (!parsed.ok) return parsed.res;
     const body = parsed.data;
+    const overview = (body.overview ?? "").trim();
     const sessionNodes = getNodesBySession(ctx.db, sessionId);
     const changedStableIds = sessionNodes.filter((n) => n.changeStatus === "changed").map((n) => n.stableId);
     const flows = await ctx.graphProvider.getFlows(new Set(changedStableIds));
@@ -33300,13 +33308,14 @@ function createSessionsRoute(ctx) {
         );
       }
       updateSessionStatus(ctx.db, sessionId, "walking");
+      updateSessionOverview(ctx.db, sessionId, overview);
     })();
     const coverage = {
       changedTotal: changedStableIds.length,
       covered: changedStableIds.length - leftovers.length,
       unassigned: leftovers.length
     };
-    return c.json({ units: getUnitsBySession(ctx.db, sessionId), coverage });
+    return c.json({ units: getUnitsBySession(ctx.db, sessionId), coverage, overview });
   });
   router.patch("/:id/units/:unitId", async (c) => {
     const sessionId = c.req.param("id");
@@ -33531,6 +33540,7 @@ function createCommentsRoute(ctx) {
       branch: session.branch,
       baseRef: session.baseRef,
       headSha: session.headSha,
+      overview: session.overview,
       comments: exportComments(ctx.db, session.id)
     });
   });
@@ -33860,7 +33870,7 @@ CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_node_id);
 CREATE INDEX IF NOT EXISTS idx_comments_session ON comments(session_id);
 CREATE INDEX IF NOT EXISTS idx_comments_node ON comments(node_id);
 `;
-var SCHEMA_VERSION = 8;
+var SCHEMA_VERSION = 9;
 var MIGRATIONS = {
   1: SCHEMA_SQL,
   2: `ALTER TABLE review_sessions ADD COLUMN repo_fingerprint TEXT NOT NULL DEFAULT '';`,
@@ -33890,7 +33900,10 @@ DROP TABLE comments;
 ALTER TABLE comments_v8 RENAME TO comments;
 CREATE INDEX IF NOT EXISTS idx_comments_session ON comments(session_id);
 CREATE INDEX IF NOT EXISTS idx_comments_node ON comments(node_id);
-`
+`,
+  // v9: plan-narrative overview — replaced on every plan submit (cleared when
+  // the submitted plan omits it), so a replan never keeps a stale narrative.
+  9: `ALTER TABLE review_sessions ADD COLUMN overview TEXT NOT NULL DEFAULT '';`
 };
 
 // packages/server/src/db/connection.ts

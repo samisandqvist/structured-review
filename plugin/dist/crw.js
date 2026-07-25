@@ -9,6 +9,18 @@ import { readFileSync as readFileSync2 } from "node:fs";
 // packages/skill/src/api.ts
 import { spawn } from "node:child_process";
 var DEFAULT_BASE_URL = process.env.CRW_SERVER_URL || "http://localhost:3456";
+function parsePlanFile(text) {
+  const raw = JSON.parse(text);
+  if (Array.isArray(raw)) return { units: raw };
+  if (raw && typeof raw === "object" && Array.isArray(raw.units)) {
+    const overview = raw.overview;
+    return {
+      units: raw.units,
+      ...typeof overview === "string" && overview.trim() ? { overview } : {}
+    };
+  }
+  throw new Error("plan file must be a units array or { overview?, units }");
+}
 async function fetchJson(url, init) {
   const res = await fetch(url, {
     ...init,
@@ -44,8 +56,11 @@ async function getNodes(base, sessionId) {
 async function getNodeDiff(base, sessionId, nodeId) {
   return fetchJson(`${base}/api/sessions/${sessionId}/nodes/${nodeId}`);
 }
-async function writePlan(base, sessionId, units) {
-  return fetchJson(`${base}/api/sessions/${sessionId}/plan`, { method: "PUT", body: JSON.stringify({ units }) });
+async function writePlan(base, sessionId, units, overview) {
+  return fetchJson(`${base}/api/sessions/${sessionId}/plan`, {
+    method: "PUT",
+    body: JSON.stringify(overview === void 0 ? { units } : { units, overview })
+  });
 }
 async function exportComments(base, sessionId) {
   return fetchJson(`${base}/api/sessions/${sessionId}/export`);
@@ -100,6 +115,7 @@ function computeStatus(info, nodes, flows) {
     coverage: info.coverage,
     ...info.stale === void 0 ? {} : { stale: info.stale },
     ...info.staleReason ? { staleReason: info.staleReason } : {},
+    ...info.session.overview ? { overview: info.session.overview } : {},
     units,
     unreviewed
   };
@@ -310,6 +326,7 @@ async function fetchStatus(base, sessionId) {
 function prettyStatus(s) {
   const lines = [
     `session ${s.sessionId} (${s.sessionStatus})${s.stale ? ` \u2014 STALE: ${s.staleReason}` : ""}`,
+    ...s.overview ? [`overview: ${s.overview.length > 100 ? s.overview.slice(0, 100) + "\u2026" : s.overview}`] : [],
     `coverage: ${s.coverage.covered}/${s.coverage.changedTotal} assigned, ${s.coverage.unassigned} unassigned`,
     ...s.units.map((u) => `  [${u.reviewed}/${u.total}] ${u.label}${u.auto ? " (auto)" : ""} \u2014 ${u.kind}`)
   ];
@@ -405,19 +422,21 @@ async function cmdContext(base, flags) {
 async function cmdPlan(base, flags) {
   const sessionId = required(flags, "session");
   let units;
+  let overview;
   if (flags.auto) {
     const { flows, orphans } = await getFlows(base, sessionId);
     units = defaultPartition(flows, orphans);
   } else if (typeof flags.units === "string") {
-    units = JSON.parse(readFileSync2(flags.units, "utf8"));
+    ({ units, overview } = parsePlanFile(readFileSync2(flags.units, "utf8")));
   } else {
     throw new Error(`plan needs --auto or --units <file.json>
 ${USAGE}`);
   }
-  const result = await writePlan(base, sessionId, units);
+  const result = await writePlan(base, sessionId, units, overview);
   if (flags.open) launchUI(base, sessionId);
   const out = {
     coverage: result.coverage,
+    ...result.overview ? { overview: result.overview } : {},
     units: result.units.map((u) => ({
       label: u.label,
       kind: u.kind,
@@ -430,6 +449,7 @@ ${USAGE}`);
     json: out,
     pretty: [
       `coverage: ${out.coverage.covered}/${out.coverage.changedTotal} assigned, ${out.coverage.unassigned} unassigned`,
+      ...out.overview ? [`overview: ${out.overview}`] : [],
       ...out.units.map((u) => `  ${u.label}${u.auto ? " (auto)" : ""} \u2014 ${u.kind}, ${u.members} member(s)${u.attached ? `, ${u.attached} attached` : ""}`)
     ].join("\n")
   };
