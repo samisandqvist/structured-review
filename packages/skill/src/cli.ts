@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 import {
   DEFAULT_BASE_URL, createSession, defaultPartition, deleteSession, exportComments, getChanges,
-  getFlows, getNodeDiff, getNodes, getSessionInfo, launchUI, listSessions, uiUrl, writePlan,
+  getFlows, getNodeDiff, getNodes, getSessionInfo, launchUI, listSessions, parsePlanFile, uiUrl, writePlan,
   type UnitInput,
 } from "./api.js";
 import { computeStatus, waitConditionMet, type SessionStatus } from "./status.js";
@@ -179,18 +179,20 @@ async function cmdContext(base: string, flags: Record<string, string | boolean>)
 async function cmdPlan(base: string, flags: Record<string, string | boolean>): Promise<CommandResult> {
   const sessionId = required(flags, "session");
   let units: UnitInput[];
+  let overview: string | undefined;
   if (flags.auto) {
     const { flows, orphans } = await getFlows(base, sessionId);
     units = defaultPartition(flows, orphans);
   } else if (typeof flags.units === "string") {
-    units = JSON.parse(readFileSync(flags.units, "utf8")) as UnitInput[];
+    ({ units, overview } = parsePlanFile(readFileSync(flags.units, "utf8")));
   } else {
     throw new Error(`plan needs --auto or --units <file.json>\n${USAGE}`);
   }
-  const result = await writePlan(base, sessionId, units);
+  const result = await writePlan(base, sessionId, units, overview);
   if (flags.open) launchUI(base, sessionId);
   const out = {
     coverage: result.coverage,
+    ...(result.overview ? { overview: result.overview } : {}),
     units: result.units.map((u) => ({
       label: u.label, kind: u.kind, auto: u.auto, members: u.memberStableIds.length,
       attached: (u.attached ?? []).filter((m) => m.counted).length,
@@ -200,6 +202,7 @@ async function cmdPlan(base: string, flags: Record<string, string | boolean>): P
     json: out,
     pretty: [
       `coverage: ${out.coverage.covered}/${out.coverage.changedTotal} assigned, ${out.coverage.unassigned} unassigned`,
+      ...(out.overview ? [`overview: ${out.overview}`] : []),
       ...out.units.map((u) =>
         `  ${u.label}${u.auto ? " (auto)" : ""} — ${u.kind}, ${u.members} member(s)${u.attached ? `, ${u.attached} attached` : ""}`),
     ].join("\n"),
