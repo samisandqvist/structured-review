@@ -81,7 +81,9 @@ Harvest flow (after the reviewer walks the plan):
 tests, DTOs and module-scope leftovers attach themselves to those units at
 submit, and anything truly homeless is swept into the auto "Unassigned changes"
 unit. Prefer an LLM-authored plan when the change warrants judgment. The plan
-is an ordered list of **units**, each either a **flow** or an **orphan group**:
+is an optional session **overview** plus an ordered list of **units**,
+each either a **flow** or an **orphan group**. The plan file is
+`{ "overview": "...", "units": [...] }` (a bare units array is also accepted):
 
 - **flow-unit** — `{ "kind": "flow", "flowEntryStableIds": ["<entry>", ...], "label": "...", "rationale": "..." }`
   (the singular `flowEntryStableId` is still accepted)
@@ -89,17 +91,22 @@ is an ordered list of **units**, each either a **flow** or an **orphan group**:
 
 Steps for an LLM-authored plan:
 
-1. After `crw session create`, run `crw context --session <id>`. It prints
+1. Gather the change's stated intent when available: `gh pr view --json
+   title,body` and `git log <base>..<branch> --format=%s` (commit subjects
+   only). This is intent input, not diff reading — the "never run `git diff`"
+   rule below stands. No PR or uninformative messages → proceed without;
+   never block on missing intent.
+2. After `crw session create`, run `crw context --session <id>`. It prints
    `{ sessionId, flows, orphans, changes }`. `changes` is a compact per-node
    summary (kind, file, lines, +/- counts, signature) — **not** diff bodies.
-2. Make one flow-unit per **affected** flow, using `flowEntryStableIds: [entryStableId]`.
+3. Make one flow-unit per **affected** flow, using `flowEntryStableIds: [entryStableId]`.
    Do not split flows. **Merge** flows into one multi-entry flow-unit
    (`flowEntryStableIds: [e1, e2, ...]`) when they substantially review the same
    change — guideline: shared `changedStableIds` ≥ half of the smaller flow's
    changed set. Label a merged unit by the shared capability, not the entry names
    (e.g. "Order validation — via API, CLI and worker"). Never merge flows with
    disjoint changed sets just to shorten the plan.
-3. Group the remaining orphans into orphan-units by shared purpose (e.g.
+4. Group the remaining orphans into orphan-units by shared purpose (e.g.
    "validation helpers"). **Do not hand-author units for changed tests, DTOs,
    or module-scope leftovers of files already in flows** — at plan submit the
    server nests those under the covered node that gives them context
@@ -107,11 +114,21 @@ Steps for an LLM-authored plan:
    coverage. Non-code-graph changes with no such home (configs, dependency
    manifests) still deserve explicit orphan-units, ordered early: they are the
    foundations the flows sit on.
-4. Give each unit a `label` and an optional short `rationale` describing **what
-   the unit does** (its functionality/purpose) — not why you ordered it.
-5. Order units for a sensible walk (foundational/helper changes first, then the
+5. Write a session `overview` (2–4 sentences, after the units are decided):
+   what the change sets out to do — from stated intent when present, otherwise
+   from what the diff observably does — and how the plan decomposes it
+   ("units 1–2 are the config foundation, units 3–5 the consumer flows").
+   State relation, never verdicts ("implements the issuance half of the token
+   change", not "correctly issues tokens").
+6. Give each unit a `label` and an optional short `rationale` (1–2 sentences)
+   stating **what part of the overall change this unit carries**, in relation
+   to the overview — not a restatement of what the code does. When a unit does
+   not serve the stated intent, say so descriptively ("not part of the stated
+   goal; appears to be a drive-by refactor of the retry helper") — that
+   wording is the scope-creep signal; there is no separate divergence pass.
+7. Order units for a sensible walk (foundational/helper changes first, then the
    flows that depend on them — your judgment).
-6. Write the units array to a JSON file and run
+8. Write the units array to a JSON file and run
    `crw plan --session <id> --units plan.json`. It prints `coverage` and
    per-unit `attached` counts. `coverage.unassigned > 0` now means true
    leftovers (nothing could attach them): add orphan-units for those and
