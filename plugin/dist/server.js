@@ -33315,7 +33315,12 @@ function createSessionsRoute(ctx) {
       covered: changedStableIds.length - leftovers.length,
       unassigned: leftovers.length
     };
-    return c.json({ units: getUnitsBySession(ctx.db, sessionId), coverage, overview });
+    const nodeByStable = new Map(sessionNodes.map((n) => [n.stableId, n]));
+    const unassignedNodes = leftovers.map((id) => {
+      const n = nodeByStable.get(id);
+      return { stableId: id, label: n?.label ?? id, file: n?.file ?? "" };
+    });
+    return c.json({ units: getUnitsBySession(ctx.db, sessionId), coverage, overview, unassigned: unassignedNodes });
   });
   router.patch("/:id/units/:unitId", async (c) => {
     const sessionId = c.req.param("id");

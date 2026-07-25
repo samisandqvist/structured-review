@@ -9,6 +9,17 @@ import { readFileSync as readFileSync2 } from "node:fs";
 // packages/skill/src/api.ts
 import { spawn } from "node:child_process";
 var DEFAULT_BASE_URL = process.env.CRW_SERVER_URL || "http://localhost:3456";
+function compactContext(flows, orphans) {
+  return {
+    flows: flows.filter((f) => f.affected).map((f) => ({ id: f.id, name: f.name, entryStableId: f.entryStableId, changedStableIds: f.changedStableIds })),
+    orphans: orphans.map((o) => ({
+      stableId: o.stableId,
+      label: o.label,
+      file: o.file,
+      ...o.residualKind !== void 0 ? { residualKind: o.residualKind } : {}
+    }))
+  };
+}
 function parsePlanFile(text) {
   const raw = JSON.parse(text);
   if (Array.isArray(raw)) return { units: raw };
@@ -280,15 +291,16 @@ var USAGE = `usage:
   crw session create --branch <b> --base <ref> [--open]
   crw session list
   crw session delete --session <id>
-  crw context --session <id>
+  crw context --session <id> [--full]
   crw plan --session <id> (--auto | --units <file.json>) [--open]
   crw diff --session <id> --node <stableId>
   crw status --session <id>
   crw comments --session <id>
   crw wait --session <id> [--until reviewed|commented] [--interval sec] [--timeout sec]
   crw gc [--repo <path>] [--all]
+  crw shutdown
 global flags: --port N (hub port), --pretty (human-readable output)`;
-var BOOL_FLAGS = /* @__PURE__ */ new Set(["auto", "open", "pretty", "all"]);
+var BOOL_FLAGS = /* @__PURE__ */ new Set(["auto", "open", "pretty", "all", "full"]);
 function parseCliArgs(argv) {
   const positionals = [];
   const flags = {};
@@ -411,13 +423,18 @@ ${s.removed.map((p) => `  - ${p}`).join("\n")}`),
     ].join("\n")
   };
 }
+async function cmdShutdown(base) {
+  const result = await shutdownHub(base);
+  return { json: result, pretty: `hub stopping${result.pid ? ` (pid ${result.pid})` : ""}` };
+}
 async function cmdContext(base, flags) {
   const sessionId = required(flags, "session");
   const [{ flows, orphans }, { changes }] = await Promise.all([
     getFlows(base, sessionId),
     getChanges(base, sessionId)
   ]);
-  return { json: { sessionId, flows, orphans, changes } };
+  if (flags.full) return { json: { sessionId, flows, orphans, changes } };
+  return { json: { sessionId, ...compactContext(flows, orphans), changes } };
 }
 async function cmdPlan(base, flags) {
   const sessionId = required(flags, "session");
@@ -434,9 +451,13 @@ ${USAGE}`);
   }
   const result = await writePlan(base, sessionId, units, overview);
   if (flags.open) launchUI(base, sessionId);
+  const unassigned = result.unassigned ?? [];
   const out = {
     coverage: result.coverage,
     ...result.overview ? { overview: result.overview } : {},
+    // Leftovers by stableId so a planner can author orphan-units for them and
+    // re-submit without re-fetching the session.
+    ...unassigned.length > 0 ? { unassigned } : {},
     units: result.units.map((u) => ({
       label: u.label,
       kind: u.kind,
@@ -450,6 +471,7 @@ ${USAGE}`);
     pretty: [
       `coverage: ${out.coverage.covered}/${out.coverage.changedTotal} assigned, ${out.coverage.unassigned} unassigned`,
       ...out.overview ? [`overview: ${out.overview}`] : [],
+      ...unassigned.map((n) => `  unassigned: ${n.label} \u2014 ${n.file} (${n.stableId})`),
       ...out.units.map((u) => `  ${u.label}${u.auto ? " (auto)" : ""} \u2014 ${u.kind}, ${u.members} member(s)${u.attached ? `, ${u.attached} attached` : ""}`)
     ].join("\n")
   };
@@ -534,6 +556,9 @@ async function runCli(argv) {
       break;
     case "gc":
       result = await cmdGc(base, flags);
+      break;
+    case "shutdown":
+      result = await cmdShutdown(base);
       break;
     case "context":
       result = await cmdContext(base, flags);
