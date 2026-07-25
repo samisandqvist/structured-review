@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("node:child_process", () => ({ spawn: vi.fn(() => ({ unref: vi.fn() })), execFileSync: vi.fn() }));
 
-import { createSession, writePlan, exportComments, defaultPartition, uiUrl, parsePlanFile } from "../src/api.js";
+import { compactContext, createSession, writePlan, exportComments, defaultPartition, uiUrl, parsePlanFile } from "../src/api.js";
 
 const BASE = "http://localhost:3456";
 const mockFetch = vi.fn();
@@ -86,5 +86,38 @@ describe("parsePlanFile", () => {
   it("rejects shapes that are neither", () => {
     expect(() => parsePlanFile(JSON.stringify({ overview: "no units here" }))).toThrow(/units/);
     expect(() => parsePlanFile(JSON.stringify("nope"))).toThrow(/units/);
+  });
+});
+
+describe("compactContext", () => {
+  const flows = [
+    {
+      id: 1, name: "handleOrder", affected: true, entryStableId: "fn:handleOrder",
+      changedStableIds: ["fn:handleOrder", "fn:processOrder"],
+      steps: [{ stableId: "fn:handleOrder", label: "handleOrder", file: "o.ts", startLine: 1, endLine: 2, isTest: false, depth: 0, nodeId: "n1", changeStatus: "changed", reviewStatus: "unreviewed" }],
+    },
+    {
+      id: 2, name: "unrelated", affected: false, entryStableId: "fn:unrelated",
+      changedStableIds: [],
+      steps: [],
+    },
+  ];
+  const orphans = [
+    { stableId: "file-residual:docs/x.md", label: "x.md", file: "docs/x.md", residualKind: "whole-file", id: "n9", sessionId: "s1", startLine: 1, endLine: 5 },
+  ];
+
+  it("keeps only affected flows, without step arrays", () => {
+    const compact = compactContext(flows as never, orphans as never);
+    expect(compact.flows).toEqual([
+      { id: 1, name: "handleOrder", entryStableId: "fn:handleOrder", changedStableIds: ["fn:handleOrder", "fn:processOrder"] },
+    ]);
+    expect("steps" in compact.flows[0]).toBe(false);
+  });
+
+  it("reduces orphans to stableId/label/file/residualKind", () => {
+    const compact = compactContext(flows as never, orphans as never);
+    expect(compact.orphans).toEqual([
+      { stableId: "file-residual:docs/x.md", label: "x.md", file: "docs/x.md", residualKind: "whole-file" },
+    ]);
   });
 });

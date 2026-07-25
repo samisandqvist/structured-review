@@ -4,8 +4,8 @@
 // the HTTP API (api.ts) and server lifecycle (serve.ts) — never SQLite.
 import { readFileSync } from "node:fs";
 import {
-  DEFAULT_BASE_URL, createSession, defaultPartition, deleteSession, exportComments, getChanges,
-  getFlows, getNodeDiff, getNodes, getSessionInfo, launchUI, listSessions, parsePlanFile, uiUrl, writePlan,
+  DEFAULT_BASE_URL, compactContext, createSession, defaultPartition, deleteSession, exportComments, getChanges,
+  getFlows, getNodeDiff, getNodes, getSessionInfo, launchUI, listSessions, parsePlanFile, shutdownHub, uiUrl, writePlan,
   type UnitInput,
 } from "./api.js";
 import { computeStatus, waitConditionMet, type SessionStatus } from "./status.js";
@@ -17,16 +17,17 @@ const USAGE = `usage:
   crw session create --branch <b> --base <ref> [--open]
   crw session list
   crw session delete --session <id>
-  crw context --session <id>
+  crw context --session <id> [--full]
   crw plan --session <id> (--auto | --units <file.json>) [--open]
   crw diff --session <id> --node <stableId>
   crw status --session <id>
   crw comments --session <id>
   crw wait --session <id> [--until reviewed|commented] [--interval sec] [--timeout sec]
   crw gc [--repo <path>] [--all]
+  crw shutdown
 global flags: --port N (hub port), --pretty (human-readable output)`;
 
-const BOOL_FLAGS = new Set(["auto", "open", "pretty", "all"]);
+const BOOL_FLAGS = new Set(["auto", "open", "pretty", "all", "full"]);
 
 export interface CliArgs { command: string; flags: Record<string, string | boolean>; }
 
@@ -166,15 +167,25 @@ async function cmdGc(base: string, flags: Record<string, string | boolean>): Pro
   };
 }
 
-// Planning context for LLM-authored plans: flows + orphans + compact per-node
-// change summaries (kind, file, lines, +/- counts, signature) — not diff bodies.
+// Stop the hub over HTTP — the CLI counterpart of POST /api/shutdown, so
+// cleanup never needs a hand-rolled curl.
+async function cmdShutdown(base: string): Promise<CommandResult> {
+  const result = await shutdownHub(base);
+  return { json: result, pretty: `hub stopping${result.pid ? ` (pid ${result.pid})` : ""}` };
+}
+
+// Planning context for LLM-authored plans: affected flows (no step arrays),
+// orphans reduced to plan-referencable fields, and compact per-node change
+// summaries (kind, file, lines, +/- counts, signature) — not diff bodies.
+// `--full` restores the complete dump (all flows with steps, full orphan nodes).
 async function cmdContext(base: string, flags: Record<string, string | boolean>): Promise<CommandResult> {
   const sessionId = required(flags, "session");
   const [{ flows, orphans }, { changes }] = await Promise.all([
     getFlows(base, sessionId),
     getChanges(base, sessionId),
   ]);
-  return { json: { sessionId, flows, orphans, changes } };
+  if (flags.full) return { json: { sessionId, flows, orphans, changes } };
+  return { json: { sessionId, ...compactContext(flows, orphans), changes } };
 }
 
 async function cmdPlan(base: string, flags: Record<string, string | boolean>): Promise<CommandResult> {
@@ -191,9 +202,13 @@ async function cmdPlan(base: string, flags: Record<string, string | boolean>): P
   }
   const result = await writePlan(base, sessionId, units, overview);
   if (flags.open) launchUI(base, sessionId);
+  const unassigned = result.unassigned ?? [];
   const out = {
     coverage: result.coverage,
     ...(result.overview ? { overview: result.overview } : {}),
+    // Leftovers by stableId so a planner can author orphan-units for them and
+    // re-submit without re-fetching the session.
+    ...(unassigned.length > 0 ? { unassigned } : {}),
     units: result.units.map((u) => ({
       label: u.label, kind: u.kind, auto: u.auto, members: u.memberStableIds.length,
       attached: (u.attached ?? []).filter((m) => m.counted).length,
@@ -204,6 +219,7 @@ async function cmdPlan(base: string, flags: Record<string, string | boolean>): P
     pretty: [
       `coverage: ${out.coverage.covered}/${out.coverage.changedTotal} assigned, ${out.coverage.unassigned} unassigned`,
       ...(out.overview ? [`overview: ${out.overview}`] : []),
+      ...unassigned.map((n) => `  unassigned: ${n.label} — ${n.file} (${n.stableId})`),
       ...out.units.map((u) =>
         `  ${u.label}${u.auto ? " (auto)" : ""} — ${u.kind}, ${u.members} member(s)${u.attached ? `, ${u.attached} attached` : ""}`),
     ].join("\n"),
@@ -287,6 +303,7 @@ export async function runCli(argv: string[]): Promise<void> {
     case "session list": result = await cmdSessionList(base); break;
     case "session delete": result = await cmdSessionDelete(base, flags); break;
     case "gc": result = await cmdGc(base, flags); break;
+    case "shutdown": result = await cmdShutdown(base); break;
     case "context": result = await cmdContext(base, flags); break;
     case "plan": result = await cmdPlan(base, flags); break;
     case "diff": result = await cmdDiff(base, flags); break;

@@ -19,7 +19,25 @@ export interface FlowStep {
   nodeId: string | null; changeStatus: string | null; reviewStatus: string | null;
 }
 export interface FlowDTO { id: number; name: string; affected: boolean; entryStableId: string; changedStableIds: string[]; steps: FlowStep[]; }
-export interface OrphanDTO { stableId: string; label: string; file: string; }
+export interface OrphanDTO { stableId: string; label: string; file: string; residualKind?: string | null; }
+
+/** Planning view of a session: affected flows without their step arrays,
+ *  orphans reduced to what a plan references. This is what an LLM planner
+ *  needs to author units; the full dump is behind `crw context --full`. */
+export function compactContext(flows: FlowDTO[], orphans: OrphanDTO[]): {
+  flows: { id: number; name: string; entryStableId: string; changedStableIds: string[] }[];
+  orphans: { stableId: string; label: string; file: string; residualKind?: string | null }[];
+} {
+  return {
+    flows: flows
+      .filter((f) => f.affected)
+      .map((f) => ({ id: f.id, name: f.name, entryStableId: f.entryStableId, changedStableIds: f.changedStableIds })),
+    orphans: orphans.map((o) => ({
+      stableId: o.stableId, label: o.label, file: o.file,
+      ...(o.residualKind !== undefined ? { residualKind: o.residualKind } : {}),
+    })),
+  };
+}
 
 export interface SessionNode {
   id: string; stableId: string; label: string; file: string;
@@ -126,7 +144,7 @@ export async function getNodeDiff(base: string, sessionId: string, nodeId: strin
 
 export async function writePlan(
   base: string, sessionId: string, units: UnitInput[], overview?: string
-): Promise<{ units: Unit[]; coverage: Coverage; overview: string }> {
+): Promise<{ units: Unit[]; coverage: Coverage; overview: string; unassigned: { stableId: string; label: string; file: string }[] }> {
   return fetchJson(`${base}/api/sessions/${sessionId}/plan`, {
     method: "PUT",
     body: JSON.stringify(overview === undefined ? { units } : { units, overview }),

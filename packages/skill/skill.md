@@ -31,7 +31,7 @@ add `--pretty` for human-readable output. Never touch the SQLite file or hand-ro
 ```bash
 crw serve [--repo <path>] [--port N]            # ensure the hub runs against a repo
 crw session create --branch <b> --base <ref> [--open]
-crw context --session <id>                      # flows + orphans + change summaries for planning
+crw context --session <id> [--full]             # planning view: affected flows + orphans + change summaries (--full: everything)
 crw plan --session <id> (--auto | --units <file.json>) [--open]
 crw diff --session <id> --node <stableId>       # one node's diff, for grouping decisions
 crw status --session <id>                       # coverage, per-unit reviewed/total, unreviewed list
@@ -40,6 +40,7 @@ crw wait --session <id> [--until reviewed|commented] [--interval s] [--timeout s
 crw session list                                # sessions in this repo's hub, newest first
 crw session delete --session <id>               # remove one session's state (cascades)
 crw gc [--repo <path>] [--all]                  # remove a repo's DB/logs (stops the hub first); --all sweeps dead repos
+crw shutdown                                    # stop the hub (state stays; serve restarts it)
 ```
 
 Setup flow:
@@ -85,8 +86,12 @@ Steps for an LLM-authored plan:
    rule below stands. No PR or uninformative messages → proceed without;
    never block on missing intent.
 2. After `crw session create`, run `crw context --session <id>`. It prints
-   `{ sessionId, flows, orphans, changes }`. `changes` is a compact per-node
-   summary (kind, file, lines, +/- counts, signature) — **not** diff bodies.
+   `{ sessionId, flows, orphans, changes }`: `flows` are the **affected** flows
+   only (`name`, `entryStableId`, `changedStableIds` — no step arrays), `orphans`
+   carry just `stableId`/`label`/`file`/`residualKind`, and `changes` is a
+   compact per-node summary (kind, file, lines, +/- counts, signature) — **not**
+   diff bodies. That is everything a plan references; `--full` restores the
+   complete dump (all flows with steps) if you truly need it.
 3. Make one flow-unit per **affected** flow, using `flowEntryStableIds: [entryStableId]`.
    Do not split flows. **Merge** flows into one multi-entry flow-unit
    (`flowEntryStableIds: [e1, e2, ...]`) when they substantially review the same
@@ -119,8 +124,9 @@ Steps for an LLM-authored plan:
 8. Write the plan file (`{ "overview": "...", "units": [...] }`) and run
    `crw plan --session <id> --units plan.json`. It prints `coverage` and
    per-unit `attached` counts. `coverage.unassigned > 0` now means true
-   leftovers (nothing could attach them): add orphan-units for those and
-   re-submit.
+   leftovers (nothing could attach them) — the response lists each under
+   `unassigned` (`stableId`, `label`, `file`): add orphan-units for exactly
+   those stableIds and re-submit.
 
 **Never run `git diff` for planning.** If you must read a node's code to decide
 grouping, use `crw diff --session <id> --node <stableId>` — it returns just that
