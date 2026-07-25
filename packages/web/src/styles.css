@@ -771,7 +771,7 @@ textarea:focus {
 .plan__overview { padding: 8px 16px 10px; border-bottom: 1px solid var(--line); }
 .plan__overview-toggle { display: flex; align-items: center; gap: 6px; background: none; border: none; padding: 0; cursor: pointer; font-family: var(--display); font-weight: 500; font-size: 15px; color: var(--dim); }
 .plan__overview-badge { font-size: 11px; line-height: 1.6; padding: 0 5px; border: 1px solid var(--line); border-radius: 4px; color: var(--dim); }
-.plan__overview-text { margin: 6px 0 0; font-size: 14px; line-height: 1.55; white-space: pre-wrap; }
+.plan__overview-text { margin: 6px 0 0; font-size: 14px; line-height: 1.55; white-space: pre-wrap; color: var(--dim); }
 .unit__track-caption { font-size: 13px; color: var(--dim); font-family: var(--mono); letter-spacing: 0.05em; margin: 6px 0 2px; }
 .flow__collapsed {
   background: none; border: 1px dashed var(--line-bright); border-radius: 4px;

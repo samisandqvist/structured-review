@@ -116,7 +116,7 @@ Steps for an LLM-authored plan:
    wording is the scope-creep signal; there is no separate divergence pass.
 7. Order units for a sensible walk (foundational/helper changes first, then the
    flows that depend on them — your judgment).
-8. Write the units array to a JSON file and run
+8. Write the plan file (`{ "overview": "...", "units": [...] }`) and run
    `crw plan --session <id> --units plan.json`. It prints `coverage` and
    per-unit `attached` counts. `coverage.unassigned > 0` now means true
    leftovers (nothing could attach them): add orphan-units for those and
