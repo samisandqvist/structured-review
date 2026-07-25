@@ -5,13 +5,14 @@ import { useUIStore } from "../src/store/ui.js";
 
 const mockBulkMutate = vi.fn();
 const mockUpdateUnit = vi.fn();
+let mockOverview = "";
 
 vi.mock("../src/api/hooks.js", () => ({
   useBulkUpdateNodeStatus: () => ({ mutate: mockBulkMutate }),
   useUpdateUnit: () => ({ mutate: mockUpdateUnit }),
   useComments: () => ({ data: { comments: [] }, isLoading: false }),
   useCreateComment: () => ({ mutate: vi.fn() }),
-  useSession: () => ({ data: { units: [
+  useSession: () => ({ data: { session: { overview: mockOverview }, units: [
     { id: "u1", position: 0, kind: "flow", label: "Order handling", rationale: "the order path", memberStableIds: ["fn:handleOrder"], auto: false,
       attached: [{ stableId: "fn:testOrder", parentStableId: "fn:handleOrder", reason: "tested-by", counted: false }] },
     { id: "u2", position: 1, kind: "orphans", label: "Validation helpers", rationale: "", memberStableIds: ["fn:validateOrder"], auto: false,
@@ -62,6 +63,7 @@ vi.mock("../src/api/hooks.js", () => ({
 beforeEach(() => {
   mockBulkMutate.mockClear();
   mockUpdateUnit.mockClear();
+  mockOverview = "";
   useUIStore.setState({ collapsedUnits: [], expandedUnits: [] });
 });
 
@@ -186,5 +188,25 @@ describe("PlanView", () => {
     expect(screen.getAllByText("sharedHelper")).toHaveLength(2);
     // distinct changed: entryA, entryB, shared = 3; reviewed: shared = 1
     expect(merged.querySelector(".unit__progress")!.textContent).toBe("1/3");
+  });
+
+  it("renders the overview block above the units when the session has one", () => {
+    mockOverview = "Adds Redis rate limiting; units 1-2 are the config foundation.";
+    render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={() => {}} />);
+    const block = screen.getByTestId("plan-overview");
+    expect(block).toHaveTextContent("Adds Redis rate limiting");
+    expect(block).toHaveTextContent("from plan");
+  });
+
+  it("renders no overview block when the session has none", () => {
+    render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={() => {}} />);
+    expect(screen.queryByTestId("plan-overview")).toBeNull();
+  });
+
+  it("collapses the overview on toggle", () => {
+    mockOverview = "Adds Redis rate limiting.";
+    render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={() => {}} />);
+    fireEvent.click(screen.getByTestId("plan-overview-toggle"));
+    expect(screen.queryByText("Adds Redis rate limiting.")).toBeNull();
   });
 });

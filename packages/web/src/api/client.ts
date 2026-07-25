@@ -2,6 +2,9 @@ export interface ReviewSession {
   id: string; branch: string; baseRef: string;
   status: "planning" | "walking" | "complete"; createdAt: number;
   indexWarnings?: string[];
+  /** Plan-authored narrative ("the change does X, decomposed as…"); empty
+   *  until a plan carrying one is submitted. */
+  overview?: string;
 }
 /** A changed node the server nested under a covered node at plan-write time.
  *  counted=false = cross-unit reference: render-only, not in walk/coverage. */
