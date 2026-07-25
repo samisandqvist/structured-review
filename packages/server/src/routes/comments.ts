@@ -57,6 +57,7 @@ export function createCommentsRoute(ctx: AppContext) {
       branch: session.branch,
       baseRef: session.baseRef,
       headSha: session.headSha,
+      overview: session.overview,
       comments: exportComments(ctx.db, session.id),
     });
   });

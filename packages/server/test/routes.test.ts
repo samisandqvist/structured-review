@@ -666,6 +666,24 @@ describe("GET /api/sessions/:id/export", () => {
     expect(body.comments).toHaveLength(2);
     expect(body.comments.map((c: any) => c.text)).toEqual(["first", "second"]);
   });
+
+  it("export includes the session overview, empty string when unset", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    expect((await (await app.request(`/api/sessions/${session.id}/export`)).json()).overview).toBe("");
+
+    await app.request(`/api/sessions/${session.id}/plan`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        overview: "One-line narrative.",
+        units: [{ kind: "flow", flowEntryStableId: "fn:handleOrder", label: "Order handling" }],
+      }),
+    });
+    expect((await (await app.request(`/api/sessions/${session.id}/export`)).json()).overview).toBe("One-line narrative.");
+  });
 });
 
 describe("GET /api/sessions/:id/nodes/:nodeId/context", () => {
