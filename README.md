@@ -14,7 +14,13 @@ in active dogfooding.**
   into expandable context runs.
 - **Coverage as a contract.** Every changed node belongs to exactly one
   unit; anything a plan misses is swept into a visible "Unassigned changes"
-  unit, and per-unit `reviewed/total` ledgers track progress to 100%.
+  unit (and listed by the plan API so a planner can assign it), and per-unit
+  `reviewed/total` ledgers track progress to 100%.
+- **Plan narrative.** A plan can carry a session **overview** ("the change
+  does X, decomposed as…") and change-relative unit rationales — authored at
+  plan time (never generated server-side), rendered as a collapsible
+  "from plan" block above the unit list, and included in `crw status` and
+  the comment export for PR review bodies.
 - **Context attachments.** At plan submit, the server nests changed tests
   under the code they exercise (TESTED_BY edges or test-file imports),
   DTOs/types under their consumers (a file-level requires relation), and
@@ -96,12 +102,16 @@ node packages/skill/dist/cli.js <command>       # (the plugin runs the same CLI 
 ```text
 crw serve [--repo <path>] [--port N]            # start or reuse the hub for a repo
 crw session create --branch <b> --base <ref> [--open]
-crw context --session <id>                      # flows + orphans + change summaries for planning
+crw session list
+crw session delete --session <id>
+crw context --session <id> [--full]             # planning view: affected flows + orphans + change summaries (--full: everything)
 crw plan --session <id> (--auto | --units <file.json>) [--open]
 crw diff --session <id> --node <stableId>       # a single node's diff
-crw status --session <id>                       # coverage, per-unit reviewed/total, unreviewed list
+crw status --session <id>                       # coverage, overview, per-unit reviewed/total, unreviewed list
 crw comments --session <id>                     # exported comments, GitHub-mappable
 crw wait --session <id> [--until reviewed|commented] [--interval s] [--timeout s]
+crw gc [--repo <path>] [--all]                  # remove a repo's DB/logs (stops the hub first)
+crw shutdown                                    # stop the hub (state stays; serve restarts it)
 ```
 
 Every command prints JSON on stdout (`--pretty` for humans). A typical
@@ -117,7 +127,10 @@ This reviews the **current working tree** (staged and unstaged changes
 included) against `--base`, writes a deterministic plan (one unit per
 affected execution flow; tests/DTOs/residuals attach themselves to those
 units at submit), and opens the UI to that session. `crw plan --units`
-takes an LLM- or hand-authored plan instead — see
+takes an LLM- or hand-authored plan instead — a
+`{ "overview": "...", "units": [...] }` file (bare units array also
+accepted); the response lists any unassigned leftovers by stableId so the
+plan can be fixed and re-submitted. See
 [`packages/skill/skill.md`](packages/skill/skill.md) for the plan schema
 and authoring guidance.
 
@@ -167,6 +180,7 @@ ambient repo root), and `CRG_COMMAND` sets the command used to launch the
   "branch": "HEAD",
   "baseRef": "main",
   "headSha": "…",
+  "overview": "…",
   "comments": [ {
     "id": "…", "nodeId": "…", "stableId": "…", "label": "…",
     "file": "…", "startLine": 1, "endLine": 20,
@@ -176,7 +190,9 @@ ambient repo root), and `CRG_COMMAND` sets the command used to launch the
 }
 ```
 
-`comments` is an ordered array (insertion order); a node with multiple
+`overview` is the plan's session narrative (`""` when the plan carries
+none) — prepend it to a PR review body if exporting there. `comments` is an
+ordered array (insertion order); a node with multiple
 comments has multiple entries. `anchor` is the comment's diff line range
 (`null` for whole-node comments) — with `file` it maps directly onto a
 GitHub PR review comment. `hunkSnippet` is derived by the server when the
