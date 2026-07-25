@@ -290,6 +290,33 @@ describe("PUT /api/sessions/:id/plan", () => {
     const body = await res.json();
     expect(body.units[0].memberStableIds).toEqual(["fn:a", "fn:b"]);
   });
+
+  it("stores a trimmed overview, returns it, and clears it on resubmit without one", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const units = [{ kind: "flow", flowEntryStableId: "fn:handleOrder", label: "Order handling" }];
+
+    const res = await app.request(`/api/sessions/${session.id}/plan`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ overview: "  Adds Redis rate limiting; units 1-2 are the config foundation.  ", units }),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).overview).toBe("Adds Redis rate limiting; units 1-2 are the config foundation.");
+
+    const info = await (await app.request(`/api/sessions/${session.id}`)).json();
+    expect(info.session.overview).toBe("Adds Redis rate limiting; units 1-2 are the config foundation.");
+
+    const res2 = await app.request(`/api/sessions/${session.id}/plan`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ units }),
+    });
+    expect((await res2.json()).overview).toBe("");
+    const info2 = await (await app.request(`/api/sessions/${session.id}`)).json();
+    expect(info2.session.overview).toBe("");
+  });
 });
 
 describe("GET /api/sessions/:id/nodes", () => {
