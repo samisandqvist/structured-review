@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type AnchorSide, type CommentAnchor, type DiffLine, type Node, type NodeDiff } from "../api/client.js";
 import { useUIStore } from "../store/ui.js";
 import { RESIDUAL_KIND } from "../residual-kind.js";
@@ -164,22 +164,65 @@ function DiffLines({ lines, onExpand, edges }: {
 }) {
   const lineSelection = useUIStore((s) => s.lineSelection);
   const setLineSelection = useUIStore((s) => s.setLineSelection);
+  // Live drag state: `from` on mousedown, `moved` once another row is entered.
+  const dragRef = useRef<{ from: number; moved: boolean } | null>(null);
+
+  const anchorable = (idx: number) => !lines[idx].expanded && !!endpointOf(lines[idx]);
+
+  /** Set the range between the anchored start and `idx` (either direction). */
+  const selectFromAnchor = (from: number, idx: number) => {
+    const startIdx = Math.min(from, idx);
+    const endIdx = Math.max(from, idx);
+    const anchor = anchorFor(lines, startIdx, endIdx);
+    if (anchor) setLineSelection({ startIdx, endIdx, anchorIdx: from, anchor, label: selectionLabel(anchor) });
+  };
 
   const handleClick = (idx: number, shiftKey: boolean) => {
-    if (lines[idx].expanded) return; // expanded context is outside this node's diff — not anchorable
-    if (!endpointOf(lines[idx])) return; // context rows are inert
+    if (!anchorable(idx)) return; // context / expanded rows are inert
     if (lineSelection && shiftKey) {
-      const startIdx = Math.min(lineSelection.startIdx, idx);
-      const endIdx = Math.max(lineSelection.endIdx, idx);
-      const anchor = anchorFor(lines, startIdx, endIdx);
-      if (anchor) setLineSelection({ startIdx, endIdx, anchor, label: selectionLabel(anchor) });
+      // Anchor-based extension: the clicked row becomes the OTHER end, so
+      // shift-clicking inside the range shrinks it and above the anchor flips it.
+      selectFromAnchor(lineSelection.anchorIdx ?? lineSelection.startIdx, idx);
       return;
     }
     // No toggle-off on re-click: a silent clear made the "commenting on…"
     // chip vanish while writing a comment. Deselecting is the chip's ✕ only.
-    const anchor = anchorFor(lines, idx, idx);
-    if (anchor) setLineSelection({ startIdx: idx, endIdx: idx, anchor, label: selectionLabel(anchor) });
+    selectFromAnchor(idx, idx);
   };
+
+  const handleMouseDown = (idx: number, e: React.MouseEvent) => {
+    if (e.button !== 0 || e.shiftKey || !anchorable(idx)) return;
+    dragRef.current = { from: idx, moved: false };
+  };
+
+  const handleMouseEnter = (idx: number) => {
+    const drag = dragRef.current;
+    if (!drag || idx === drag.from || !anchorable(idx)) return;
+    drag.moved = true;
+    // Line-drag replaces native text selection; drop the browser's highlight.
+    window.getSelection?.()?.removeAllRanges();
+    selectFromAnchor(drag.from, idx);
+  };
+
+  useEffect(() => {
+    // After a real drag, the browser fires one click — on a row if the mouse
+    // came back to the start row, on an ancestor otherwise. Swallow exactly
+    // that click at window capture so it can't collapse the fresh range; the
+    // timeout drops the squelch if no click follows (drag released off-window).
+    const squelch = (e: MouseEvent) => e.stopPropagation();
+    const onUp = () => {
+      if (dragRef.current?.moved) {
+        window.addEventListener("click", squelch, { capture: true, once: true });
+        setTimeout(() => window.removeEventListener("click", squelch, { capture: true }), 0);
+      }
+      dragRef.current = null;
+    };
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("click", squelch, { capture: true });
+    };
+  }, []);
 
   const isSelected = (idx: number) =>
     !!lineSelection && idx >= lineSelection.startIdx && idx <= lineSelection.endIdx;
@@ -200,6 +243,8 @@ function DiffLines({ lines, onExpand, edges }: {
                 data-expanded={entry.line.expanded ? "true" : undefined}
                 data-selected={isSelected(entry.idx) ? "true" : undefined}
                 onClick={(e) => handleClick(entry.idx, e.shiftKey)}
+                onMouseDown={(e) => handleMouseDown(entry.idx, e)}
+                onMouseEnter={() => handleMouseEnter(entry.idx)}
                 style={{
                   background: isSelected(entry.idx) ? "rgba(96, 165, 250, 0.16)" : ROW_BG[entry.line.type],
                   boxShadow: isSelected(entry.idx) ? "inset 2px 0 0 #60a5fa" : undefined,

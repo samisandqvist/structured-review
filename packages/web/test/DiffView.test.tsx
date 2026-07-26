@@ -198,6 +198,48 @@ describe("line selection interaction", () => {
     expect(useUIStore.getState().lineSelection?.anchor).toEqual({ startLine: 11, startSide: "new", endLine: 12, endSide: "new" });
   });
 
+  // Row map: row1 = context 10, row2 = removed -11, row3 = added +11, row4 = added +12.
+  it("shift-click moves the end from the anchored start: shrink and flip work", () => {
+    render(<DiffView node={NODE} diff={{ oldText: "", newText: "", lines: LINES }} />);
+    const rows = screen.getAllByRole("row");
+    fireEvent.click(rows[2]); // anchor at -11
+    fireEvent.click(rows[4], { shiftKey: true }); // -11…+12
+    expect(useUIStore.getState().lineSelection?.anchor).toEqual({ startLine: 11, startSide: "old", endLine: 12, endSide: "new" });
+    fireEvent.click(rows[3], { shiftKey: true }); // shrink to -11…+11
+    expect(useUIStore.getState().lineSelection?.anchor).toEqual({ startLine: 11, startSide: "old", endLine: 11, endSide: "new" });
+    fireEvent.click(rows[3]); // re-anchor at +11
+    fireEvent.click(rows[2], { shiftKey: true }); // flip upward: -11…+11
+    expect(useUIStore.getState().lineSelection?.anchor).toEqual({ startLine: 11, startSide: "old", endLine: 11, endSide: "new" });
+    fireEvent.click(rows[4], { shiftKey: true }); // same anchor +11, now down: +11…+12
+    expect(useUIStore.getState().lineSelection?.anchor).toEqual({ startLine: 11, startSide: "new", endLine: 12, endSide: "new" });
+  });
+
+  it("mousedown-drag-mouseup selects the dragged range; the trailing click cannot collapse it", () => {
+    render(<DiffView node={NODE} diff={{ oldText: "", newText: "", lines: LINES }} />);
+    const rows = screen.getAllByRole("row");
+    fireEvent.mouseDown(rows[2]);
+    fireEvent.mouseEnter(rows[3]);
+    fireEvent.mouseEnter(rows[4]);
+    fireEvent.mouseUp(window);
+    expect(useUIStore.getState().lineSelection?.anchor).toEqual({ startLine: 11, startSide: "old", endLine: 12, endSide: "new" });
+    // Browsers fire a click after mouseup; it must not collapse the fresh drag range.
+    fireEvent.click(rows[4]);
+    expect(useUIStore.getState().lineSelection?.anchor).toEqual({ startLine: 11, startSide: "old", endLine: 12, endSide: "new" });
+    // A later plain click behaves normally again.
+    fireEvent.click(rows[3]);
+    expect(useUIStore.getState().lineSelection?.anchor).toEqual({ startLine: 11, startSide: "new", endLine: 11, endSide: "new" });
+  });
+
+  it("dragging over context rows keeps the last anchorable endpoint", () => {
+    render(<DiffView node={NODE} diff={{ oldText: "", newText: "", lines: LINES }} />);
+    const rows = screen.getAllByRole("row");
+    fireEvent.mouseDown(rows[3]); // +11
+    fireEvent.mouseEnter(rows[2]); // upward to -11
+    fireEvent.mouseEnter(rows[1]); // context row: ignored as endpoint
+    fireEvent.mouseUp(window);
+    expect(useUIStore.getState().lineSelection?.anchor).toEqual({ startLine: 11, startSide: "old", endLine: 11, endSide: "new" });
+  });
+
   it("re-clicking the selected line keeps the selection (only ✕ clears)", () => {
     // A silent toggle-off made "commenting on…" vanish mid-comment; clicks
     // now only ever set or extend the selection.
