@@ -7,6 +7,12 @@ import {
 import { useUIStore } from "../store/ui.js";
 import { selectionLabel } from "./DiffView.js";
 
+// Both Meta+Enter and Ctrl+Enter submit; the hint names the key the viewer's
+// platform actually has (⌘ means nothing on a Linux/Windows keyboard).
+const SEND_KEY = /Mac|iP(hone|ad|od)/.test(
+  typeof navigator === "undefined" ? "" : navigator.platform || navigator.userAgent
+) ? "⌘↵" : "Ctrl+↵";
+
 export function CommentBox({
   sessionId,
   nodeId,
@@ -130,7 +136,7 @@ export function CommentBox({
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSubmit();
           }}
-          placeholder="Leave a review comment…  (⌘↵ to send)"
+          placeholder={`Leave a review comment…  (${SEND_KEY} to send)`}
           style={{ flex: 1, minHeight: 58, fontSize: 17, padding: "11px 13px" }}
         />
         <button

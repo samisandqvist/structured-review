@@ -76,6 +76,12 @@ describe("anchored comments", () => {
     expect(useUIStore.getState().lineSelection).toBeNull(); // cleared on success
   });
 
+  it("names the platform's send key in the placeholder (Ctrl on non-mac)", () => {
+    // jsdom reports a non-mac platform; a ⌘ hint means nothing on Linux/Windows.
+    renderWithProviders(<CommentBox sessionId="s1" nodeId="n1" />);
+    expect(screen.getByPlaceholderText(/Ctrl\+↵ to send/)).toBeInTheDocument();
+  });
+
   it("clears the selection via the chip's ✕ without commenting", () => {
     useUIStore.setState({ lineSelection: { startIdx: 2, endIdx: 3, anchor, label: "lines +11…+12" } });
     renderWithProviders(<CommentBox sessionId="s1" nodeId="n1" />);
