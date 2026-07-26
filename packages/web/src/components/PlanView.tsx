@@ -473,6 +473,7 @@ function AttachedChip({
       title={title}
     >
       {node.label}
+      {node.reviewStatus === "reviewed-commented" && <CommentMark />}
       {residual && <span className="step__kind">{residual.badge}</span>}
       <span className="step__reason">{member.counted ? member.reason : `${member.reason} →`}</span>
     </button>
@@ -504,8 +505,19 @@ function StepChip({
       title={residual ? `${step.file}:${step.startLine} — ${residual.title}` : `${step.file}:${step.startLine}`}
     >
       {step.label}
+      {step.reviewStatus === "reviewed-commented" && <CommentMark />}
       {residual && <span className="step__kind">{residual.badge}</span>}
     </button>
+  );
+}
+
+/** Marks a plan chip whose node carries comments, so a reviewer can spot and
+ *  return to their commented chunks from the unit view. */
+function CommentMark() {
+  return (
+    <span className="step__comment" data-testid="comment-mark" title="has comments">
+      ✱
+    </span>
   );
 }
 
