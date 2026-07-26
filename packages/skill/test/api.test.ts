@@ -152,10 +152,24 @@ describe("compactContext", () => {
     expect("steps" in compact.flows[0]).toBe(false);
   });
 
-  it("reduces orphans to stableId/label/file/residualKind", () => {
+  it("reduces orphans to stableId/label/file/residualKind, grouped by directory", () => {
     const compact = compactContext(flows as never, orphans as never);
-    expect(compact.orphans).toEqual([
-      { stableId: "file-residual:docs/x.md", label: "x.md", file: "docs/x.md", residualKind: "whole-file" },
+    expect(compact.orphanGroups).toEqual([
+      {
+        dir: "docs",
+        orphans: [{ stableId: "file-residual:docs/x.md", label: "x.md", file: "docs/x.md", residualKind: "whole-file" }],
+      },
     ]);
+  });
+
+  it("groups orphans by directory, '.' for the repo root, sorted", () => {
+    const many = [
+      { stableId: "d2", label: "y.md", file: "docs/y.md" },
+      { stableId: "r1", label: "pkg", file: "package.json" },
+      { stableId: "d1", label: "x.md", file: "docs/x.md" },
+    ];
+    const { orphanGroups } = compactContext([] as never, many as never);
+    expect(orphanGroups.map((g) => g.dir)).toEqual([".", "docs"]);
+    expect(orphanGroups[1].orphans.map((o) => o.stableId)).toEqual(["d1", "d2"]);
   });
 });

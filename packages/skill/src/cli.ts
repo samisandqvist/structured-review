@@ -190,7 +190,7 @@ async function cmdContext(base: string, flags: Record<string, string | boolean>)
   const compact = compactContext(flows, orphans);
   // Precomputed merge guideline (shared changed ids >= half the smaller flow's
   // set) so the planner spends judgment on labels/order, not set arithmetic.
-  return { json: { sessionId, ...subjects, flows: compact.flows, mergeSuggestions: suggestMerges(compact.flows), orphans: compact.orphans, changes } };
+  return { json: { sessionId, ...subjects, flows: compact.flows, mergeSuggestions: suggestMerges(compact.flows), orphanGroups: compact.orphanGroups, changes } };
 }
 
 async function cmdPlan(base: string, flags: Record<string, string | boolean>): Promise<CommandResult> {
