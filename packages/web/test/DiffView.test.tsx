@@ -198,12 +198,14 @@ describe("line selection interaction", () => {
     expect(useUIStore.getState().lineSelection?.anchor).toEqual({ startLine: 11, startSide: "new", endLine: 12, endSide: "new" });
   });
 
-  it("clicking the single selected line clears the selection", () => {
+  it("re-clicking the selected line keeps the selection (only ✕ clears)", () => {
+    // A silent toggle-off made "commenting on…" vanish mid-comment; clicks
+    // now only ever set or extend the selection.
     render(<DiffView node={NODE} diff={{ oldText: "", newText: "", lines: LINES }} />);
     const rows = screen.getAllByRole("row");
     fireEvent.click(rows[3]);
     fireEvent.click(rows[3]);
-    expect(useUIStore.getState().lineSelection).toBeNull();
+    expect(useUIStore.getState().lineSelection?.anchor).toEqual({ startLine: 11, startSide: "new", endLine: 11, endSide: "new" });
   });
 
   it("selected rows carry a data-selected attribute", () => {

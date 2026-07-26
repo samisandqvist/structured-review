@@ -175,10 +175,8 @@ function DiffLines({ lines, onExpand, edges }: {
       if (anchor) setLineSelection({ startIdx, endIdx, anchor, label: selectionLabel(anchor) });
       return;
     }
-    if (lineSelection && lineSelection.startIdx === idx && lineSelection.endIdx === idx) {
-      setLineSelection(null); // toggle off
-      return;
-    }
+    // No toggle-off on re-click: a silent clear made the "commenting on…"
+    // chip vanish while writing a comment. Deselecting is the chip's ✕ only.
     const anchor = anchorFor(lines, idx, idx);
     if (anchor) setLineSelection({ startIdx: idx, endIdx: idx, anchor, label: selectionLabel(anchor) });
   };
