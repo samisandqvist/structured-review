@@ -127,6 +127,18 @@ function subtreeFingerprint(subdir, root = repoRoot(), pathspecs) {
     return null;
   }
 }
+function commitSubjects(baseRef, root = repoRoot(), limit = 50) {
+  const log = (range) => execFileSync("git", ["log", "--format=%s", `--max-count=${limit}`, range], { cwd: root, encoding: "utf8", ...QUIET }).split("\n").filter(Boolean);
+  try {
+    return log(`${baseRef}..HEAD`);
+  } catch {
+    try {
+      return log("HEAD");
+    } catch {
+      return [];
+    }
+  }
+}
 function currentBranch(root = repoRoot()) {
   try {
     return execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: root, encoding: "utf8", ...QUIET }).trim();
@@ -135,11 +147,13 @@ function currentBranch(root = repoRoot()) {
   }
 }
 function resolveRef(ref, root = repoRoot()) {
-  try {
-    return execFileSync("git", ["rev-parse", "--verify", `${ref}^{commit}`], { cwd: root, encoding: "utf8", ...QUIET }).trim();
-  } catch {
-    return null;
+  for (const peel of ["commit", "tree"]) {
+    try {
+      return execFileSync("git", ["rev-parse", "--verify", `${ref}^{${peel}}`], { cwd: root, encoding: "utf8", ...QUIET }).trim();
+    } catch {
+    }
   }
+  return null;
 }
 function changedFilesStrict(baseRef, root = repoRoot()) {
   try {
@@ -33048,7 +33062,9 @@ var orphanUnitSchema = external_exports.object({
   kind: external_exports.literal("orphans"),
   label: external_exports.string().trim(),
   rationale: external_exports.string().optional(),
-  orphanStableIds: external_exports.array(external_exports.string().min(1))
+  orphanStableIds: external_exports.array(external_exports.string().min(1)).optional(),
+  // File globs (`**`, `*`, `?`), resolved to orphan stableIds at plan submit.
+  orphanFiles: external_exports.array(external_exports.string().min(1)).optional()
 });
 var planSchema = external_exports.object({
   overview: external_exports.string().optional(),
@@ -33059,12 +33075,13 @@ var planSchema = external_exports.object({
     if (!u.label.trim()) {
       ctx.addIssue({ code: "custom", path: ["units", i, "label"], message: "unit label must be nonempty" });
     }
-    const ids = u.kind === "flow" ? /* @__PURE__ */ new Set([...u.flowEntryStableIds ?? [], ...u.flowEntryStableId ? [u.flowEntryStableId] : []]) : new Set(u.orphanStableIds);
-    if (ids.size === 0) {
+    const ids = u.kind === "flow" ? /* @__PURE__ */ new Set([...u.flowEntryStableIds ?? [], ...u.flowEntryStableId ? [u.flowEntryStableId] : []]) : new Set(u.orphanStableIds ?? []);
+    const globCount = u.kind === "orphans" ? u.orphanFiles?.length ?? 0 : 0;
+    if (ids.size === 0 && globCount === 0) {
       ctx.addIssue({
         code: "custom",
         path: ["units", i],
-        message: u.kind === "flow" ? "flow unit needs at least one entry stableId" : "orphan unit needs at least one member"
+        message: u.kind === "flow" ? "flow unit needs at least one entry stableId" : "orphan unit needs at least one member or file glob"
       });
     }
     for (const id of ids) {
@@ -33119,6 +33136,43 @@ async function parseBody2(c, schema) {
     };
   }
   return { ok: true, data: result.data };
+}
+
+// packages/server/src/globs.ts
+function globToRegExp(glob) {
+  let re = "";
+  for (let i = 0; i < glob.length; i++) {
+    const ch = glob[i];
+    if (ch === "*") {
+      if (glob[i + 1] === "*") {
+        re += ".*";
+        i++;
+      } else {
+        re += "[^/]*";
+      }
+    } else if (ch === "?") {
+      re += "[^/]";
+    } else {
+      re += ch.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+    }
+  }
+  return new RegExp(`^${re}$`);
+}
+function resolveOrphanFiles(units, orphanNodes) {
+  const claimed = new Set(
+    units.flatMap((u) => u.kind === "orphans" ? u.orphanStableIds ?? [] : [])
+  );
+  const emptyUnits = [];
+  const resolved = units.map((u) => {
+    if (u.kind !== "orphans" || !u.orphanFiles?.length) return u;
+    const regexps = u.orphanFiles.map(globToRegExp);
+    const matched = orphanNodes.filter((o) => !claimed.has(o.stableId) && regexps.some((r) => r.test(o.file))).map((o) => o.stableId);
+    for (const id of matched) claimed.add(id);
+    const orphanStableIds = [...u.orphanStableIds ?? [], ...matched];
+    if (orphanStableIds.length === 0) emptyUnits.push(u.label);
+    return { ...u, orphanStableIds };
+  });
+  return { units: resolved, emptyUnits };
 }
 
 // packages/server/src/routes/sessions.ts
@@ -33278,20 +33332,28 @@ function createSessionsRoute(ctx) {
     const sessionNodes = getNodesBySession(ctx.db, sessionId);
     const changedStableIds = sessionNodes.filter((n) => n.changeStatus === "changed").map((n) => n.stableId);
     const flows = await ctx.graphProvider.getFlows(new Set(changedStableIds));
-    const { unassigned } = computeCoverage(body.units, flows, changedStableIds);
+    const inAnyFlow = new Set(flows.flatMap((f) => f.steps.map((s) => s.stableId)));
+    const orphanNodes = sessionNodes.filter(
+      (n) => n.changeStatus === "changed" && !inAnyFlow.has(n.stableId)
+    );
+    const { units, emptyUnits } = resolveOrphanFiles(body.units, orphanNodes);
+    if (emptyUnits.length > 0) {
+      return c.json({ error: `orphanFiles matched no unassigned changes for unit(s): ${emptyUnits.join(", ")}` }, 400);
+    }
+    const { unassigned } = computeCoverage(units, flows, changedStableIds);
     const testEdges = ctx.db.prepare(
       `SELECT sn.stable_id AS prod, tn.stable_id AS test
        FROM edges e JOIN nodes sn ON e.source_node_id = sn.id JOIN nodes tn ON e.target_node_id = tn.id
        WHERE e.session_id = ? AND e.edge_type = 'test'`
     ).all(sessionId).map((r) => ({ productionStableId: r.prod, testStableId: r.test }));
     const fileRequires = await ctx.graphProvider.getFileRequires?.() ?? /* @__PURE__ */ new Map();
-    const attachedPerUnit = deriveAttachments(body.units, flows, sessionNodes, testEdges, fileRequires);
+    const attachedPerUnit = deriveAttachments(units, flows, sessionNodes, testEdges, fileRequires);
     const attachedIds = countedAttachmentIds(attachedPerUnit);
     const leftovers = unassigned.filter((id) => !attachedIds.has(id));
     ctx.db.transaction(() => {
       for (const u of getUnitsBySession(ctx.db, sessionId)) deleteUnit(ctx.db, u.id);
       let pos = 0;
-      body.units.forEach((u, i) => {
+      units.forEach((u, i) => {
         const members = u.kind === "flow" ? flowEntries(u) : u.orphanStableIds ?? [];
         createUnit(ctx.db, sessionId, pos++, u.label, u.rationale ?? "", u.kind, members, false, attachedPerUnit[i]);
       });
@@ -33781,7 +33843,7 @@ function createChangesRoute(ctx) {
         signature: nodeSignature(n.file, n.startLine, ctx.repoRoot)
       };
     });
-    return c.json({ changes });
+    return c.json({ changes, commitSubjects: commitSubjects(session.baseRef, ctx.repoRoot) });
   });
   return router;
 }

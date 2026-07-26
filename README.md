@@ -101,10 +101,10 @@ node packages/skill/dist/cli.js <command>       # (the plugin runs the same CLI 
 
 ```text
 crw serve [--repo <path>] [--port N]            # start or reuse the hub for a repo
-crw session create --branch <b> --base <ref> [--open]
+crw session create --branch <b> --base <ref|empty> [--open]   # "empty" = whole-repo review
 crw session list
 crw session delete --session <id>
-crw context --session <id> [--full]             # planning view: affected flows + orphans + change summaries (--full: everything)
+crw context --session <id> [--full]             # planning view: commit subjects, flows + merge suggestions, orphan groups, change summaries (--full: raw dump)
 crw plan --session <id> (--auto | --units <file.json>) [--open]
 crw diff --session <id> --node <stableId>       # a single node's diff
 crw status --session <id>                       # coverage, overview, per-unit reviewed/total, unreviewed list

@@ -35,8 +35,8 @@ touch the SQLite file or hand-roll `curl` — the CLI is the stable surface.
 
 ```text
 crw serve [--repo <path>] [--port N]            # ensure the hub runs against a repo
-crw session create --branch <b> --base <ref> [--open]
-crw context --session <id> [--full]             # planning view: affected flows + orphans + change summaries (--full: everything)
+crw session create --branch <b> --base <ref|empty> [--open]   # base "empty" = whole-repo review
+crw context --session <id> [--full]             # planning view: commit subjects, flows + merge suggestions, orphan groups, change summaries (--full: raw dump)
 crw plan --session <id> (--auto | --units <file.json>) [--open]
 crw diff --session <id> --node <stableId>       # one node's diff, for grouping decisions
 crw status --session <id>                       # coverage, per-unit reviewed/total, unreviewed list
@@ -58,7 +58,8 @@ an error.
 Setup flow:
 
 1. `crw serve` — starts (or reuses) the hub for the current repo; prints `baseUrl`.
-2. `crw session create --branch <b> --base <ref>` — prints `sessionId`, `uiUrl`,
+2. `crw session create --branch <b> --base <ref>` (`--base empty` reviews the
+   entire repo) — prints `sessionId`, `uiUrl`,
    node/flow counts, and `indexWarnings`. **Always relay `indexWarnings` to the
    user** — they mean a language was indexed in degraded mode.
 3. Build the plan (next section), then share `uiUrl` with the reviewer (or pass
@@ -88,31 +89,43 @@ each either a **flow** or an **orphan group**. The plan file is
 
 - **flow-unit** — `{ "kind": "flow", "flowEntryStableIds": ["<entry>", ...], "label": "...", "rationale": "..." }`
   (the singular `flowEntryStableId` is still accepted)
-- **orphan-unit** — `{ "kind": "orphans", "orphanStableIds": ["..."], "label": "...", "rationale": "..." }`
+- **orphan-unit** — `{ "kind": "orphans", "orphanStableIds": ["..."], "orphanFiles": ["docs/**"], "label": "...", "rationale": "..." }`
+  — `orphanFiles` globs (`**`, `*`, `?`) resolve to unassigned changes at
+  submit; prefer them over long stableId lists. Either field alone is fine;
+  overlapping matches go to the earliest unit; a glob-only unit that matches
+  nothing fails the submit loudly.
 
 Steps for an LLM-authored plan:
 
 1. Gather the change's stated intent when available: `gh pr view --json
-   title,body` and `git log <base>..<branch> --format=%s` (commit subjects
-   only). This is intent input, not diff reading — the "never run `git diff`"
-   rule below stands. No PR or uninformative messages → proceed without;
-   never block on missing intent.
+   title,body`. Commit subjects already arrive in `crw context` as
+   `commitSubjects` — no separate `git log` step. This is intent input, not
+   diff reading — the "never run `git diff`" rule below stands. No PR or
+   uninformative messages → proceed without; never block on missing intent.
 2. After `crw session create`, run `crw context --session <id>`. It prints
-   `{ sessionId, flows, orphans, changes }`: `flows` are the **affected** flows
-   only (`name`, `entryStableId`, `changedStableIds` — no step arrays), `orphans`
-   carry just `stableId`/`label`/`file`/`residualKind`, and `changes` is a
-   compact per-node summary (kind, file, lines, +/- counts, signature) — **not**
-   diff bodies. That is everything a plan references; `--full` restores the
-   complete dump (all flows with steps) if you truly need it.
+   `{ sessionId, commitSubjects, flows, mergeSuggestions, orphanGroups, changes }`:
+   `flows` are the **affected** flows only (`name`, `entryStableId`,
+   `changedStableIds` — no step arrays); `mergeSuggestions` precomputes the
+   flow-merge guideline (next step); `orphanGroups` are the orphans grouped by
+   directory, each carrying just `stableId`/`label`/`file`/`residualKind`; and
+   `changes` is a compact per-node summary (kind, file, lines, +/- counts,
+   signature) — **not** diff bodies. That is everything a plan references;
+   `--full` restores the complete flat dump (all flows with steps) if you
+   truly need it.
 3. Make one flow-unit per **affected** flow, using `flowEntryStableIds: [entryStableId]`.
    Do not split flows. **Merge** flows into one multi-entry flow-unit
    (`flowEntryStableIds: [e1, e2, ...]`) when they substantially review the same
-   change — guideline: shared `changedStableIds` ≥ half of the smaller flow's
-   changed set. Label a merged unit by the shared capability, not the entry names
-   (e.g. "Order validation — via API, CLI and worker"). Never merge flows with
-   disjoint changed sets just to shorten the plan.
+   change. The guideline (shared `changedStableIds` ≥ half of the smaller
+   flow's changed set) is precomputed: each entry in `mergeSuggestions` is a
+   group with ready-to-paste `entryStableIds`, `names`, and per-pair evidence
+   (`shared`/`smaller`). Treat a suggestion as the default merge and spend
+   your judgment on the label — name the shared capability, not the entry
+   names (e.g. "Order validation — via API, CLI and worker"). Never merge
+   flows with disjoint changed sets just to shorten the plan.
 4. Group the remaining orphans into orphan-units by shared purpose (e.g.
-   "validation helpers"). **Do not hand-author units for changed tests, DTOs,
+   "validation helpers") — `orphanGroups`' directory clustering is usually
+   most of the answer, and `orphanFiles` globs express it directly
+   (`"orphanFiles": ["docs/**"]`). **Do not hand-author units for changed tests, DTOs,
    or module-scope leftovers of files already in flows** — at plan submit the
    server nests those under the covered node that gives them context
    (tested-by / required-by / same-file), and they count toward that unit's
@@ -138,7 +151,7 @@ Steps for an LLM-authored plan:
    per-unit `attached` counts. `coverage.unassigned > 0` now means true
    leftovers (nothing could attach them) — the response lists each under
    `unassigned` (`stableId`, `label`, `file`): add orphan-units for exactly
-   those stableIds and re-submit.
+   those stableIds (or an `orphanFiles` glob that covers them) and re-submit.
 
 **Never run `git diff` for planning.** If you must read a node's code to decide
 grouping, use `crw diff --session <id> --node <stableId>` — it returns just that
