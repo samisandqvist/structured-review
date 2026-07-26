@@ -1,28 +1,31 @@
 import { describe, it, expect } from "vitest";
-import { globToRegExp, resolveOrphanFiles } from "../src/globs.js";
+import { matchGlob, resolveOrphanFiles } from "../src/globs.js";
 
-describe("globToRegExp", () => {
+// Conformance suite for the documented glob semantics. Matching is delegated
+// to node:path matchesGlob (experimental) — if an upstream Node change shifts
+// behavior, these cases catch it.
+describe("matchGlob", () => {
   it("** crosses directories", () => {
-    expect(globToRegExp("docs/**").test("docs/a/b.md")).toBe(true);
-    expect(globToRegExp("docs/**").test("docs/a.md")).toBe(true);
-    expect(globToRegExp("docs/**").test("src/a.md")).toBe(false);
+    expect(matchGlob("docs/a/b.md", "docs/**")).toBe(true);
+    expect(matchGlob("docs/a.md", "docs/**")).toBe(true);
+    expect(matchGlob("src/a.md", "docs/**")).toBe(false);
   });
   it("* stays within a segment", () => {
-    expect(globToRegExp("*.md").test("README.md")).toBe(true);
-    expect(globToRegExp("*.md").test("docs/x.md")).toBe(false);
-    expect(globToRegExp("packages/*/package.json").test("packages/web/package.json")).toBe(true);
-    expect(globToRegExp("packages/*/package.json").test("packages/web/src/package.json")).toBe(false);
+    expect(matchGlob("README.md", "*.md")).toBe(true);
+    expect(matchGlob("docs/x.md", "*.md")).toBe(false);
+    expect(matchGlob("packages/web/package.json", "packages/*/package.json")).toBe(true);
+    expect(matchGlob("packages/web/src/package.json", "packages/*/package.json")).toBe(false);
   });
   it("? matches one non-slash char; regex specials stay literal", () => {
-    expect(globToRegExp("a?.ts").test("ab.ts")).toBe(true);
-    expect(globToRegExp("a?.ts").test("a/.ts")).toBe(false);
-    expect(globToRegExp("a.b").test("axb")).toBe(false);
-    expect(globToRegExp("a+b.txt").test("a+b.txt")).toBe(true);
-    expect(globToRegExp("a+b.txt").test("aab.txt")).toBe(false);
+    expect(matchGlob("ab.ts", "a?.ts")).toBe(true);
+    expect(matchGlob("a/.ts", "a?.ts")).toBe(false);
+    expect(matchGlob("axb", "a.b")).toBe(false);
+    expect(matchGlob("a+b.txt", "a+b.txt")).toBe(true);
+    expect(matchGlob("aab.txt", "a+b.txt")).toBe(false);
   });
   it("matches whole paths only", () => {
-    expect(globToRegExp("b.md").test("docs/b.md")).toBe(false);
-    expect(globToRegExp("docs").test("docs/b.md")).toBe(false);
+    expect(matchGlob("docs/b.md", "b.md")).toBe(false);
+    expect(matchGlob("docs/b.md", "docs")).toBe(false);
   });
 });
 
