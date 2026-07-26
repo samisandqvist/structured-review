@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("node:child_process", () => ({ spawn: vi.fn(() => ({ unref: vi.fn() })), execFileSync: vi.fn() }));
 
-import { compactContext, createSession, writePlan, exportComments, defaultPartition, uiUrl, parsePlanFile } from "../src/api.js";
+import { compactContext, createSession, writePlan, exportComments, defaultPartition, uiUrl, parsePlanFile, resolveBaseAlias, EMPTY_TREE_SHA } from "../src/api.js";
 
 const BASE = "http://localhost:3456";
 const mockFetch = vi.fn();
@@ -39,6 +39,17 @@ describe("api client", () => {
 
   it("builds the UI url from the hub base", () => {
     expect(uiUrl(BASE, "s1")).toBe("http://localhost:3456/?session=s1");
+  });
+});
+
+describe("resolveBaseAlias", () => {
+  it("maps 'empty' to the empty tree sha", () => {
+    expect(resolveBaseAlias("empty")).toBe(EMPTY_TREE_SHA);
+    expect(EMPTY_TREE_SHA).toBe("4b825dc642cb6eb9a060e54bf8d69288fbee4904");
+  });
+  it("passes ordinary refs through", () => {
+    expect(resolveBaseAlias("main")).toBe("main");
+    expect(resolveBaseAlias("HEAD~3")).toBe("HEAD~3");
   });
 });
 
