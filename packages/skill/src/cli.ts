@@ -5,7 +5,8 @@
 import { readFileSync } from "node:fs";
 import {
   DEFAULT_BASE_URL, compactContext, createSession, defaultPartition, deleteSession, exportComments, getChanges,
-  getFlows, getNodeDiff, getNodes, getSessionInfo, launchUI, listSessions, parsePlanFile, shutdownHub, uiUrl, writePlan,
+  getFlows, getNodeDiff, getNodes, getSessionInfo, launchUI, listSessions, parsePlanFile, resolveBaseAlias,
+  shutdownHub, uiUrl, writePlan,
   type UnitInput,
 } from "./api.js";
 import { computeStatus, waitConditionMet, type SessionStatus } from "./status.js";
@@ -14,7 +15,7 @@ import { gcRepo, gcSweep } from "./gc.js";
 
 const USAGE = `usage:
   crw serve [--repo <path>] [--port N]
-  crw session create --branch <b> --base <ref> [--open]
+  crw session create --branch <b> --base <ref|empty> [--open]
   crw session list
   crw session delete --session <id>
   crw context --session <id> [--full]
@@ -94,7 +95,7 @@ async function cmdServe(flags: Record<string, string | boolean>): Promise<Comman
 
 async function cmdSessionCreate(base: string, flags: Record<string, string | boolean>): Promise<CommandResult> {
   const branch = typeof flags.branch === "string" ? flags.branch : "HEAD";
-  const baseRef = required(flags, "base");
+  const baseRef = resolveBaseAlias(required(flags, "base"));
   const { session } = await createSession(base, branch, baseRef);
   const [{ nodes }, { flows }] = await Promise.all([getNodes(base, session.id), getFlows(base, session.id)]);
   if (flags.open) launchUI(base, session.id);

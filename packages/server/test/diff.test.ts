@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { extractHunkDiff, extractLinesForRanges, expandedContextSlice, getNodeDiff, nodeChangeStats, subtractRanges, resolveRef, changedFilesStrict, currentBranch, repoFingerprint, subtreeFingerprint, formatHunkSnippet, anchorRowRange, GitError } from "../src/diff.js";
+import { extractHunkDiff, extractLinesForRanges, expandedContextSlice, getNodeDiff, nodeChangeStats, subtractRanges, resolveRef, changedFilesStrict, currentBranch, repoFingerprint, subtreeFingerprint, formatHunkSnippet, anchorRowRange, GitError, EMPTY_TREE_SHA } from "../src/diff.js";
 import type { DiffLine } from "../src/diff.js";
 import type { CommentAnchor } from "../src/types.js";
 import { languagePathspecs } from "../src/graph/roots.js";
@@ -31,6 +31,13 @@ describe("resolveRef", () => {
   it("resolves HEAD and returns null for unknown refs", () => {
     expect(resolveRef("HEAD", fixtureRepo)).toMatch(/^[0-9a-f]{40}$/);
     expect(resolveRef("no-such-ref", fixtureRepo)).toBeNull();
+  });
+  it("resolves the empty tree (tree-ish base for whole-repo reviews)", () => {
+    expect(resolveRef(EMPTY_TREE_SHA, fixtureRepo)).toBe(EMPTY_TREE_SHA);
+  });
+  it("still rejects blob refs", () => {
+    // a.txt exists at HEAD; HEAD:a.txt is a blob, not commit-ish or tree-ish
+    expect(resolveRef("HEAD:a.txt", fixtureRepo)).toBeNull();
   });
 });
 

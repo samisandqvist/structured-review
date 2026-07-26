@@ -58,6 +58,14 @@ describe("POST /api/sessions", () => {
     expect(resMain.status).toBe(200);
   });
 
+  it("accepts the empty tree as baseRef (whole-repo review)", async () => {
+    const res = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "4b825dc642cb6eb9a060e54bf8d69288fbee4904" }),
+    });
+    expect(res.status).toBe(200);
+  });
+
   it("rejects a branch that is not checked out", async () => {
     const res = await app.request("/api/sessions", {
       method: "POST", headers: { "Content-Type": "application/json" },

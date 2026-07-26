@@ -5,6 +5,15 @@ import { spawn } from "node:child_process";
 
 export const DEFAULT_BASE_URL = process.env.CRW_SERVER_URL || "http://localhost:3456";
 
+/** git's well-known empty tree; `crw session create --base empty` maps here,
+ *  making the session a whole-repo review (diff from nothing). */
+export const EMPTY_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+
+/** Base-ref conveniences: "empty" = the empty tree (whole-repo review). */
+export function resolveBaseAlias(ref: string): string {
+  return ref === "empty" ? EMPTY_TREE_SHA : ref;
+}
+
 export interface Session {
   id: string; branch: string; baseRef: string; status: string; createdAt: number;
   headSha?: string; indexWarnings?: string[]; overview?: string;

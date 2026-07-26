@@ -170,13 +170,23 @@ export function changedFiles(baseRef: string, root: string = repoRoot()): string
   }
 }
 
-/** Resolves `ref` to a full commit sha, or null if it doesn't exist in `root`. */
+/** git's well-known empty tree — a valid diff base meaning "nothing", so a
+ *  session with this base reviews the entire codebase. */
+export const EMPTY_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+
+/** Resolves `ref` to a full commit or tree sha, or null if it is neither.
+ *  Tree-ish is accepted because every downstream use is `git diff <base>`,
+ *  which takes tree-ish — enabling empty-tree (whole-repo) bases. The commit
+ *  peel runs first so commit refs keep resolving to commit shas. */
 export function resolveRef(ref: string, root: string = repoRoot()): string | null {
-  try {
-    return execFileSync("git", ["rev-parse", "--verify", `${ref}^{commit}`], { cwd: root, encoding: "utf8", ...QUIET }).trim();
-  } catch {
-    return null;
+  for (const peel of ["commit", "tree"] as const) {
+    try {
+      return execFileSync("git", ["rev-parse", "--verify", `${ref}^{${peel}}`], { cwd: root, encoding: "utf8", ...QUIET }).trim();
+    } catch {
+      /* try next peel */
+    }
   }
+  return null;
 }
 
 /**
