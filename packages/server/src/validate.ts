@@ -18,7 +18,9 @@ const orphanUnitSchema = z.object({
   kind: z.literal("orphans"),
   label: z.string().trim(),
   rationale: z.string().optional(),
-  orphanStableIds: z.array(z.string().min(1)),
+  orphanStableIds: z.array(z.string().min(1)).optional(),
+  // File globs (`**`, `*`, `?`), resolved to orphan stableIds at plan submit.
+  orphanFiles: z.array(z.string().min(1)).optional(),
 });
 
 export const planSchema = z
@@ -36,11 +38,15 @@ export const planSchema = z
       // plural one inside a single unit, which flowEntries() already collapses.
       const ids = u.kind === "flow"
         ? new Set([...(u.flowEntryStableIds ?? []), ...(u.flowEntryStableId ? [u.flowEntryStableId] : [])])
-        : new Set(u.orphanStableIds);
-      if (ids.size === 0) {
+        : new Set(u.orphanStableIds ?? []);
+      // An orphan unit may be glob-only: globs resolve to members at submit.
+      const globCount = u.kind === "orphans" ? u.orphanFiles?.length ?? 0 : 0;
+      if (ids.size === 0 && globCount === 0) {
         ctx.addIssue({
           code: "custom", path: ["units", i],
-          message: u.kind === "flow" ? "flow unit needs at least one entry stableId" : "orphan unit needs at least one member",
+          message: u.kind === "flow"
+            ? "flow unit needs at least one entry stableId"
+            : "orphan unit needs at least one member or file glob",
         });
       }
       for (const id of ids) {

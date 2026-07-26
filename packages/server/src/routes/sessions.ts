@@ -12,6 +12,7 @@ import { computeCoverage, flowEntries } from "../coverage.js";
 import { deriveAttachments, countedAttachmentIds } from "../attach.js";
 import { randomId } from "../util.js";
 import { parseBody, sessionCreateSchema, planSchema, unitPatchSchema } from "../validate.js";
+import { resolveOrphanFiles } from "../globs.js";
 
 /**
  * Turn a provider subgraph into the nodes we actually store:
@@ -198,7 +199,20 @@ export function createSessionsRoute(ctx: AppContext) {
       .filter((n) => n.changeStatus === "changed")
       .map((n) => n.stableId);
     const flows = await ctx.graphProvider.getFlows(new Set(changedStableIds));
-    const { unassigned } = computeCoverage(body.units, flows, changedStableIds);
+
+    // Expand orphanFiles globs against the orphan set (changed nodes in no
+    // flow — same universe the planner saw in context) before any coverage
+    // math, so globs and explicit ids are indistinguishable downstream.
+    const inAnyFlow = new Set(flows.flatMap((f) => f.steps.map((s) => s.stableId)));
+    const orphanNodes = sessionNodes.filter(
+      (n) => n.changeStatus === "changed" && !inAnyFlow.has(n.stableId)
+    );
+    const { units, emptyUnits } = resolveOrphanFiles(body.units, orphanNodes);
+    if (emptyUnits.length > 0) {
+      return c.json({ error: `orphanFiles matched no unassigned changes for unit(s): ${emptyUnits.join(", ")}` }, 400);
+    }
+
+    const { unassigned } = computeCoverage(units, flows, changedStableIds);
 
     // Attachment derivation (spec 2026-07-17): nest unassigned tests, DTOs and
     // module-scope residuals under the covered node that gives them context.
@@ -210,14 +224,14 @@ export function createSessionsRoute(ctx: AppContext) {
     ).all(sessionId) as { prod: string; test: string }[])
       .map((r) => ({ productionStableId: r.prod, testStableId: r.test }));
     const fileRequires = (await ctx.graphProvider.getFileRequires?.()) ?? new Map<string, Set<string>>();
-    const attachedPerUnit = deriveAttachments(body.units, flows, sessionNodes, testEdges, fileRequires);
+    const attachedPerUnit = deriveAttachments(units, flows, sessionNodes, testEdges, fileRequires);
     const attachedIds = countedAttachmentIds(attachedPerUnit);
     const leftovers = unassigned.filter((id) => !attachedIds.has(id));
 
     ctx.db.transaction(() => {
       for (const u of getUnitsBySession(ctx.db, sessionId)) deleteUnit(ctx.db, u.id);
       let pos = 0;
-      body.units.forEach((u, i) => {
+      units.forEach((u, i) => {
         const members = u.kind === "flow" ? flowEntries(u) : (u.orphanStableIds ?? []);
         createUnit(ctx.db, sessionId, pos++, u.label, u.rationale ?? "", u.kind, members, false, attachedPerUnit[i]);
       });

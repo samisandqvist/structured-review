@@ -5,6 +5,8 @@ export interface PlanUnitInput {
   flowEntryStableId?: string;
   flowEntryStableIds?: string[];
   orphanStableIds?: string[];
+  /** File globs resolved to orphan stableIds at plan submit (globs.ts). */
+  orphanFiles?: string[];
   label: string;
   rationale?: string;
 }
