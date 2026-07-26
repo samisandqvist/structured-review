@@ -48,6 +48,53 @@ export function compactContext(flows: FlowDTO[], orphans: OrphanDTO[]): {
   };
 }
 
+export interface MergeSuggestion {
+  /** Ready to paste as a unit's flowEntryStableIds. */
+  entryStableIds: string[];
+  names: string[];
+  /** Evidence per qualifying pair, by flow name. */
+  pairs: { a: string; b: string; shared: number; smaller: number }[];
+}
+
+/** Mechanical merge candidates per the skill guideline: two flows belong in one
+ *  multi-entry unit when they share >= half of the smaller flow's changed set.
+ *  Qualifying pairs union into components; the LLM keeps label/order judgment. */
+export function suggestMerges(
+  flows: { entryStableId: string; name: string; changedStableIds: string[] }[]
+): MergeSuggestion[] {
+  const parent = new Map<string, string>();
+  const find = (x: string): string => (parent.get(x) === x ? x : find(parent.get(x)!));
+  for (const f of flows) parent.set(f.entryStableId, f.entryStableId);
+
+  const pairs: { aId: string; a: string; b: string; shared: number; smaller: number }[] = [];
+  for (let i = 0; i < flows.length; i++) {
+    for (let j = i + 1; j < flows.length; j++) {
+      const A = flows[i];
+      const B = flows[j];
+      const bSet = new Set(B.changedStableIds);
+      const shared = A.changedStableIds.filter((id) => bSet.has(id)).length;
+      const smaller = Math.min(A.changedStableIds.length, B.changedStableIds.length);
+      if (shared > 0 && shared * 2 >= smaller) {
+        pairs.push({ aId: A.entryStableId, a: A.name, b: B.name, shared, smaller });
+        parent.set(find(A.entryStableId), find(B.entryStableId));
+      }
+    }
+  }
+
+  const groups = new Map<string, MergeSuggestion>();
+  for (const f of flows) {
+    const root = find(f.entryStableId);
+    const g = groups.get(root) ?? { entryStableIds: [], names: [], pairs: [] };
+    g.entryStableIds.push(f.entryStableId);
+    g.names.push(f.name);
+    groups.set(root, g);
+  }
+  for (const p of pairs) {
+    groups.get(find(p.aId))!.pairs.push({ a: p.a, b: p.b, shared: p.shared, smaller: p.smaller });
+  }
+  return [...groups.values()].filter((g) => g.entryStableIds.length >= 2);
+}
+
 export interface SessionNode {
   id: string; stableId: string; label: string; file: string;
   startLine: number; endLine: number;
