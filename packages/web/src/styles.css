@@ -738,6 +738,13 @@ textarea:focus {
   border-radius: 3px;
   padding: 0 4px;
 }
+/* Node carries comments: findable again from the unit view. */
+.step__comment {
+  margin-left: 5px;
+  color: var(--led-commented);
+  font-size: 13px;
+  line-height: 1;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .tnode--current {

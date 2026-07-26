@@ -28,7 +28,7 @@ vi.mock("../src/api/hooks.js", () => ({
         { stableId: "fn:handleOrder", label: "handleOrder", file: "o.ts", startLine: 1, endLine: 2, isTest: false, depth: 0, nodeId: "n1", changeStatus: "changed", reviewStatus: "unreviewed" },
         { stableId: "fn:ctx1", label: "ctxHelperOne", file: "c.ts", startLine: 1, endLine: 2, isTest: false, depth: 1, offPath: true, nodeId: null, changeStatus: null, reviewStatus: null },
         { stableId: "fn:ctx2", label: "ctxHelperTwo", file: "c.ts", startLine: 5, endLine: 6, isTest: false, depth: 1, offPath: true, nodeId: null, changeStatus: null, reviewStatus: null },
-        { stableId: "fn:processOrder", label: "processOrder", file: "o.ts", startLine: 10, endLine: 20, isTest: false, depth: 1, nodeId: "n4", changeStatus: "changed", reviewStatus: "reviewed-clean" },
+        { stableId: "fn:processOrder", label: "processOrder", file: "o.ts", startLine: 10, endLine: 20, isTest: false, depth: 1, nodeId: "n4", changeStatus: "changed", reviewStatus: "reviewed-commented" },
       ] },
     { id: 2, name: "flow A", criticality: 0.5, depth: 1, affected: true, entryStableId: "fn:entryA",
       entryConfidence: 0.4, entryReasons: ["graph-root"],
@@ -75,6 +75,13 @@ describe("PlanView", () => {
     expect(screen.getByText("handleOrder")).toBeInTheDocument();   // flow track step
     expect(screen.getByText("validateOrder")).toBeInTheDocument(); // orphan chip
     expect(screen.getByText("Unassigned changes").closest(".unit")).toHaveClass("unit--auto");
+  });
+
+  it("marks commented nodes with ✱ so the reviewer can return to them", () => {
+    render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={() => {}} />);
+    const marks = screen.getAllByTestId("comment-mark");
+    expect(marks).toHaveLength(1);
+    expect(marks[0].closest("button")).toHaveTextContent("processOrder");
   });
 
   it("shows flow-unit progress over changed steps, not memberStableIds", () => {
