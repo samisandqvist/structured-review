@@ -33,7 +33,7 @@ plugin data dir, never in the reviewed repo). Requires Node >= 22.13. Every
 command prints JSON on stdout; add `--pretty` for human-readable output. Never
 touch the SQLite file or hand-roll `curl` — the CLI is the stable surface.
 
-```text
+```bash
 crw serve [--repo <path>] [--port N]            # ensure the hub runs against a repo
 crw session create --branch <b> --base <ref|empty> [--open]   # base "empty" = whole-repo review
 crw context --session <id> [--full]             # planning view: commit subjects, flows + merge suggestions, orphan groups, change summaries (--full: raw dump)
