@@ -1,4 +1,6 @@
-<!-- packages/skill/skill.md -->
+<!-- packages/skill/skill.md — source of truth for the skill instructions.
+     plugin/skills/code-review-walkthrough/SKILL.md is GENERATED from this file
+     by scripts/build-plugin.mjs (marked regions swap to plugin-mode text). -->
 ---
 name: code-review-walkthrough
 description: Walk a reviewer through code changes along the call/dependency graph instead of a file tree. Produces a structured review plan, launches a local web UI for graph-based navigation, and exports node- and line-anchored comments.
@@ -23,10 +25,12 @@ where file-tree review doesn't map to the code's actual structure.
 
 ## The crw CLI
 
+<!-- crw-invocation:start (build-plugin.mjs replaces this region with the plugin-mode invocation) -->
 All orchestration goes through `crw` (built binary: `packages/skill/dist/cli.js`;
 dev: `npx tsx packages/skill/src/cli.ts`). Every command prints JSON on stdout;
 add `--pretty` for human-readable output. Never touch the SQLite file or hand-roll
 `curl` — the CLI is the stable surface.
+<!-- crw-invocation:end -->
 
 ```bash
 crw serve [--repo <path>] [--port N]            # ensure the hub runs against a repo
@@ -43,6 +47,7 @@ crw gc [--repo <path>] [--all]                  # remove a repo's DB/logs (stops
 crw shutdown                                    # stop the hub (state stays; serve restarts it)
 ```
 
+<!-- plugin:language-support (build-plugin.mjs inserts the indexer-install note here) -->
 Setup flow:
 
 1. `crw serve` — starts (or reuses) the hub for the current repo; prints `baseUrl`.

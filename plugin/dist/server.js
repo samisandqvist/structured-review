@@ -33139,24 +33139,9 @@ async function parseBody2(c, schema) {
 }
 
 // packages/server/src/globs.ts
-function globToRegExp(glob) {
-  let re = "";
-  for (let i = 0; i < glob.length; i++) {
-    const ch = glob[i];
-    if (ch === "*") {
-      if (glob[i + 1] === "*") {
-        re += ".*";
-        i++;
-      } else {
-        re += "[^/]*";
-      }
-    } else if (ch === "?") {
-      re += "[^/]";
-    } else {
-      re += ch.replace(/[.+^${}()|[\]\\]/g, "\\$&");
-    }
-  }
-  return new RegExp(`^${re}$`);
+import { posix } from "node:path";
+function matchGlob(path, glob) {
+  return posix.matchesGlob(path, glob);
 }
 function resolveOrphanFiles(units, orphanNodes) {
   const claimed = new Set(
@@ -33165,8 +33150,7 @@ function resolveOrphanFiles(units, orphanNodes) {
   const emptyUnits = [];
   const resolved = units.map((u) => {
     if (u.kind !== "orphans" || !u.orphanFiles?.length) return u;
-    const regexps = u.orphanFiles.map(globToRegExp);
-    const matched = orphanNodes.filter((o) => !claimed.has(o.stableId) && regexps.some((r) => r.test(o.file))).map((o) => o.stableId);
+    const matched = orphanNodes.filter((o) => !claimed.has(o.stableId) && u.orphanFiles.some((g) => matchGlob(o.file, g))).map((o) => o.stableId);
     for (const id of matched) claimed.add(id);
     const orphanStableIds = [...u.orphanStableIds ?? [], ...matched];
     if (orphanStableIds.length === 0) emptyUnits.push(u.label);

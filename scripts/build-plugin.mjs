@@ -7,7 +7,7 @@
 //
 // Run after `pnpm build`:  node scripts/build-plugin.mjs
 import { build } from "esbuild";
-import { cpSync, copyFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
+import { cpSync, copyFileSync, mkdirSync, rmSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -47,4 +47,43 @@ await build({ ...common, entryPoints: [join(root, "packages/skill/src/cli.ts")],
 copyFileSync(join(root, "packages/server/src/graph/scip.proto"), join(out, "dist/scip.proto"));
 cpSync(webDist, join(out, "web"), { recursive: true });
 
-console.log("plugin bundle written to plugin/dist + plugin/web");
+// The plugin SKILL.md is packages/skill/skill.md with two plugin-mode swaps:
+// the crw invocation (env-prefixed bundle call instead of the repo binary)
+// and the indexer-install note (repo devs get indexers via pnpm). Generated
+// here so the two files can never drift; the CI freshness guard covers it.
+const PLUGIN_INVOCATION = `Every \`crw\` command below is run as:
+
+\`\`\`bash
+CRW_DATA_DIR="\${CLAUDE_PLUGIN_DATA}" CRW_INDEXER_HOME="\${CLAUDE_PLUGIN_DATA}" node "\${CLAUDE_PLUGIN_ROOT}/dist/crw.js" <command>
+\`\`\`
+
+The env prefix is required on every invocation (state and indexers live in the
+plugin data dir, never in the reviewed repo). Requires Node >= 22.13. Every
+command prints JSON on stdout; add \`--pretty\` for human-readable output. Never
+touch the SQLite file or hand-roll \`curl\` — the CLI is the stable surface.`;
+
+const LANGUAGE_SUPPORT = `Language support: TypeScript and Python indexers are installed automatically
+(first session start runs \`npm install\` in the plugin data dir — allow a
+minute once). Java additionally needs the scip-java toolchain on PATH
+(coursier \`cs\` + JDK + Maven); without it Java changes appear as residual-only
+with a visible warning — relay that warning, it is expected degradation, not
+an error.
+`;
+
+const skillSrc = readFileSync(join(root, "packages/skill/skill.md"), "utf8");
+const generated = skillSrc
+  .replace(/^<!--[\s\S]*?-->\n/, "") // source-of-truth header comment
+  .replace(
+    /<!-- crw-invocation:start[\s\S]*?crw-invocation:end -->/,
+    PLUGIN_INVOCATION
+  )
+  .replace(/<!-- plugin:language-support[^>]*-->\n/, `${LANGUAGE_SUPPORT}\n`);
+for (const marker of ["crw-invocation", "plugin:language-support"]) {
+  if (!generated.includes("CLAUDE_PLUGIN_ROOT") || generated.includes(marker)) {
+    console.error(`SKILL.md generation failed: marker '${marker}' did not resolve — check packages/skill/skill.md`);
+    process.exit(1);
+  }
+}
+writeFileSync(join(out, "skills/code-review-walkthrough/SKILL.md"), generated);
+
+console.log("plugin bundle written to plugin/dist + plugin/web (+ generated SKILL.md)");
