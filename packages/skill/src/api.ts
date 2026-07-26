@@ -139,7 +139,9 @@ export async function getFlows(base: string, sessionId: string): Promise<{ flows
   return fetchJson(`${base}/api/sessions/${sessionId}/flows`);
 }
 
-export async function getChanges(base: string, sessionId: string): Promise<{ changes: unknown[] }> {
+export async function getChanges(
+  base: string, sessionId: string
+): Promise<{ changes: unknown[]; commitSubjects?: string[] }> {
   return fetchJson(`${base}/api/sessions/${sessionId}/changes`);
 }
 

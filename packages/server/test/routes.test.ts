@@ -1358,7 +1358,9 @@ describe("GET /api/sessions/:id/changes", () => {
     const { session } = await cr.json();
     const res = await app.request(`/api/sessions/${session.id}/changes`);
     expect(res.status).toBe(200);
-    const { changes } = await res.json();
+    const { changes, commitSubjects } = await res.json();
+    // Intent input for plan authoring: subjects of base..HEAD (fixture has one commit).
+    expect(commitSubjects).toEqual([]);
     expect(changes.map((c: any) => c.stableId).sort()).toEqual(["fn:handleOrder", "fn:validateOrder"]);
     for (const ch of changes) {
       expect(ch).toHaveProperty("added");
@@ -1368,6 +1370,17 @@ describe("GET /api/sessions/:id/changes", () => {
       expect(ch).not.toHaveProperty("oldText");
       expect(ch).not.toHaveProperty("newText");
     }
+  });
+
+  it("includes commit subjects for the session range (tree-ish base = full history)", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "4b825dc642cb6eb9a060e54bf8d69288fbee4904" }),
+    });
+    const { session } = await cr.json();
+    const res = await app.request(`/api/sessions/${session.id}/changes`);
+    const { commitSubjects } = await res.json();
+    expect(commitSubjects).toEqual(["init"]);
   });
 
   it("classifies python #-method stableIds as methods and plain callables as functions", async () => {
