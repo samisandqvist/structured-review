@@ -1,26 +1,13 @@
 // Orphan-unit file globs (plan submit): a plan can claim orphans by path
-// pattern instead of hand-listing stableIds. Deliberately tiny — `**`, `*`,
-// `?` over repo-relative posix paths — not a general glob engine.
+// pattern instead of hand-listing stableIds. Matching is delegated to
+// node:path matchesGlob (stdlib, no package dependency); the test file pins
+// the semantics we document — `**`, `*`, `?` over repo-relative posix paths —
+// so an upstream behavior change in the still-experimental API fails loudly.
+import { posix } from "node:path";
 import type { PlanUnitInput } from "./coverage.js";
 
-export function globToRegExp(glob: string): RegExp {
-  let re = "";
-  for (let i = 0; i < glob.length; i++) {
-    const ch = glob[i];
-    if (ch === "*") {
-      if (glob[i + 1] === "*") {
-        re += ".*";
-        i++;
-      } else {
-        re += "[^/]*";
-      }
-    } else if (ch === "?") {
-      re += "[^/]";
-    } else {
-      re += ch.replace(/[.+^${}()|[\]\\]/g, "\\$&");
-    }
-  }
-  return new RegExp(`^${re}$`);
+export function matchGlob(path: string, glob: string): boolean {
+  return posix.matchesGlob(path, glob);
 }
 
 /**
@@ -41,9 +28,8 @@ export function resolveOrphanFiles(
   const emptyUnits: string[] = [];
   const resolved = units.map((u) => {
     if (u.kind !== "orphans" || !u.orphanFiles?.length) return u;
-    const regexps = u.orphanFiles.map(globToRegExp);
     const matched = orphanNodes
-      .filter((o) => !claimed.has(o.stableId) && regexps.some((r) => r.test(o.file)))
+      .filter((o) => !claimed.has(o.stableId) && u.orphanFiles!.some((g) => matchGlob(o.file, g)))
       .map((o) => o.stableId);
     for (const id of matched) claimed.add(id);
     const orphanStableIds = [...(u.orphanStableIds ?? []), ...matched];
