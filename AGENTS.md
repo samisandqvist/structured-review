@@ -43,8 +43,8 @@ stdout; `--pretty` for humans.
 
 ```bash
 crw serve [--repo <path>] [--port N]              # start or reuse the hub (checks /health repoRoot)
-crw session create --branch <b> --base <ref>      # prints sessionId, uiUrl, counts, indexWarnings
-crw context --session <id> [--full]               # planning view: affected flows + orphans + change summaries
+crw session create --branch <b> --base <ref|empty># prints sessionId, uiUrl, counts, indexWarnings; "empty" = whole-repo
+crw context --session <id> [--full]               # planning view: commit subjects, flows + merge suggestions, orphan groups, change summaries
 crw plan --session <id> (--auto | --units <f>)    # mechanical or LLM-authored plan; lists unassigned leftovers
 crw diff --session <id> --node <stableId>         # single node diff
 crw status --session <id>                         # coverage, overview, per-unit reviewed/total, unreviewed

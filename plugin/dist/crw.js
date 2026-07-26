@@ -9,16 +9,60 @@ import { readFileSync as readFileSync2 } from "node:fs";
 // packages/skill/src/api.ts
 import { spawn } from "node:child_process";
 var DEFAULT_BASE_URL = process.env.CRW_SERVER_URL || "http://localhost:3456";
+var EMPTY_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+function resolveBaseAlias(ref) {
+  return ref === "empty" ? EMPTY_TREE_SHA : ref;
+}
 function compactContext(flows, orphans) {
+  const dirOf = (file) => file.includes("/") ? file.slice(0, file.lastIndexOf("/")) : ".";
+  const byDir = /* @__PURE__ */ new Map();
+  for (const o of [...orphans].sort((a, b) => a.file.localeCompare(b.file))) {
+    const dir = dirOf(o.file);
+    byDir.set(dir, [...byDir.get(dir) ?? [], o]);
+  }
   return {
     flows: flows.filter((f) => f.affected).map((f) => ({ id: f.id, name: f.name, entryStableId: f.entryStableId, changedStableIds: f.changedStableIds })),
-    orphans: orphans.map((o) => ({
-      stableId: o.stableId,
-      label: o.label,
-      file: o.file,
-      ...o.residualKind !== void 0 ? { residualKind: o.residualKind } : {}
+    orphanGroups: [...byDir.keys()].sort().map((dir) => ({
+      dir,
+      orphans: byDir.get(dir).map((o) => ({
+        stableId: o.stableId,
+        label: o.label,
+        file: o.file,
+        ...o.residualKind !== void 0 ? { residualKind: o.residualKind } : {}
+      }))
     }))
   };
+}
+function suggestMerges(flows) {
+  const parent = /* @__PURE__ */ new Map();
+  const find = (x) => parent.get(x) === x ? x : find(parent.get(x));
+  for (const f of flows) parent.set(f.entryStableId, f.entryStableId);
+  const pairs = [];
+  for (let i = 0; i < flows.length; i++) {
+    for (let j = i + 1; j < flows.length; j++) {
+      const A = flows[i];
+      const B = flows[j];
+      const bSet = new Set(B.changedStableIds);
+      const shared = A.changedStableIds.filter((id) => bSet.has(id)).length;
+      const smaller = Math.min(A.changedStableIds.length, B.changedStableIds.length);
+      if (shared > 0 && shared * 2 >= smaller) {
+        pairs.push({ aId: A.entryStableId, a: A.name, b: B.name, shared, smaller });
+        parent.set(find(A.entryStableId), find(B.entryStableId));
+      }
+    }
+  }
+  const groups = /* @__PURE__ */ new Map();
+  for (const f of flows) {
+    const root = find(f.entryStableId);
+    const g = groups.get(root) ?? { entryStableIds: [], names: [], pairs: [] };
+    g.entryStableIds.push(f.entryStableId);
+    g.names.push(f.name);
+    groups.set(root, g);
+  }
+  for (const p of pairs) {
+    groups.get(find(p.aId)).pairs.push({ a: p.a, b: p.b, shared: p.shared, smaller: p.smaller });
+  }
+  return [...groups.values()].filter((g) => g.entryStableIds.length >= 2);
 }
 function parsePlanFile(text) {
   const raw = JSON.parse(text);
@@ -288,7 +332,7 @@ function gcSweep(dataDir) {
 // packages/skill/src/cli.ts
 var USAGE = `usage:
   crw serve [--repo <path>] [--port N]
-  crw session create --branch <b> --base <ref> [--open]
+  crw session create --branch <b> --base <ref|empty> [--open]
   crw session list
   crw session delete --session <id>
   crw context --session <id> [--full]
@@ -360,7 +404,7 @@ repo: ${result.repoRoot}`
 }
 async function cmdSessionCreate(base, flags) {
   const branch = typeof flags.branch === "string" ? flags.branch : "HEAD";
-  const baseRef = required(flags, "base");
+  const baseRef = resolveBaseAlias(required(flags, "base"));
   const { session } = await createSession(base, branch, baseRef);
   const [{ nodes }, { flows }] = await Promise.all([getNodes(base, session.id), getFlows(base, session.id)]);
   if (flags.open) launchUI(base, session.id);
@@ -429,12 +473,14 @@ async function cmdShutdown(base) {
 }
 async function cmdContext(base, flags) {
   const sessionId = required(flags, "session");
-  const [{ flows, orphans }, { changes }] = await Promise.all([
+  const [{ flows, orphans }, { changes, commitSubjects }] = await Promise.all([
     getFlows(base, sessionId),
     getChanges(base, sessionId)
   ]);
-  if (flags.full) return { json: { sessionId, flows, orphans, changes } };
-  return { json: { sessionId, ...compactContext(flows, orphans), changes } };
+  const subjects = commitSubjects === void 0 ? {} : { commitSubjects };
+  if (flags.full) return { json: { sessionId, ...subjects, flows, orphans, changes } };
+  const compact = compactContext(flows, orphans);
+  return { json: { sessionId, ...subjects, flows: compact.flows, mergeSuggestions: suggestMerges(compact.flows), orphanGroups: compact.orphanGroups, changes } };
 }
 async function cmdPlan(base, flags) {
   const sessionId = required(flags, "session");
