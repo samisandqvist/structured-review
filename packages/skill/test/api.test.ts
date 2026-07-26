@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("node:child_process", () => ({ spawn: vi.fn(() => ({ unref: vi.fn() })), execFileSync: vi.fn() }));
 
-import { compactContext, createSession, writePlan, exportComments, defaultPartition, uiUrl, parsePlanFile, resolveBaseAlias, EMPTY_TREE_SHA } from "../src/api.js";
+import { compactContext, createSession, writePlan, exportComments, defaultPartition, uiUrl, parsePlanFile, resolveBaseAlias, suggestMerges, EMPTY_TREE_SHA } from "../src/api.js";
 
 const BASE = "http://localhost:3456";
 const mockFetch = vi.fn();
@@ -50,6 +50,33 @@ describe("resolveBaseAlias", () => {
   it("passes ordinary refs through", () => {
     expect(resolveBaseAlias("main")).toBe("main");
     expect(resolveBaseAlias("HEAD~3")).toBe("HEAD~3");
+  });
+});
+
+describe("suggestMerges", () => {
+  const flow = (entry: string, changed: string[]) => ({ entryStableId: entry, name: entry, changedStableIds: changed });
+
+  it("groups flows sharing at least half of the smaller changed set", () => {
+    const flows = [flow("a", ["x", "y", "z"]), flow("b", ["x", "y", "q"]), flow("c", ["p"])];
+    const s = suggestMerges(flows);
+    expect(s).toHaveLength(1);
+    expect(s[0].entryStableIds).toEqual(["a", "b"]);
+    expect(s[0].names).toEqual(["a", "b"]);
+    expect(s[0].pairs).toEqual([{ a: "a", b: "b", shared: 2, smaller: 3 }]);
+  });
+
+  it("chains transitively into one component", () => {
+    const flows = [flow("a", ["1", "2"]), flow("b", ["2", "3"]), flow("c", ["3", "4"])];
+    const s = suggestMerges(flows);
+    expect(s).toHaveLength(1);
+    expect(s[0].entryStableIds).toEqual(["a", "b", "c"]);
+    expect(s[0].pairs).toHaveLength(2);
+  });
+
+  it("suggests nothing for disjoint or below-threshold flows", () => {
+    expect(suggestMerges([flow("a", ["1"]), flow("b", ["2"])])).toEqual([]);
+    // shared 1 < half of smaller (3)
+    expect(suggestMerges([flow("a", ["1", "2", "3"]), flow("b", ["3", "4", "5"])])).toEqual([]);
   });
 });
 

@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import {
   DEFAULT_BASE_URL, compactContext, createSession, defaultPartition, deleteSession, exportComments, getChanges,
   getFlows, getNodeDiff, getNodes, getSessionInfo, launchUI, listSessions, parsePlanFile, resolveBaseAlias,
-  shutdownHub, uiUrl, writePlan,
+  shutdownHub, suggestMerges, uiUrl, writePlan,
   type UnitInput,
 } from "./api.js";
 import { computeStatus, waitConditionMet, type SessionStatus } from "./status.js";
@@ -187,7 +187,10 @@ async function cmdContext(base: string, flags: Record<string, string | boolean>)
   ]);
   const subjects = commitSubjects === undefined ? {} : { commitSubjects };
   if (flags.full) return { json: { sessionId, ...subjects, flows, orphans, changes } };
-  return { json: { sessionId, ...subjects, ...compactContext(flows, orphans), changes } };
+  const compact = compactContext(flows, orphans);
+  // Precomputed merge guideline (shared changed ids >= half the smaller flow's
+  // set) so the planner spends judgment on labels/order, not set arithmetic.
+  return { json: { sessionId, ...subjects, flows: compact.flows, mergeSuggestions: suggestMerges(compact.flows), orphans: compact.orphans, changes } };
 }
 
 async function cmdPlan(base: string, flags: Record<string, string | boolean>): Promise<CommandResult> {
