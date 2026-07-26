@@ -8,6 +8,9 @@ const sessionKey = new URLSearchParams(window.location.search).get("session") ??
 export interface LineSelection {
   startIdx: number;
   endIdx: number;
+  /** The row the selection started from — shift-click and drag move the OTHER
+   *  end relative to this, so ranges can shrink and flip. Defaults to startIdx. */
+  anchorIdx?: number;
   anchor: CommentAnchor;
   label: string;
 }
