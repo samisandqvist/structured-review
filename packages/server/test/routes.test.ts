@@ -576,6 +576,50 @@ describe("coverage reconciliation", () => {
     expect((await sres.json()).coverage).toEqual({ changedTotal: 2, covered: 2, unassigned: 0 });
   });
 
+  it("resolves orphanFiles globs into unit members at submit", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const res = await app.request(`/api/sessions/${session.id}/plan`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ units: [{ kind: "orphans", label: "everything", orphanFiles: ["src/**"] }] }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const unit = body.units.find((u: any) => u.label === "everything");
+    expect([...unit.memberStableIds].sort()).toEqual(["fn:handleOrder", "fn:validateOrder"]);
+    expect(body.coverage).toEqual({ changedTotal: 2, covered: 2, unassigned: 0 });
+  });
+
+  it("400s when a glob-only unit matches nothing", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const res = await app.request(`/api/sessions/${session.id}/plan`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ units: [{ kind: "orphans", label: "nope", orphanFiles: ["no/such/dir/**"] }] }),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/nope/);
+  });
+
+  it("rejects an orphan unit with neither ids nor globs", async () => {
+    const cr = await app.request("/api/sessions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    const { session } = await cr.json();
+    const res = await app.request(`/api/sessions/${session.id}/plan`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ units: [{ kind: "orphans", label: "empty" }] }),
+    });
+    expect(res.status).toBe(400);
+  });
+
   it("sweeps unattachable changed nodes into the auto Unassigned unit", async () => {
     // A changed node in its own file with no test edge and no requires
     // relation cannot attach anywhere — it must still be swept.

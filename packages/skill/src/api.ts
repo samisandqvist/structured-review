@@ -129,7 +129,7 @@ export interface SessionInfo {
 
 export type UnitInput =
   | { kind: "flow"; flowEntryStableId?: string; flowEntryStableIds?: string[]; label: string; rationale?: string }
-  | { kind: "orphans"; orphanStableIds: string[]; label: string; rationale?: string };
+  | { kind: "orphans"; orphanStableIds?: string[]; orphanFiles?: string[]; label: string; rationale?: string };
 
 /** Plan file for `crw plan --units`: either a bare UnitInput[] (legacy) or
  *  { overview?, units }. The overview travels with the plan so a replan
