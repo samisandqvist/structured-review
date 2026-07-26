@@ -31,19 +31,30 @@ export interface FlowDTO { id: number; name: string; affected: boolean; entrySta
 export interface OrphanDTO { stableId: string; label: string; file: string; residualKind?: string | null; }
 
 /** Planning view of a session: affected flows without their step arrays,
- *  orphans reduced to what a plan references. This is what an LLM planner
- *  needs to author units; the full dump is behind `crw context --full`. */
+ *  orphans reduced to what a plan references and grouped by directory (the
+ *  triage a planner does anyway — docs vs configs vs code residuals). This is
+ *  what an LLM planner needs to author units; the full flat dump is behind
+ *  `crw context --full`. */
 export function compactContext(flows: FlowDTO[], orphans: OrphanDTO[]): {
   flows: { id: number; name: string; entryStableId: string; changedStableIds: string[] }[];
-  orphans: { stableId: string; label: string; file: string; residualKind?: string | null }[];
+  orphanGroups: { dir: string; orphans: { stableId: string; label: string; file: string; residualKind?: string | null }[] }[];
 } {
+  const dirOf = (file: string) => (file.includes("/") ? file.slice(0, file.lastIndexOf("/")) : ".");
+  const byDir = new Map<string, OrphanDTO[]>();
+  for (const o of [...orphans].sort((a, b) => a.file.localeCompare(b.file))) {
+    const dir = dirOf(o.file);
+    byDir.set(dir, [...(byDir.get(dir) ?? []), o]);
+  }
   return {
     flows: flows
       .filter((f) => f.affected)
       .map((f) => ({ id: f.id, name: f.name, entryStableId: f.entryStableId, changedStableIds: f.changedStableIds })),
-    orphans: orphans.map((o) => ({
-      stableId: o.stableId, label: o.label, file: o.file,
-      ...(o.residualKind !== undefined ? { residualKind: o.residualKind } : {}),
+    orphanGroups: [...byDir.keys()].sort().map((dir) => ({
+      dir,
+      orphans: byDir.get(dir)!.map((o) => ({
+        stableId: o.stableId, label: o.label, file: o.file,
+        ...(o.residualKind !== undefined ? { residualKind: o.residualKind } : {}),
+      })),
     })),
   };
 }
