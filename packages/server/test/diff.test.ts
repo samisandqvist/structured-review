@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { extractHunkDiff, extractLinesForRanges, expandedContextSlice, getNodeDiff, nodeChangeStats, subtractRanges, resolveRef, changedFilesStrict, currentBranch, repoFingerprint, subtreeFingerprint, formatHunkSnippet, anchorRowRange, GitError, EMPTY_TREE_SHA } from "../src/diff.js";
+import { extractHunkDiff, extractLinesForRanges, expandedContextSlice, getNodeDiff, nodeChangeStats, subtractRanges, resolveRef, changedFilesStrict, currentBranch, repoFingerprint, subtreeFingerprint, formatHunkSnippet, anchorRowRange, GitError, EMPTY_TREE_SHA, commitSubjects } from "../src/diff.js";
 import type { DiffLine } from "../src/diff.js";
 import type { CommentAnchor } from "../src/types.js";
 import { languagePathspecs } from "../src/graph/roots.js";
@@ -38,6 +38,38 @@ describe("resolveRef", () => {
   it("still rejects blob refs", () => {
     // a.txt exists at HEAD; HEAD:a.txt is a blob, not commit-ish or tree-ish
     expect(resolveRef("HEAD:a.txt", fixtureRepo)).toBeNull();
+  });
+});
+
+describe("commitSubjects", () => {
+  let repo: string;
+  beforeAll(() => {
+    repo = mkdtempSync(join(tmpdir(), "crw-subjects-"));
+    const git = (...a: string[]) => execFileSync("git", a, { cwd: repo, encoding: "utf8" });
+    git("init", "-b", "main");
+    git("config", "user.email", "t@t");
+    git("config", "user.name", "t");
+    writeFileSync(join(repo, "a.txt"), "one\n");
+    git("add", ".");
+    git("commit", "-m", "init");
+    writeFileSync(join(repo, "b.txt"), "two\n");
+    git("add", ".");
+    git("commit", "-m", "second");
+  });
+  afterAll(() => rmSync(repo, { recursive: true, force: true }));
+
+  it("lists subjects newest-first for base..HEAD", () => {
+    expect(commitSubjects("HEAD~1", repo)).toEqual(["second"]);
+    expect(commitSubjects("main", repo)).toEqual([]);
+  });
+  it("falls back to full history for a tree-ish base (empty tree)", () => {
+    expect(commitSubjects(EMPTY_TREE_SHA, repo)).toEqual(["second", "init"]);
+  });
+  it("caps at the limit", () => {
+    expect(commitSubjects(EMPTY_TREE_SHA, repo, 1)).toEqual(["second"]);
+  });
+  it("returns [] outside a repo", () => {
+    expect(commitSubjects("HEAD", emptyTmpDir)).toEqual([]);
   });
 });
 

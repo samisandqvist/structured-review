@@ -181,12 +181,13 @@ async function cmdShutdown(base: string): Promise<CommandResult> {
 // `--full` restores the complete dump (all flows with steps, full orphan nodes).
 async function cmdContext(base: string, flags: Record<string, string | boolean>): Promise<CommandResult> {
   const sessionId = required(flags, "session");
-  const [{ flows, orphans }, { changes }] = await Promise.all([
+  const [{ flows, orphans }, { changes, commitSubjects }] = await Promise.all([
     getFlows(base, sessionId),
     getChanges(base, sessionId),
   ]);
-  if (flags.full) return { json: { sessionId, flows, orphans, changes } };
-  return { json: { sessionId, ...compactContext(flows, orphans), changes } };
+  const subjects = commitSubjects === undefined ? {} : { commitSubjects };
+  if (flags.full) return { json: { sessionId, ...subjects, flows, orphans, changes } };
+  return { json: { sessionId, ...subjects, ...compactContext(flows, orphans), changes } };
 }
 
 async function cmdPlan(base: string, flags: Record<string, string | boolean>): Promise<CommandResult> {

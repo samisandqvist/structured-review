@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { AppContext } from "../app.js";
 import { getSession } from "../repo/sessions.js";
 import { getNodesBySession } from "../repo/nodes.js";
-import { fileUnifiedDiff, nodeChangeStats, nodeSignature } from "../diff.js";
+import { commitSubjects, fileUnifiedDiff, nodeChangeStats, nodeSignature } from "../diff.js";
 
 /** Compact, software-computed change summary per changed node — no diff bodies.
  *  Bounded by node count, not diff size. */
@@ -38,7 +38,9 @@ export function createChangesRoute(ctx: AppContext) {
         status, added, removed, signature: nodeSignature(n.file, n.startLine, ctx.repoRoot),
       };
     });
-    return c.json({ changes });
+    // Subjects of the session's commit range ride along as intent input for
+    // plan authoring — the planner should not need its own git log.
+    return c.json({ changes, commitSubjects: commitSubjects(session.baseRef, ctx.repoRoot) });
   });
 
   return router;

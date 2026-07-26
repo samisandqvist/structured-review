@@ -146,6 +146,27 @@ export function subtreeFingerprint(subdir: string, root: string = repoRoot(), pa
   }
 }
 
+/**
+ * Commit subjects in baseRef..HEAD, newest first, capped at `limit` — intent
+ * input for plan authoring. A tree-ish base (e.g. the empty tree) has no
+ * commit range, so fall back to full HEAD history: for the empty tree that
+ * IS the range. [] when git fails entirely.
+ */
+export function commitSubjects(baseRef: string, root: string = repoRoot(), limit = 50): string[] {
+  const log = (range: string) =>
+    execFileSync("git", ["log", "--format=%s", `--max-count=${limit}`, range], { cwd: root, encoding: "utf8", ...QUIET })
+      .split("\n").filter(Boolean);
+  try {
+    return log(`${baseRef}..HEAD`);
+  } catch {
+    try {
+      return log("HEAD");
+    } catch {
+      return [];
+    }
+  }
+}
+
 /** The currently checked-out branch name ("HEAD" when detached), or null on git failure. */
 export function currentBranch(root: string = repoRoot()): string | null {
   try {
