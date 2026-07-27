@@ -59,6 +59,53 @@ export function compactContext(flows: FlowDTO[], orphans: OrphanDTO[]): {
   };
 }
 
+/** Per-node change summary as served by GET /:id/changes. */
+export interface ChangeSummary {
+  stableId: string; label: string; kind: string; file: string;
+  startLine: number; endLine: number;
+  status: string; added: number; removed: number; signature?: string | null;
+}
+
+/** Scannable planning view with no SCIP stableIds anywhere (`crw context
+ *  --brief`): flows named by their numeric id + a short human entry, merge
+ *  suggestions by group index + flow ids, orphan groups as directory + file
+ *  list, changes without stableId/signature. With numeric plan refs
+ *  (resolvePlanRefs) and orphanFiles globs this is everything plan authoring
+ *  needs — the group indexes and flow ids here are exactly what `mergeGroup`
+ *  and `flowIds` resolve against at plan submit. */
+export function briefContext(flows: FlowDTO[], orphans: OrphanDTO[], changes: ChangeSummary[]): {
+  flows: { id: number; name: string; entry: string; changedCount: number }[];
+  mergeSuggestions: { group: number; flowIds: number[]; names: string[] }[];
+  orphanGroups: { dir: string; files: string[] }[];
+  changes: { file: string; lines: string; label: string; kind: string; status: string; added: number; removed: number }[];
+} {
+  const compact = compactContext(flows, orphans);
+  const entryOf = new Map(
+    flows.map((f) => {
+      const s = f.steps[0];
+      return [f.id, s ? `${s.label} — ${s.file}` : f.entryStableId] as const;
+    })
+  );
+  const idByEntry = new Map(compact.flows.map((f) => [f.entryStableId, f.id]));
+  return {
+    flows: compact.flows.map((f) => ({
+      id: f.id, name: f.name,
+      entry: entryOf.get(f.id) ?? f.entryStableId,
+      changedCount: f.changedStableIds.length,
+    })),
+    mergeSuggestions: suggestMerges(compact.flows).map((s, i) => ({
+      group: i,
+      flowIds: s.entryStableIds.map((e) => idByEntry.get(e)!),
+      names: s.names,
+    })),
+    orphanGroups: compact.orphanGroups.map((g) => ({ dir: g.dir, files: g.orphans.map((o) => o.file) })),
+    changes: changes.map((c) => ({
+      file: c.file, lines: `${c.startLine}-${c.endLine}`, label: c.label,
+      kind: c.kind, status: c.status, added: c.added, removed: c.removed,
+    })),
+  };
+}
+
 export interface MergeSuggestion {
   /** Ready to paste as a unit's flowEntryStableIds. */
   entryStableIds: string[];
@@ -128,8 +175,62 @@ export interface SessionInfo {
 }
 
 export type UnitInput =
-  | { kind: "flow"; flowEntryStableId?: string; flowEntryStableIds?: string[]; label: string; rationale?: string }
+  | {
+      kind: "flow";
+      flowEntryStableId?: string;
+      flowEntryStableIds?: string[];
+      /** Numeric flow ids as printed by `crw context` — resolved to entry
+       *  stableIds CLI-side (resolvePlanRefs) before the plan is submitted. */
+      flowIds?: number[];
+      /** Index into `crw context`'s mergeSuggestions — expands to that
+       *  group's entryStableIds. */
+      mergeGroup?: number;
+      label: string;
+      rationale?: string;
+    }
   | { kind: "orphans"; orphanStableIds?: string[]; orphanFiles?: string[]; label: string; rationale?: string };
+
+/** Expand numeric plan refs (`flowIds`, `mergeGroup`) into
+ *  `flowEntryStableIds`, so a plan can reference flows the way `crw context`
+ *  names them instead of transcribing 100+-char SCIP stableIds. Resolution
+ *  must run against the same compacted flows + suggestMerges output the
+ *  context printed, so the numbering is guaranteed to line up. Unknown refs
+ *  throw with the valid range — better a loud failure than a plan that
+ *  silently reviews the wrong flow. */
+export function resolvePlanRefs(
+  units: UnitInput[],
+  flows: { id: number; name: string; entryStableId: string }[],
+  mergeSuggestions: MergeSuggestion[]
+): UnitInput[] {
+  const byId = new Map(flows.map((f) => [f.id, f.entryStableId]));
+  return units.map((u) => {
+    if (u.kind !== "flow" || (u.flowIds === undefined && u.mergeGroup === undefined)) return u;
+    const entries = [
+      ...(u.flowEntryStableIds ?? []),
+      ...(u.flowEntryStableId ? [u.flowEntryStableId] : []),
+    ];
+    for (const id of u.flowIds ?? []) {
+      const entry = byId.get(id);
+      if (entry === undefined) {
+        throw new Error(
+          `unit '${u.label}': unknown flowId ${id} (affected flows: ${[...byId.keys()].join(", ") || "none"})`
+        );
+      }
+      entries.push(entry);
+    }
+    if (u.mergeGroup !== undefined) {
+      const group = mergeSuggestions[u.mergeGroup];
+      if (!group) {
+        throw new Error(
+          `unit '${u.label}': mergeGroup ${u.mergeGroup} out of range (${mergeSuggestions.length} suggestion(s), zero-indexed)`
+        );
+      }
+      entries.push(...group.entryStableIds);
+    }
+    const { flowIds: _ids, mergeGroup: _grp, flowEntryStableId: _single, ...rest } = u;
+    return { ...rest, flowEntryStableIds: [...new Set(entries)] };
+  });
+}
 
 /** Plan file for `crw plan --units`: either a bare UnitInput[] (legacy) or
  *  { overview?, units }. The overview travels with the plan so a replan
@@ -199,7 +300,7 @@ export async function getFlows(base: string, sessionId: string): Promise<{ flows
 
 export async function getChanges(
   base: string, sessionId: string
-): Promise<{ changes: unknown[]; commitSubjects?: string[] }> {
+): Promise<{ changes: ChangeSummary[]; commitSubjects?: string[] }> {
   return fetchJson(`${base}/api/sessions/${sessionId}/changes`);
 }
 

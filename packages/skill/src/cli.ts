@@ -4,10 +4,10 @@
 // the HTTP API (api.ts) and server lifecycle (serve.ts) — never SQLite.
 import { readFileSync } from "node:fs";
 import {
-  DEFAULT_BASE_URL, compactContext, createSession, defaultPartition, deleteSession, exportComments, getChanges,
+  DEFAULT_BASE_URL, briefContext, compactContext, createSession, defaultPartition, deleteSession, exportComments, getChanges,
   getFlows, getNodeDiff, getNodes, getSessionInfo, launchUI, listSessions, parsePlanFile, resolveBaseAlias,
-  shutdownHub, suggestMerges, uiUrl, writePlan,
-  type UnitInput,
+  resolvePlanRefs, shutdownHub, suggestMerges, uiUrl, writePlan,
+  type Coverage, type UnitInput,
 } from "./api.js";
 import { computeStatus, waitConditionMet, type SessionStatus } from "./status.js";
 import { ensureServer } from "./serve.js";
@@ -18,7 +18,7 @@ const USAGE = `usage:
   crw session create --branch <b> --base <ref|empty> [--open]
   crw session list
   crw session delete --session <id>
-  crw context --session <id> [--full]
+  crw context --session <id> [--brief|--full]
   crw plan --session <id> (--auto | --units <file.json>) [--open]
   crw diff --session <id> --node <stableId>
   crw status --session <id>
@@ -28,7 +28,7 @@ const USAGE = `usage:
   crw shutdown
 global flags: --port N (hub port), --pretty (human-readable output)`;
 
-const BOOL_FLAGS = new Set(["auto", "open", "pretty", "all", "full"]);
+const BOOL_FLAGS = new Set(["auto", "open", "pretty", "all", "full", "brief"]);
 
 export interface CliArgs { command: string; flags: Record<string, string | boolean>; }
 
@@ -175,9 +175,27 @@ async function cmdShutdown(base: string): Promise<CommandResult> {
   return { json: result, pretty: `hub stopping${result.pid ? ` (pid ${result.pid})` : ""}` };
 }
 
+/** Human-scannable rendering of the brief context — the table a planner would
+ *  otherwise write a throwaway script to produce. */
+export function prettyBrief(brief: ReturnType<typeof briefContext>, commitSubjects?: string[]): string {
+  return [
+    ...(commitSubjects?.length ? ["commits:", ...commitSubjects.map((s) => `  ${s}`)] : []),
+    `flows (${brief.flows.length} affected):`,
+    ...brief.flows.map((f) => `  [${f.id}] ${f.name} (${f.changedCount} changed) — ${f.entry}`),
+    ...(brief.mergeSuggestions.length ? ["merge suggestions:"] : []),
+    ...brief.mergeSuggestions.map((s) => `  [group ${s.group}] flows ${s.flowIds.join("+")} — ${s.names.join(", ")}`),
+    ...(brief.orphanGroups.length ? ["orphan groups:"] : []),
+    ...brief.orphanGroups.map((g) => `  ${g.dir} — ${g.files.join(", ")}`),
+    `changes (${brief.changes.length}):`,
+    ...brief.changes.map((c) => `  ${c.file}:${c.lines} ${c.label} (${c.kind}, ${c.status} +${c.added}/-${c.removed})`),
+  ].join("\n");
+}
+
 // Planning context for LLM-authored plans: affected flows (no step arrays),
 // orphans reduced to plan-referencable fields, and compact per-node change
 // summaries (kind, file, lines, +/- counts, signature) — not diff bodies.
+// `--brief` goes further and drops stableIds entirely (numeric flow ids +
+// file paths are enough to author a plan via flowIds/mergeGroup/orphanFiles);
 // `--full` restores the complete dump (all flows with steps, full orphan nodes).
 async function cmdContext(base: string, flags: Record<string, string | boolean>): Promise<CommandResult> {
   const sessionId = required(flags, "session");
@@ -187,10 +205,35 @@ async function cmdContext(base: string, flags: Record<string, string | boolean>)
   ]);
   const subjects = commitSubjects === undefined ? {} : { commitSubjects };
   if (flags.full) return { json: { sessionId, ...subjects, flows, orphans, changes } };
+  if (flags.brief) {
+    const brief = briefContext(flows, orphans, changes);
+    return { json: { sessionId, ...subjects, ...brief }, pretty: prettyBrief(brief, commitSubjects) };
+  }
   const compact = compactContext(flows, orphans);
   // Precomputed merge guideline (shared changed ids >= half the smaller flow's
   // set) so the planner spends judgment on labels/order, not set arithmetic.
   return { json: { sessionId, ...subjects, flows: compact.flows, mergeSuggestions: suggestMerges(compact.flows), orphanGroups: compact.orphanGroups, changes } };
+}
+
+/** Shape the plan-submit response for output. `unassigned` is always present
+ *  ([] at full coverage) so scripted consumers get a stable response shape. */
+export function planOutput(result: Awaited<ReturnType<typeof writePlan>>): {
+  coverage: Coverage;
+  overview?: string;
+  unassigned: { stableId: string; label: string; file: string }[];
+  units: { label: string; kind: string; auto: boolean; members: number; attached: number }[];
+} {
+  return {
+    coverage: result.coverage,
+    ...(result.overview ? { overview: result.overview } : {}),
+    // Leftovers by stableId so a planner can author orphan-units for them and
+    // re-submit without re-fetching the session.
+    unassigned: result.unassigned ?? [],
+    units: result.units.map((u) => ({
+      label: u.label, kind: u.kind, auto: u.auto, members: u.memberStableIds.length,
+      attached: (u.attached ?? []).filter((m) => m.counted).length,
+    })),
+  };
 }
 
 async function cmdPlan(base: string, flags: Record<string, string | boolean>): Promise<CommandResult> {
@@ -202,23 +245,21 @@ async function cmdPlan(base: string, flags: Record<string, string | boolean>): P
     units = defaultPartition(flows, orphans);
   } else if (typeof flags.units === "string") {
     ({ units, overview } = parsePlanFile(readFileSync(flags.units, "utf8")));
+    // Numeric refs (flowIds / mergeGroup) resolve against the same compacted
+    // flows + merge suggestions `crw context` printed, so the numbers a
+    // planner read are the numbers that resolve here.
+    if (units.some((u) => u.kind === "flow" && (u.flowIds !== undefined || u.mergeGroup !== undefined))) {
+      const { flows, orphans } = await getFlows(base, sessionId);
+      const compact = compactContext(flows, orphans);
+      units = resolvePlanRefs(units, compact.flows, suggestMerges(compact.flows));
+    }
   } else {
     throw new Error(`plan needs --auto or --units <file.json>\n${USAGE}`);
   }
   const result = await writePlan(base, sessionId, units, overview);
   if (flags.open) launchUI(base, sessionId);
-  const unassigned = result.unassigned ?? [];
-  const out = {
-    coverage: result.coverage,
-    ...(result.overview ? { overview: result.overview } : {}),
-    // Leftovers by stableId so a planner can author orphan-units for them and
-    // re-submit without re-fetching the session.
-    ...(unassigned.length > 0 ? { unassigned } : {}),
-    units: result.units.map((u) => ({
-      label: u.label, kind: u.kind, auto: u.auto, members: u.memberStableIds.length,
-      attached: (u.attached ?? []).filter((m) => m.counted).length,
-    })),
-  };
+  const out = planOutput(result);
+  const unassigned = out.unassigned;
   return {
     json: out,
     pretty: [

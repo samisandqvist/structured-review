@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("node:child_process", () => ({ spawn: vi.fn(() => ({ unref: vi.fn() })), execFileSync: vi.fn() }));
 
-import { compactContext, createSession, writePlan, exportComments, defaultPartition, uiUrl, parsePlanFile, resolveBaseAlias, suggestMerges, EMPTY_TREE_SHA } from "../src/api.js";
+import { briefContext, compactContext, createSession, writePlan, exportComments, defaultPartition, uiUrl, parsePlanFile, resolveBaseAlias, resolvePlanRefs, suggestMerges, EMPTY_TREE_SHA } from "../src/api.js";
 
 const BASE = "http://localhost:3456";
 const mockFetch = vi.fn();
@@ -77,6 +77,63 @@ describe("suggestMerges", () => {
     expect(suggestMerges([flow("a", ["1"]), flow("b", ["2"])])).toEqual([]);
     // shared 1 < half of smaller (3)
     expect(suggestMerges([flow("a", ["1", "2", "3"]), flow("b", ["3", "4", "5"])])).toEqual([]);
+  });
+});
+
+describe("resolvePlanRefs", () => {
+  const flows = [
+    { id: 127, name: "handleOrder", entryStableId: "scip:long-entry-a" },
+    { id: 142, name: "processOrder", entryStableId: "scip:long-entry-b" },
+  ];
+  const suggestions = [
+    { entryStableIds: ["scip:long-entry-a", "scip:long-entry-b"], names: ["handleOrder", "processOrder"], pairs: [] },
+  ];
+
+  it("expands flowIds to entry stableIds (issue #7)", () => {
+    const units = resolvePlanRefs(
+      [{ kind: "flow", flowIds: [127], label: "Orders" }],
+      flows, suggestions
+    );
+    expect(units).toEqual([{ kind: "flow", flowEntryStableIds: ["scip:long-entry-a"], label: "Orders" }]);
+  });
+
+  it("expands mergeGroup to the suggestion's entry set", () => {
+    const units = resolvePlanRefs(
+      [{ kind: "flow", mergeGroup: 0, label: "Order validation" }],
+      flows, suggestions
+    );
+    expect(units[0]).toEqual({
+      kind: "flow",
+      flowEntryStableIds: ["scip:long-entry-a", "scip:long-entry-b"],
+      label: "Order validation",
+    });
+  });
+
+  it("merges numeric refs with explicit entries, deduped, singular field folded in", () => {
+    const units = resolvePlanRefs(
+      [{ kind: "flow", flowEntryStableId: "scip:long-entry-a", flowIds: [127, 142], label: "mix" }],
+      flows, suggestions
+    );
+    expect(units[0]).toEqual({
+      kind: "flow",
+      flowEntryStableIds: ["scip:long-entry-a", "scip:long-entry-b"],
+      label: "mix",
+    });
+  });
+
+  it("leaves stableId-only flow units and orphan units untouched", () => {
+    const input = [
+      { kind: "flow" as const, flowEntryStableIds: ["scip:long-entry-a"], label: "plain" },
+      { kind: "orphans" as const, orphanFiles: ["docs/**"], label: "docs" },
+    ];
+    expect(resolvePlanRefs(input, flows, suggestions)).toEqual(input);
+  });
+
+  it("throws a named error on unknown flowId or out-of-range mergeGroup", () => {
+    expect(() => resolvePlanRefs([{ kind: "flow", flowIds: [999], label: "bad" }], flows, suggestions))
+      .toThrow(/unit 'bad': unknown flowId 999.*127, 142/);
+    expect(() => resolvePlanRefs([{ kind: "flow", mergeGroup: 3, label: "bad" }], flows, suggestions))
+      .toThrow(/unit 'bad': mergeGroup 3 out of range \(1 suggestion/);
   });
 });
 
@@ -171,5 +228,65 @@ describe("compactContext", () => {
     const { orphanGroups } = compactContext([] as never, many as never);
     expect(orphanGroups.map((g) => g.dir)).toEqual([".", "docs"]);
     expect(orphanGroups[1].orphans.map((o) => o.stableId)).toEqual(["d1", "d2"]);
+  });
+});
+
+describe("briefContext", () => {
+  const step = (stableId: string, label: string, file: string) => ({
+    stableId, label, file, startLine: 1, endLine: 9, isTest: false, depth: 0,
+    nodeId: null, changeStatus: "changed", reviewStatus: null,
+  });
+  const flows = [
+    {
+      id: 127, name: "handleOrder", affected: true, entryStableId: "scip:long-a",
+      changedStableIds: ["scip:long-a", "scip:shared"],
+      steps: [step("scip:long-a", "handleOrder", "src/orders.ts")],
+    },
+    {
+      id: 142, name: "processOrder", affected: true, entryStableId: "scip:long-b",
+      changedStableIds: ["scip:long-b", "scip:shared"],
+      steps: [step("scip:long-b", "processOrder", "src/process.ts")],
+    },
+    { id: 3, name: "unaffected", affected: false, entryStableId: "scip:long-c", changedStableIds: [], steps: [] },
+  ];
+  const orphans = [
+    { stableId: "file-residual:docs/x.md", label: "x.md", file: "docs/x.md" },
+    { stableId: "file-residual:.gitignore", label: ".gitignore", file: ".gitignore" },
+  ];
+  const changes = [{
+    stableId: "scip:long-a", label: "handleOrder", kind: "function", file: "src/orders.ts",
+    startLine: 10, endLine: 42, status: "modified", added: 12, removed: 3, signature: "export function handleOrder()",
+  }];
+
+  it("contains no stableIds anywhere (issue #8)", () => {
+    const brief = briefContext(flows as never, orphans as never, changes);
+    expect(JSON.stringify(brief)).not.toContain("scip:");
+    expect(JSON.stringify(brief)).not.toContain("file-residual:");
+  });
+
+  it("names flows by numeric id with a short human entry", () => {
+    const brief = briefContext(flows as never, orphans as never, changes);
+    expect(brief.flows).toEqual([
+      { id: 127, name: "handleOrder", entry: "handleOrder — src/orders.ts", changedCount: 2 },
+      { id: 142, name: "processOrder", entry: "processOrder — src/process.ts", changedCount: 2 },
+    ]);
+  });
+
+  it("numbers merge suggestions and refers to flows by id — the refs resolvePlanRefs accepts", () => {
+    const brief = briefContext(flows as never, orphans as never, changes);
+    expect(brief.mergeSuggestions).toEqual([
+      { group: 0, flowIds: [127, 142], names: ["handleOrder", "processOrder"] },
+    ]);
+  });
+
+  it("reduces orphan groups to directory + file list and changes to file/lines summaries", () => {
+    const brief = briefContext(flows as never, orphans as never, changes);
+    expect(brief.orphanGroups).toEqual([
+      { dir: ".", files: [".gitignore"] },
+      { dir: "docs", files: ["docs/x.md"] },
+    ]);
+    expect(brief.changes).toEqual([
+      { file: "src/orders.ts", lines: "10-42", label: "handleOrder", kind: "function", status: "modified", added: 12, removed: 3 },
+    ]);
   });
 });

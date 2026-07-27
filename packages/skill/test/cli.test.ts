@@ -1,7 +1,7 @@
-// packages/skill/test/cli.test.ts — pure pieces of the CLI: arg parsing and
-// the serve reuse/spawn/conflict decision.
+// packages/skill/test/cli.test.ts — pure pieces of the CLI: arg parsing,
+// the serve reuse/spawn/conflict decision, and response shaping.
 import { describe, it, expect, afterEach } from "vitest";
-import { parseCliArgs } from "../src/cli.js";
+import { parseCliArgs, planOutput, prettyBrief } from "../src/cli.js";
 import { decideServe, statePaths } from "../src/serve.js";
 
 describe("parseCliArgs", () => {
@@ -20,6 +20,60 @@ describe("parseCliArgs", () => {
   it("parses flags that take values even when a boolean flag follows", () => {
     const { flags } = parseCliArgs(["serve", "--repo", "/tmp/x", "--port", "4000"]);
     expect(flags).toEqual({ repo: "/tmp/x", port: "4000" });
+  });
+});
+
+describe("planOutput", () => {
+  const base = {
+    coverage: { changedTotal: 2, covered: 2, unassigned: 0 },
+    overview: "",
+    units: [{ id: "u1", label: "A", kind: "flow" as const, memberStableIds: ["e1"], auto: false, attached: [] }],
+  };
+
+  it("always includes unassigned, [] at full coverage (issue #10)", () => {
+    const out = planOutput({ ...base, unassigned: [] });
+    expect(out.unassigned).toEqual([]);
+    expect("unassigned" in out).toBe(true);
+  });
+
+  it("lists unassigned leftovers and counts only counted attachments", () => {
+    const out = planOutput({
+      ...base,
+      coverage: { changedTotal: 3, covered: 2, unassigned: 1 },
+      units: [{
+        ...base.units[0],
+        attached: [
+          { stableId: "t1", parentStableId: "e1", reason: "tested-by" as const, counted: true },
+          { stableId: "t2", parentStableId: "e1", reason: "same-file" as const, counted: false },
+        ],
+      }],
+      unassigned: [{ stableId: "x", label: "x", file: "x.ts" }],
+    });
+    expect(out.unassigned).toHaveLength(1);
+    expect(out.units[0]).toEqual({ label: "A", kind: "flow", auto: false, members: 1, attached: 1 });
+  });
+});
+
+describe("prettyBrief", () => {
+  it("renders flows, merges, orphan groups and changes as a scannable table", () => {
+    const text = prettyBrief({
+      flows: [{ id: 127, name: "handleOrder", entry: "handleOrder — src/orders.ts", changedCount: 2 }],
+      mergeSuggestions: [{ group: 0, flowIds: [127, 142], names: ["handleOrder", "processOrder"] }],
+      orphanGroups: [{ dir: "docs", files: ["docs/x.md"] }],
+      changes: [{ file: "src/orders.ts", lines: "10-42", label: "handleOrder", kind: "function", status: "modified", added: 12, removed: 3 }],
+    }, ["feat: orders"]);
+    expect(text).toContain("commits:\n  feat: orders");
+    expect(text).toContain("[127] handleOrder (2 changed) — handleOrder — src/orders.ts");
+    expect(text).toContain("[group 0] flows 127+142 — handleOrder, processOrder");
+    expect(text).toContain("docs — docs/x.md");
+    expect(text).toContain("src/orders.ts:10-42 handleOrder (function, modified +12/-3)");
+  });
+
+  it("omits empty sections", () => {
+    const text = prettyBrief({ flows: [], mergeSuggestions: [], orphanGroups: [], changes: [] });
+    expect(text).not.toContain("merge suggestions");
+    expect(text).not.toContain("orphan groups");
+    expect(text).not.toContain("commits");
   });
 });
 
