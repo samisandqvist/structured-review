@@ -36,7 +36,7 @@ touch the SQLite file or hand-roll `curl` — the CLI is the stable surface.
 ```bash
 crw serve [--repo <path>] [--port N]            # ensure the hub runs against a repo
 crw session create --branch <b> --base <ref|empty> [--open]   # base "empty" = whole-repo review
-crw context --session <id> [--full]             # planning view: commit subjects, flows + merge suggestions, orphan groups, change summaries (--full: raw dump)
+crw context --session <id> [--brief|--full]     # planning view: commit subjects, flows + merge suggestions, orphan groups, change summaries (--brief: no stableIds, numeric refs only; --full: raw dump)
 crw plan --session <id> (--auto | --units <file.json>) [--open]
 crw diff --session <id> --node <stableId>       # one node's diff, for grouping decisions
 crw status --session <id>                       # coverage, per-unit reviewed/total, unreviewed list
@@ -87,11 +87,17 @@ is an optional session **overview** plus an ordered list of **units**,
 each either a **flow** or an **orphan group**. The plan file is
 `{ "overview": "...", "units": [...] }` (a bare units array is also accepted):
 
-- **flow-unit** — `{ "kind": "flow", "flowEntryStableIds": ["<entry>", ...], "label": "...", "rationale": "..." }`
-  (the singular `flowEntryStableId` is still accepted)
+- **flow-unit** — `{ "kind": "flow", "flowIds": [127], "label": "...", "rationale": "..." }`
+  — reference flows by the numeric `id` the context printed. `"mergeGroup": 0`
+  expands to that `mergeSuggestions` entry's whole flow set. Both resolve to
+  entry stableIds at submit and combine with each other and with explicit
+  `flowEntryStableIds: ["<entry>", ...]` (the singular `flowEntryStableId` is
+  also still accepted) — prefer the numeric refs; never transcribe SCIP
+  stableIds by hand. An unknown `flowId`/`mergeGroup` fails the submit loudly.
 - **orphan-unit** — `{ "kind": "orphans", "orphanStableIds": ["..."], "orphanFiles": ["docs/**"], "label": "...", "rationale": "..." }`
   — `orphanFiles` globs (`**`, `*`, `?`) resolve to unassigned changes at
-  submit; prefer them over long stableId lists. Either field alone is fine;
+  submit; prefer them over long stableId lists. Wildcards match dotfiles
+  (`dir/*` covers `dir/.env.example`). Either field alone is fine;
   overlapping matches go to the earliest unit; a glob-only unit that matches
   nothing fails the submit loudly.
 
@@ -102,23 +108,24 @@ Steps for an LLM-authored plan:
    `commitSubjects` — no separate `git log` step. This is intent input, not
    diff reading — the "never run `git diff`" rule below stands. No PR or
    uninformative messages → proceed without; never block on missing intent.
-2. After `crw session create`, run `crw context --session <id>`. It prints
-   `{ sessionId, commitSubjects, flows, mergeSuggestions, orphanGroups, changes }`:
-   `flows` are the **affected** flows only (`name`, `entryStableId`,
-   `changedStableIds` — no step arrays); `mergeSuggestions` precomputes the
-   flow-merge guideline (next step); `orphanGroups` are the orphans grouped by
-   directory, each carrying just `stableId`/`label`/`file`/`residualKind`; and
-   `changes` is a compact per-node summary (kind, file, lines, +/- counts,
-   signature) — **not** diff bodies. That is everything a plan references;
+2. After `crw session create`, run `crw context --session <id> --brief`. It
+   prints `{ sessionId, commitSubjects, flows, mergeSuggestions, orphanGroups, changes }`
+   with **no stableIds anywhere**: `flows` are the **affected** flows as
+   `{ id, name, entry, changedCount }` — reference them in the plan by that
+   numeric `id`; `mergeSuggestions` precomputes the flow-merge guideline
+   (next step) as `{ group, flowIds, names }`; `orphanGroups` are
+   `{ dir, files }` — write `orphanFiles` globs from them; and `changes` is a
+   compact per-node summary (file, lines, label, kind, status, +/- counts) —
+   **not** diff bodies. That is everything a plan references. Without
+   `--brief` the context carries full stableIds and per-pair merge evidence;
    `--full` restores the complete flat dump (all flows with steps) if you
    truly need it.
-3. Make one flow-unit per **affected** flow, using `flowEntryStableIds: [entryStableId]`.
-   Do not split flows. **Merge** flows into one multi-entry flow-unit
-   (`flowEntryStableIds: [e1, e2, ...]`) when they substantially review the same
-   change. The guideline (shared `changedStableIds` ≥ half of the smaller
-   flow's changed set) is precomputed: each entry in `mergeSuggestions` is a
-   group with ready-to-paste `entryStableIds`, `names`, and per-pair evidence
-   (`shared`/`smaller`). Treat a suggestion as the default merge and spend
+3. Make one flow-unit per **affected** flow, using `flowIds: [id]`. Do not
+   split flows. **Merge** flows into one multi-entry flow-unit when they
+   substantially review the same change. The guideline (shared changed
+   nodes ≥ half of the smaller flow's changed set) is precomputed: write
+   `"mergeGroup": <group>` to take a whole suggestion, or list the ids
+   (`flowIds: [127, 142]`). Treat a suggestion as the default merge and spend
    your judgment on the label — name the shared capability, not the entry
    names (e.g. "Order validation — via API, CLI and worker"). Never merge
    flows with disjoint changed sets just to shorten the plan.
@@ -150,8 +157,9 @@ Steps for an LLM-authored plan:
    `crw plan --session <id> --units plan.json`. It prints `coverage` and
    per-unit `attached` counts. `coverage.unassigned > 0` now means true
    leftovers (nothing could attach them) — the response lists each under
-   `unassigned` (`stableId`, `label`, `file`): add orphan-units for exactly
-   those stableIds (or an `orphanFiles` glob that covers them) and re-submit.
+   `unassigned` (`stableId`, `label`, `file`; always present, `[]` at full
+   coverage): add orphan-units for exactly those stableIds (or an
+   `orphanFiles` glob that covers them) and re-submit.
 
 **Never run `git diff` for planning.** If you must read a node's code to decide
 grouping, use `crw diff --session <id> --node <stableId>` — it returns just that

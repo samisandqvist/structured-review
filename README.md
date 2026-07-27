@@ -104,7 +104,7 @@ crw serve [--repo <path>] [--port N]            # start or reuse the hub for a r
 crw session create --branch <b> --base <ref|empty> [--open]   # "empty" = whole-repo review
 crw session list
 crw session delete --session <id>
-crw context --session <id> [--full]             # planning view: commit subjects, flows + merge suggestions, orphan groups, change summaries (--full: raw dump)
+crw context --session <id> [--brief|--full]     # planning view: commit subjects, flows + merge suggestions, orphan groups, change summaries (--brief: no stableIds, numeric refs only; --full: raw dump)
 crw plan --session <id> (--auto | --units <file.json>) [--open]
 crw diff --session <id> --node <stableId>       # a single node's diff
 crw status --session <id>                       # coverage, overview, per-unit reviewed/total, unreviewed list
@@ -129,8 +129,12 @@ affected execution flow; tests/DTOs/residuals attach themselves to those
 units at submit), and opens the UI to that session. `crw plan --units`
 takes an LLM- or hand-authored plan instead — a
 `{ "overview": "...", "units": [...] }` file (bare units array also
-accepted); the response lists any unassigned leftovers by stableId so the
-plan can be fixed and re-submitted. See
+accepted). Flow units can reference flows by the numeric ids the context
+prints (`"flowIds": [127]`, `"mergeGroup": 0`) instead of transcribing
+SCIP stableIds, and orphan units can claim files by glob
+(`"orphanFiles": ["docs/**"]`, dotfiles included); the response always
+lists unassigned leftovers (`[]` at full coverage) so the plan can be
+fixed and re-submitted. See
 [`packages/skill/skill.md`](packages/skill/skill.md) for the plan schema
 and authoring guidance.
 
