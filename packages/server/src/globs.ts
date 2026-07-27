@@ -6,8 +6,22 @@
 import { posix } from "node:path";
 import type { PlanUnitInput } from "./coverage.js";
 
+// matchesGlob follows the minimatch default of not letting wildcards match a
+// leading dot, and exposes no `dot: true` option. For a review tool dotfiles
+// (.env.example, .gitignore, CI config) are exactly what orphan globs exist to
+// cover, so we hide leading dots behind a sentinel on both sides before
+// matching: `*` then matches `.env` (via the sentinel) while a literal-dot
+// pattern like `.env*` still only matches dotfiles.
+const DOT_SENTINEL = "\u0001"; // control char that cannot appear in a repo path
+function hideLeadingDots(p: string): string {
+  return p
+    .split("/")
+    .map((seg) => (seg.startsWith(".") ? DOT_SENTINEL + seg.slice(1) : seg))
+    .join("/");
+}
+
 export function matchGlob(path: string, glob: string): boolean {
-  return posix.matchesGlob(path, glob);
+  return posix.matchesGlob(hideLeadingDots(path), hideLeadingDots(glob));
 }
 
 /**

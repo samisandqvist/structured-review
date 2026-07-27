@@ -27,6 +27,18 @@ describe("matchGlob", () => {
     expect(matchGlob("docs/b.md", "b.md")).toBe(false);
     expect(matchGlob("docs/b.md", "docs")).toBe(false);
   });
+  it("wildcards match dotfiles (issue #9)", () => {
+    expect(matchGlob("documentation-gathering/.env.example", "documentation-gathering/*")).toBe(true);
+    expect(matchGlob(".gitignore", "*")).toBe(true);
+    expect(matchGlob("a/.github/workflows/ci.yml", "a/**")).toBe(true);
+    expect(matchGlob(".env", "?env")).toBe(true);
+  });
+  it("literal-dot patterns still require the dot", () => {
+    expect(matchGlob(".env", "env*")).toBe(false);
+    expect(matchGlob(".env.example", ".env*")).toBe(true);
+    expect(matchGlob("env.example", ".env*")).toBe(false);
+    expect(matchGlob(".envrc", ".*")).toBe(true);
+  });
 });
 
 describe("resolveOrphanFiles", () => {
