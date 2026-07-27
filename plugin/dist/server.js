@@ -33140,8 +33140,12 @@ async function parseBody2(c, schema) {
 
 // packages/server/src/globs.ts
 import { posix } from "node:path";
+var DOT_SENTINEL = "";
+function hideLeadingDots(p) {
+  return p.split("/").map((seg) => seg.startsWith(".") ? DOT_SENTINEL + seg.slice(1) : seg).join("/");
+}
 function matchGlob(path, glob) {
-  return posix.matchesGlob(path, glob);
+  return posix.matchesGlob(hideLeadingDots(path), hideLeadingDots(glob));
 }
 function resolveOrphanFiles(units, orphanNodes) {
   const claimed = new Set(

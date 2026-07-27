@@ -33,6 +33,39 @@ function compactContext(flows, orphans) {
     }))
   };
 }
+function briefContext(flows, orphans, changes) {
+  const compact = compactContext(flows, orphans);
+  const entryOf = new Map(
+    flows.map((f) => {
+      const s = f.steps[0];
+      return [f.id, s ? `${s.label} \u2014 ${s.file}` : f.entryStableId];
+    })
+  );
+  const idByEntry = new Map(compact.flows.map((f) => [f.entryStableId, f.id]));
+  return {
+    flows: compact.flows.map((f) => ({
+      id: f.id,
+      name: f.name,
+      entry: entryOf.get(f.id) ?? f.entryStableId,
+      changedCount: f.changedStableIds.length
+    })),
+    mergeSuggestions: suggestMerges(compact.flows).map((s, i) => ({
+      group: i,
+      flowIds: s.entryStableIds.map((e) => idByEntry.get(e)),
+      names: s.names
+    })),
+    orphanGroups: compact.orphanGroups.map((g) => ({ dir: g.dir, files: g.orphans.map((o) => o.file) })),
+    changes: changes.map((c) => ({
+      file: c.file,
+      lines: `${c.startLine}-${c.endLine}`,
+      label: c.label,
+      kind: c.kind,
+      status: c.status,
+      added: c.added,
+      removed: c.removed
+    }))
+  };
+}
 function suggestMerges(flows) {
   const parent = /* @__PURE__ */ new Map();
   const find = (x) => parent.get(x) === x ? x : find(parent.get(x));
@@ -63,6 +96,36 @@ function suggestMerges(flows) {
     groups.get(find(p.aId)).pairs.push({ a: p.a, b: p.b, shared: p.shared, smaller: p.smaller });
   }
   return [...groups.values()].filter((g) => g.entryStableIds.length >= 2);
+}
+function resolvePlanRefs(units, flows, mergeSuggestions) {
+  const byId = new Map(flows.map((f) => [f.id, f.entryStableId]));
+  return units.map((u) => {
+    if (u.kind !== "flow" || u.flowIds === void 0 && u.mergeGroup === void 0) return u;
+    const entries = [
+      ...u.flowEntryStableIds ?? [],
+      ...u.flowEntryStableId ? [u.flowEntryStableId] : []
+    ];
+    for (const id of u.flowIds ?? []) {
+      const entry = byId.get(id);
+      if (entry === void 0) {
+        throw new Error(
+          `unit '${u.label}': unknown flowId ${id} (affected flows: ${[...byId.keys()].join(", ") || "none"})`
+        );
+      }
+      entries.push(entry);
+    }
+    if (u.mergeGroup !== void 0) {
+      const group = mergeSuggestions[u.mergeGroup];
+      if (!group) {
+        throw new Error(
+          `unit '${u.label}': mergeGroup ${u.mergeGroup} out of range (${mergeSuggestions.length} suggestion(s), zero-indexed)`
+        );
+      }
+      entries.push(...group.entryStableIds);
+    }
+    const { flowIds: _ids, mergeGroup: _grp, flowEntryStableId: _single, ...rest } = u;
+    return { ...rest, flowEntryStableIds: [...new Set(entries)] };
+  });
 }
 function parsePlanFile(text) {
   const raw = JSON.parse(text);
@@ -335,7 +398,7 @@ var USAGE = `usage:
   crw session create --branch <b> --base <ref|empty> [--open]
   crw session list
   crw session delete --session <id>
-  crw context --session <id> [--full]
+  crw context --session <id> [--brief|--full]
   crw plan --session <id> (--auto | --units <file.json>) [--open]
   crw diff --session <id> --node <stableId>
   crw status --session <id>
@@ -344,7 +407,7 @@ var USAGE = `usage:
   crw gc [--repo <path>] [--all]
   crw shutdown
 global flags: --port N (hub port), --pretty (human-readable output)`;
-var BOOL_FLAGS = /* @__PURE__ */ new Set(["auto", "open", "pretty", "all", "full"]);
+var BOOL_FLAGS = /* @__PURE__ */ new Set(["auto", "open", "pretty", "all", "full", "brief"]);
 function parseCliArgs(argv) {
   const positionals = [];
   const flags = {};
@@ -471,6 +534,19 @@ async function cmdShutdown(base) {
   const result = await shutdownHub(base);
   return { json: result, pretty: `hub stopping${result.pid ? ` (pid ${result.pid})` : ""}` };
 }
+function prettyBrief(brief, commitSubjects) {
+  return [
+    ...commitSubjects?.length ? ["commits:", ...commitSubjects.map((s) => `  ${s}`)] : [],
+    `flows (${brief.flows.length} affected):`,
+    ...brief.flows.map((f) => `  [${f.id}] ${f.name} (${f.changedCount} changed) \u2014 ${f.entry}`),
+    ...brief.mergeSuggestions.length ? ["merge suggestions:"] : [],
+    ...brief.mergeSuggestions.map((s) => `  [group ${s.group}] flows ${s.flowIds.join("+")} \u2014 ${s.names.join(", ")}`),
+    ...brief.orphanGroups.length ? ["orphan groups:"] : [],
+    ...brief.orphanGroups.map((g) => `  ${g.dir} \u2014 ${g.files.join(", ")}`),
+    `changes (${brief.changes.length}):`,
+    ...brief.changes.map((c) => `  ${c.file}:${c.lines} ${c.label} (${c.kind}, ${c.status} +${c.added}/-${c.removed})`)
+  ].join("\n");
+}
 async function cmdContext(base, flags) {
   const sessionId = required(flags, "session");
   const [{ flows, orphans }, { changes, commitSubjects }] = await Promise.all([
@@ -479,8 +555,28 @@ async function cmdContext(base, flags) {
   ]);
   const subjects = commitSubjects === void 0 ? {} : { commitSubjects };
   if (flags.full) return { json: { sessionId, ...subjects, flows, orphans, changes } };
+  if (flags.brief) {
+    const brief = briefContext(flows, orphans, changes);
+    return { json: { sessionId, ...subjects, ...brief }, pretty: prettyBrief(brief, commitSubjects) };
+  }
   const compact = compactContext(flows, orphans);
   return { json: { sessionId, ...subjects, flows: compact.flows, mergeSuggestions: suggestMerges(compact.flows), orphanGroups: compact.orphanGroups, changes } };
+}
+function planOutput(result) {
+  return {
+    coverage: result.coverage,
+    ...result.overview ? { overview: result.overview } : {},
+    // Leftovers by stableId so a planner can author orphan-units for them and
+    // re-submit without re-fetching the session.
+    unassigned: result.unassigned ?? [],
+    units: result.units.map((u) => ({
+      label: u.label,
+      kind: u.kind,
+      auto: u.auto,
+      members: u.memberStableIds.length,
+      attached: (u.attached ?? []).filter((m) => m.counted).length
+    }))
+  };
 }
 async function cmdPlan(base, flags) {
   const sessionId = required(flags, "session");
@@ -491,27 +587,19 @@ async function cmdPlan(base, flags) {
     units = defaultPartition(flows, orphans);
   } else if (typeof flags.units === "string") {
     ({ units, overview } = parsePlanFile(readFileSync2(flags.units, "utf8")));
+    if (units.some((u) => u.kind === "flow" && (u.flowIds !== void 0 || u.mergeGroup !== void 0))) {
+      const { flows, orphans } = await getFlows(base, sessionId);
+      const compact = compactContext(flows, orphans);
+      units = resolvePlanRefs(units, compact.flows, suggestMerges(compact.flows));
+    }
   } else {
     throw new Error(`plan needs --auto or --units <file.json>
 ${USAGE}`);
   }
   const result = await writePlan(base, sessionId, units, overview);
   if (flags.open) launchUI(base, sessionId);
-  const unassigned = result.unassigned ?? [];
-  const out = {
-    coverage: result.coverage,
-    ...result.overview ? { overview: result.overview } : {},
-    // Leftovers by stableId so a planner can author orphan-units for them and
-    // re-submit without re-fetching the session.
-    ...unassigned.length > 0 ? { unassigned } : {},
-    units: result.units.map((u) => ({
-      label: u.label,
-      kind: u.kind,
-      auto: u.auto,
-      members: u.memberStableIds.length,
-      attached: (u.attached ?? []).filter((m) => m.counted).length
-    }))
-  };
+  const out = planOutput(result);
+  const unassigned = out.unassigned;
   return {
     json: out,
     pretty: [
@@ -645,5 +733,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 }
 export {
   parseCliArgs,
+  planOutput,
+  prettyBrief,
   runCli
 };
