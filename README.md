@@ -6,6 +6,12 @@ tree — and tracks review coverage per unit so nothing changed goes unseen.
 Supports **TypeScript, Python, and Java** in one session. **Status: alpha,
 in active dogfooding.**
 
+## Status
+
+This software has been vibecoded as an experiment to validate a flow-based
+software review process. It is pre-alpha quality and very much subject to
+change.
+
 ## Features
 
 - **Execution-flow review plans.** Changes are grouped into ordered review
