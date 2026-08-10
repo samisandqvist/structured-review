@@ -91,10 +91,35 @@ describe("file-level requires map", () => {
       },
     ];
     const g = buildGraphFromIndex({ documents }, "/repo");
-    expect(g.fileRequires.get("src/ctrl.ts")).toEqual(new Set(["src/dto.ts"]));
-    expect(g.fileRequires.get("src/svc.ts")).toEqual(new Set(["src/dto.ts"]));
+    // Type-symbol (`#`) references carry hasValueRef: false — pass 3 uses the
+    // edge, pass 4 filters on the flag (#12).
+    expect(g.fileRequires.get("src/ctrl.ts")).toEqual(new Map([["src/dto.ts", { hasValueRef: false }]]));
+    expect(g.fileRequires.get("src/svc.ts")).toEqual(new Map([["src/dto.ts", { hasValueRef: false }]]));
     expect(g.fileRequires.has("src/dto.ts")).toBe(false); // same-file use is not a requires
     expect(g.nodes.has(DTO_TYPE)).toBe(false); // types still excluded as graph nodes
+  });
+
+  it("a value reference upgrades the edge even when type refs came first", () => {
+    const TYPE = "scip-typescript npm pkg 1.0 src/`schema.ts`/User#";
+    const FN = "scip-typescript npm pkg 1.0 src/`schema.ts`/makeUser().";
+    const documents: ScipDocument[] = [
+      {
+        relativePath: "src/schema.ts",
+        occurrences: [
+          { symbol: TYPE, symbolRoles: 1, range: [0, 13, 17] },
+          { symbol: FN, symbolRoles: 1, range: [2, 9, 17], enclosingRange: [2, 0, 4, 1] },
+        ],
+      },
+      {
+        relativePath: "src/consumer.ts",
+        occurrences: [
+          { symbol: TYPE, symbolRoles: 2, range: [0, 9, 13] }, // import type { User }
+          { symbol: FN, symbolRoles: 0, range: [3, 4, 12] },   // makeUser() call
+        ],
+      },
+    ];
+    const g = buildGraphFromIndex({ documents }, "/repo");
+    expect(g.fileRequires.get("src/consumer.ts")).toEqual(new Map([["src/schema.ts", { hasValueRef: true }]]));
   });
 
   it("includes function imports/references, so test files require what they import", () => {
@@ -113,7 +138,7 @@ describe("file-level requires map", () => {
       },
     ];
     const g = buildGraphFromIndex({ documents }, "/repo");
-    expect(g.fileRequires.get("test/a.test.ts")).toEqual(new Set(["src/a.ts"]));
+    expect(g.fileRequires.get("test/a.test.ts")).toEqual(new Map([["src/a.ts", { hasValueRef: true }]]));
   });
 });
 

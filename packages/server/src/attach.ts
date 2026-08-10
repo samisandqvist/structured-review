@@ -3,7 +3,7 @@
 // Runs inside PUT /plan; results persist on units and die with them (spec:
 // docs/superpowers/specs/2026-07-17-unassigned-changes-design.md).
 import { flowEntries, unitCoverage, type PlanUnitInput } from "./coverage.js";
-import type { Flow } from "./graph/provider.js";
+import type { FileRequires, Flow } from "./graph/provider.js";
 import type { AttachedMember } from "./types.js";
 
 /** The node facts derivation needs — a subset of the session Node. */
@@ -97,7 +97,7 @@ export function deriveAttachments(
   flows: Flow[],
   nodes: AttachNode[],
   testEdges: TestEdge[],
-  fileRequires: Map<string, Set<string>>
+  fileRequires: FileRequires
 ): AttachedMember[][] {
   const byStable = new Map(nodes.map((n) => [n.stableId, n]));
   const changed = new Set(nodes.filter((n) => n.changeStatus === "changed").map((n) => n.stableId));
@@ -160,13 +160,21 @@ export function deriveAttachments(
     // a basename match (users.service.spec -> users.service) beats walk
     // order — otherwise an early unit holding a widely-imported hub file
     // (schema, shared types) becomes a magnet for every changed test (#11).
-    // Tests only — for production code this reversed direction would attach
-    // on far weaker evidence.
+    // Type-only edges (import type for fixture convenience) say nothing
+    // about what the spec exercises, so they are candidates only when the
+    // basename matches, e.g. a type-test spec (#12). Tests only — for
+    // production code this reversed direction would attach on far weaker
+    // evidence.
     if (node.isTest) {
       const stems = testNameStems(node.file);
-      const rank = (id: string) => (stems.has(fileStem(byStable.get(id)!.file)) ? 0 : 1);
+      const nameMatch = (id: string) => stems.has(fileStem(byStable.get(id)!.file));
+      const rank = (id: string) => (nameMatch(id) ? 0 : 1);
+      const reqs = fileRequires.get(node.file);
       const imported = [...covered]
-        .filter((c) => fileRequires.get(node.file)?.has(byStable.get(c)?.file ?? ""))
+        .filter((c) => {
+          const edge = reqs?.get(byStable.get(c)?.file ?? "");
+          return edge != null && (edge.hasValueRef || nameMatch(c));
+        })
         .sort((a, b) => rank(a) - rank(b) || byWalk(a, b));
       if (imported.length > 0) {
         attach({ stableId, parentStableId: imported[0], reason: "tested-by", counted: true });

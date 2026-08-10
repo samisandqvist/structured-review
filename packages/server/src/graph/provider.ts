@@ -55,7 +55,14 @@ export interface GraphProvider {
    *  (e.g. "Java indexing skipped: toolchain missing"). Absent/[] = none. */
   getIndexWarnings?(): Promise<string[]>;
   /** Optional: file-level requires relation — consumer file -> files defining
-   *  the type symbols it references/imports. Used to attach changed DTOs to
-   *  their consumers at plan time. Absent/empty = required-by pass finds nothing. */
-  getFileRequires?(): Promise<Map<string, Set<string>>>;
+   *  the symbols it references/imports, with per-edge evidence strength:
+   *  hasValueRef is true when at least one referenced symbol is a value
+   *  (function, method, term — not a bare SCIP `#` type). Used to attach
+   *  changed DTOs to their consumers at plan time (type edges included) and
+   *  to filter test-import candidates (type-only edges are weak evidence,
+   *  #12). Absent/empty = required-by pass finds nothing. */
+  getFileRequires?(): Promise<FileRequires>;
 }
+
+/** consumer file -> defining file -> evidence strength of the edge. */
+export type FileRequires = Map<string, Map<string, { hasValueRef: boolean }>>;
