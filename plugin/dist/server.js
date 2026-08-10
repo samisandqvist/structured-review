@@ -18352,7 +18352,11 @@ function buildGraphFromIndex(idx, root) {
       if (!o.symbol) continue;
       const def = defFile.get(o.symbol);
       if (!def || def === file2) continue;
-      (fileRequires.get(file2) ?? fileRequires.set(file2, /* @__PURE__ */ new Set()).get(file2)).add(def);
+      const isValue = !o.symbol.endsWith("#");
+      const edges = fileRequires.get(file2) ?? fileRequires.set(file2, /* @__PURE__ */ new Map()).get(file2);
+      const edge = edges.get(def);
+      if (edge) edge.hasValueRef ||= isValue;
+      else edges.set(def, { hasValueRef: isValue });
     }
   }
   const callSets = /* @__PURE__ */ new Map();
@@ -18532,8 +18536,13 @@ function deriveAttachments(units, flows, nodes, testEdges, fileRequires) {
     }
     if (node.isTest) {
       const stems = testNameStems(node.file);
-      const rank = (id) => stems.has(fileStem(byStable.get(id).file)) ? 0 : 1;
-      const imported = [...covered].filter((c) => fileRequires.get(node.file)?.has(byStable.get(c)?.file ?? "")).sort((a, b) => rank(a) - rank(b) || byWalk(a, b));
+      const nameMatch = (id) => stems.has(fileStem(byStable.get(id).file));
+      const rank = (id) => nameMatch(id) ? 0 : 1;
+      const reqs = fileRequires.get(node.file);
+      const imported = [...covered].filter((c) => {
+        const edge = reqs?.get(byStable.get(c)?.file ?? "");
+        return edge != null && (edge.hasValueRef || nameMatch(c));
+      }).sort((a, b) => rank(a) - rank(b) || byWalk(a, b));
       if (imported.length > 0) {
         attach({ stableId, parentStableId: imported[0], reason: "tested-by", counted: true });
       }
