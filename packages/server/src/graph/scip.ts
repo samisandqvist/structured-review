@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import protobuf from "protobufjs";
-import type { GraphProvider, GraphNode, GraphEdge, ChangeSubgraph, Flow } from "./provider.js";
+import type { GraphProvider, GraphNode, GraphEdge, ChangeSubgraph, Flow, FileRequires } from "./provider.js";
 import type { ChangeStatus, EdgeType } from "../types.js";
 import { fileChangedRanges, rangesOverlap, repoFingerprint, repoRoot, subtreeFingerprint, type LineRange } from "../diff.js";
 import { discoverLanguageRoots, languagePathspecs, rootHasSources, type IndexerJob } from "./roots.js";
@@ -44,8 +44,9 @@ export interface BuiltGraph {
   nodes: Map<string, RawNode>; // symbol -> node
   callAdj: Map<string, string[]>; // caller -> callees (deduped)
   callRev: Map<string, string[]>; // callee -> callers
-  /** consumer file -> files defining the type symbols it references/imports. */
-  fileRequires: Map<string, Set<string>>;
+  /** consumer file -> files defining the symbols it references/imports, with
+   *  per-edge hasValueRef (false = only bare `#` type symbols referenced). */
+  fileRequires: FileRequires;
   /** Per-language degradation notices from job planning (e.g. java toolchain missing). */
   warnings?: string[];
 }
@@ -291,7 +292,7 @@ export class ScipGraphProvider implements GraphProvider {
     return (await this.buildGraph()).warnings ?? [];
   }
 
-  async getFileRequires(): Promise<Map<string, Set<string>>> {
+  async getFileRequires(): Promise<FileRequires> {
     return (await this.buildGraph()).fileRequires;
   }
 
@@ -556,7 +557,7 @@ export function buildGraphFromIndex(idx: ScipIndex, root: string): BuiltGraph {
       defFile.set(o.symbol, file);
     }
   }
-  const fileRequires = new Map<string, Set<string>>();
+  const fileRequires: FileRequires = new Map();
   for (const d of idx.documents) {
     const file = rel(d.relativePath ?? "");
     for (const o of d.occurrences ?? []) {
@@ -564,7 +565,16 @@ export function buildGraphFromIndex(idx: ScipIndex, root: string): BuiltGraph {
       if (!o.symbol) continue;
       const def = defFile.get(o.symbol);
       if (!def || def === file) continue;
-      (fileRequires.get(file) ?? fileRequires.set(file, new Set()).get(file)!).add(def);
+      // A bare type-descriptor symbol (`…User#`) is a type reference; anything
+      // deeper (`…User#create().`, terms) is a value reference and upgrades
+      // the edge. Kind isn't emitted by scip-typescript, so the suffix is the
+      // only classification we have — classes still surface as value refs via
+      // their methods.
+      const isValue = !o.symbol.endsWith("#");
+      const edges = fileRequires.get(file) ?? fileRequires.set(file, new Map()).get(file)!;
+      const edge = edges.get(def);
+      if (edge) edge.hasValueRef ||= isValue;
+      else edges.set(def, { hasValueRef: isValue });
     }
   }
 

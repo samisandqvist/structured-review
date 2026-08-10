@@ -223,7 +223,7 @@ export function createSessionsRoute(ctx: AppContext) {
        WHERE e.session_id = ? AND e.edge_type = 'test'`
     ).all(sessionId) as { prod: string; test: string }[])
       .map((r) => ({ productionStableId: r.prod, testStableId: r.test }));
-    const fileRequires = (await ctx.graphProvider.getFileRequires?.()) ?? new Map<string, Set<string>>();
+    const fileRequires = (await ctx.graphProvider.getFileRequires?.()) ?? new Map();
     const attachedPerUnit = deriveAttachments(units, flows, sessionNodes, testEdges, fileRequires);
     const attachedIds = countedAttachmentIds(attachedPerUnit);
     const leftovers = unassigned.filter((id) => !attachedIds.has(id));
