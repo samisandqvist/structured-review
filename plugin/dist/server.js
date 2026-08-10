@@ -203,8 +203,9 @@ function repoRoot() {
   return cachedRoot;
 }
 function getNodeDiff(baseRef, file2, startLine, endLine, changeStatus, root = repoRoot()) {
+  const totalLines = fileTotalLines(file2, root);
   if (changeStatus === "unchanged") {
-    return withTexts(contextLines(readSlice(root, file2, startLine, endLine), startLine));
+    return { ...withTexts(contextLines(readSlice(root, file2, startLine, endLine), startLine)), totalLines };
   }
   let raw2;
   try {
@@ -215,9 +216,18 @@ function getNodeDiff(baseRef, file2, startLine, endLine, changeStatus, root = re
       ...QUIET
     });
   } catch {
-    return withTexts(contextLines(readSlice(root, file2, startLine, endLine), startLine));
+    return { ...withTexts(contextLines(readSlice(root, file2, startLine, endLine), startLine)), totalLines };
   }
-  return extractHunkDiff(raw2, startLine, endLine) ?? sliceBoth(root, file2, startLine, endLine);
+  return { ...extractHunkDiff(raw2, startLine, endLine) ?? sliceBoth(root, file2, startLine, endLine), totalLines };
+}
+function fileTotalLines(file2, root = repoRoot()) {
+  try {
+    const lines = readFileSync(join(root, file2), "utf8").split("\n");
+    if (lines[lines.length - 1] === "") lines.pop();
+    return lines.length;
+  } catch {
+    return 0;
+  }
 }
 function anchorRowRange(lines, anchor) {
   const find = (line, side) => lines.findIndex(
@@ -274,7 +284,8 @@ function getNodeDiffForRanges(baseRef, file2, ranges, root = repoRoot()) {
   } catch {
     return null;
   }
-  return extractLinesForRanges(raw2, ranges);
+  const d = extractLinesForRanges(raw2, ranges);
+  return d && { ...d, totalLines: fileTotalLines(file2, root) };
 }
 function expandedContextSlice(baseRef, file2, startLine, endLine, root = repoRoot()) {
   let fileLines;
@@ -18520,13 +18531,31 @@ function deriveAttachments(units, flows, nodes, testEdges, fileRequires) {
       continue;
     }
     if (node.isTest) {
-      const imported = [...covered].filter((c) => fileRequires.get(node.file)?.has(byStable.get(c)?.file ?? "")).sort(byWalk);
+      const stems = testNameStems(node.file);
+      const rank = (id) => stems.has(fileStem(byStable.get(id).file)) ? 0 : 1;
+      const imported = [...covered].filter((c) => fileRequires.get(node.file)?.has(byStable.get(c)?.file ?? "")).sort((a, b) => rank(a) - rank(b) || byWalk(a, b));
       if (imported.length > 0) {
         attach({ stableId, parentStableId: imported[0], reason: "tested-by", counted: true });
       }
     }
   }
   return attached;
+}
+function fileStem(file2) {
+  const base = file2.slice(file2.lastIndexOf("/") + 1).toLowerCase();
+  const dot = base.lastIndexOf(".");
+  return dot > 0 ? base.slice(0, dot) : base;
+}
+function testNameStems(file2) {
+  const stem = fileStem(file2);
+  const out = /* @__PURE__ */ new Set([stem]);
+  const sep = /[._-](spec|specs|test|tests)$/.exec(stem);
+  if (sep) out.add(stem.slice(0, sep.index));
+  const bare = /(spec|test|tests)$/.exec(stem);
+  if (bare && bare.index > 0) out.add(stem.slice(0, bare.index));
+  const prefix = /^(test|spec)[._-]/.exec(stem);
+  if (prefix) out.add(stem.slice(prefix[0].length));
+  return out;
 }
 function countedAttachmentIds(attached) {
   return new Set(attached.flat().filter((m) => m.counted).map((m) => m.stableId));
@@ -33502,7 +33531,7 @@ function createNodesRoute(ctx) {
     if (!node || node.sessionId !== sessionId) return c.json({ error: "not found" }, 404);
     const { callers, callees } = getNodeNeighbors(ctx.db, node.id);
     const session = getSession(ctx.db, sessionId);
-    const diff = session ? node.residualRanges && node.residualRanges.length > 0 ? getNodeDiffForRanges(session.baseRef, node.file, node.residualRanges, ctx.repoRoot) ?? getNodeDiff(session.baseRef, node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot) : getNodeDiff(session.baseRef, node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot) : { oldText: "", newText: "", lines: [] };
+    const diff = session ? node.residualRanges && node.residualRanges.length > 0 ? getNodeDiffForRanges(session.baseRef, node.file, node.residualRanges, ctx.repoRoot) ?? getNodeDiff(session.baseRef, node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot) : getNodeDiff(session.baseRef, node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot) : { oldText: "", newText: "", lines: [], totalLines: 0 };
     return c.json({ node, callers, callees, diff });
   });
   router.get("/:id/nodes/:nodeId/context", (c) => {
