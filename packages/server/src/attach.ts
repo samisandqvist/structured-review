@@ -156,19 +156,47 @@ export function deriveAttachments(
     // Pass 4 — test imports: a test whose call edges didn't resolve (e.g.
     // vitest `it()` bodies are anonymous callbacks, so no TESTED_BY edge
     // forms) still names what it exercises via its file's imports. Nest it
-    // under the first covered node its file requires. Tests only — for
-    // production code this reversed direction would attach on far weaker
-    // evidence.
+    // under the covered node its file requires, ranked by evidence strength:
+    // a basename match (users.service.spec -> users.service) beats walk
+    // order — otherwise an early unit holding a widely-imported hub file
+    // (schema, shared types) becomes a magnet for every changed test (#11).
+    // Tests only — for production code this reversed direction would attach
+    // on far weaker evidence.
     if (node.isTest) {
+      const stems = testNameStems(node.file);
+      const rank = (id: string) => (stems.has(fileStem(byStable.get(id)!.file)) ? 0 : 1);
       const imported = [...covered]
         .filter((c) => fileRequires.get(node.file)?.has(byStable.get(c)?.file ?? ""))
-        .sort(byWalk);
+        .sort((a, b) => rank(a) - rank(b) || byWalk(a, b));
       if (imported.length > 0) {
         attach({ stableId, parentStableId: imported[0], reason: "tested-by", counted: true });
       }
     }
   }
   return attached;
+}
+
+/** Lowercased basename without extension: src/a/Users.service.ts -> users.service. */
+function fileStem(file: string): string {
+  const base = file.slice(file.lastIndexOf("/") + 1).toLowerCase();
+  const dot = base.lastIndexOf(".");
+  return dot > 0 ? base.slice(0, dot) : base;
+}
+
+/** The subject stems a test file's name points at, lowercased: its own stem
+ *  plus that stem with one common test marker stripped — separator suffix
+ *  (users.service.spec -> users.service), bare suffix (UsersServiceTest ->
+ *  UsersService), or prefix (test_users -> users). */
+function testNameStems(file: string): Set<string> {
+  const stem = fileStem(file);
+  const out = new Set([stem]);
+  const sep = /[._-](spec|specs|test|tests)$/.exec(stem);
+  if (sep) out.add(stem.slice(0, sep.index));
+  const bare = /(spec|test|tests)$/.exec(stem);
+  if (bare && bare.index > 0) out.add(stem.slice(0, bare.index));
+  const prefix = /^(test|spec)[._-]/.exec(stem);
+  if (prefix) out.add(stem.slice(prefix[0].length));
+  return out;
 }
 
 /** Counted attachment stableIds across all units (they count as covered). */
