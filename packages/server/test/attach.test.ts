@@ -105,6 +105,59 @@ describe("deriveAttachments — test imports (pass 4)", () => {
     expect(attached.flat()).toEqual([]);
   });
 
+  it("prefers the covered node whose file basename matches the spec name over an earlier hub import", () => {
+    // Issue #11: every spec imported the schema hub (fixture types), and the
+    // schema sat in an early orphan unit — walk order made it a test magnet.
+    const nodes = [
+      node("schema", { file: "src/database/schema.ts" }),
+      node("svc", { file: "src/users/users.service.ts" }),
+      node("spec", { isTest: true, file: "src/users/users.service.spec.ts" }),
+    ];
+    const flows = [flow(1, ["svc"])];
+    const requires = new Map([
+      ["src/users/users.service.spec.ts", new Set(["src/database/schema.ts", "src/users/users.service.ts"])],
+    ]);
+    const attached = deriveAttachments(
+      [orphanUnit(["schema"], "Database schema"), flowUnit("svc")],
+      flows, nodes, [], requires
+    );
+    expect(attached[0]).toEqual([]);
+    expect(attached[1]).toEqual([{ stableId: "spec", parentStableId: "svc", reason: "tested-by", counted: true }]);
+  });
+
+  it("basename match understands prefix (python) and suffix (java) test naming", () => {
+    const cases = [
+      { testFile: "tests/test_users.py", subjectFile: "app/users.py" },
+      { testFile: "src/test/UsersServiceTest.java", subjectFile: "src/main/UsersService.java" },
+    ];
+    for (const { testFile, subjectFile } of cases) {
+      const nodes = [
+        node("hub", { file: "src/hub.py" }),
+        node("subject", { file: subjectFile }),
+        node("t", { isTest: true, file: testFile }),
+      ];
+      const flows = [flow(1, ["subject"])];
+      const requires = new Map([[testFile, new Set(["src/hub.py", subjectFile])]]);
+      const attached = deriveAttachments(
+        [orphanUnit(["hub"]), flowUnit("subject")],
+        flows, nodes, [], requires
+      );
+      expect(attached[1], testFile).toEqual([{ stableId: "t", parentStableId: "subject", reason: "tested-by", counted: true }]);
+    }
+  });
+
+  it("falls back to walk order when no basename matches", () => {
+    const nodes = [
+      node("a", { file: "src/a.ts" }),
+      node("b", { file: "src/b.ts" }),
+      node("t", { isTest: true, file: "src/misc.spec.ts" }),
+    ];
+    const flows = [flow(1, ["a", "b"])];
+    const requires = new Map([["src/misc.spec.ts", new Set(["src/a.ts", "src/b.ts"])]]);
+    const [attached] = deriveAttachments([flowUnit("a")], flows, nodes, [], requires);
+    expect(attached).toEqual([{ stableId: "t", parentStableId: "a", reason: "tested-by", counted: true }]);
+  });
+
   it("prefers a real TESTED_BY edge over imports", () => {
     const nodes = [node("a"), node("b"), node("t", { isTest: true, file: "t.test.ts" })];
     const flows = [flow(1, ["a", "b"])];
