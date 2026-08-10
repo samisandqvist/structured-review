@@ -72,6 +72,14 @@ body {
   font-feature-settings: "liga" 0, "calt" 0;
 }
 
+/* Form controls take their font from the UA stylesheet, not inheritance, so
+   the body-level ligature kill never reaches them — re-declare it (#13). */
+textarea,
+input {
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+}
+
 /* A faint instrument-screen wash behind everything */
 #root {
   background:
