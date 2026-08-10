@@ -25,7 +25,7 @@ vi.mock("../src/api/hooks.js", () => ({
           node: allNodes.find((n) => n.id === nodeId),
           callers: nodeId === "n-a" ? [callerNode] : [],
           callees: [],
-          diff: { oldText: "", newText: "", lines: [] },
+          diff: { oldText: "", newText: "", lines: [], totalLines: 0 },
         }
       : undefined,
   }),

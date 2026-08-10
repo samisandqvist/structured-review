@@ -33,7 +33,7 @@ export function createNodesRoute(ctx: AppContext) {
           ? getNodeDiffForRanges(session.baseRef, node.file, node.residualRanges, ctx.repoRoot) ??
             getNodeDiff(session.baseRef, node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot)
           : getNodeDiff(session.baseRef, node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot))
-      : { oldText: "", newText: "", lines: [] };
+      : { oldText: "", newText: "", lines: [], totalLines: 0 };
     return c.json({ node, callers, callees, diff });
   });
 

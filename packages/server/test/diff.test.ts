@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { extractHunkDiff, extractLinesForRanges, expandedContextSlice, getNodeDiff, nodeChangeStats, subtractRanges, resolveRef, changedFilesStrict, currentBranch, repoFingerprint, subtreeFingerprint, formatHunkSnippet, anchorRowRange, GitError, EMPTY_TREE_SHA, commitSubjects } from "../src/diff.js";
+import { extractHunkDiff, extractLinesForRanges, expandedContextSlice, getNodeDiff, getNodeDiffForRanges, nodeChangeStats, subtractRanges, resolveRef, changedFilesStrict, currentBranch, repoFingerprint, subtreeFingerprint, formatHunkSnippet, anchorRowRange, GitError, EMPTY_TREE_SHA, commitSubjects } from "../src/diff.js";
 import type { DiffLine } from "../src/diff.js";
 import type { CommentAnchor } from "../src/types.js";
 import { languagePathspecs } from "../src/graph/roots.js";
@@ -245,6 +245,42 @@ describe("getNodeDiff", () => {
     const d = getNodeDiff("HEAD", "a.txt", 1, 1, "unchanged", fixtureRepo);
     expect(d.oldText).toBe(d.newText);
     expect(d.lines[0]).toEqual({ type: "context", oldLine: 1, newLine: 1, text: "one" });
+  });
+});
+
+describe("node diff totalLines", () => {
+  // The diff viewer needs the file's real end to render exact bottom-edge
+  // expanders (issue #14) — every node-diff shape carries totalLines.
+  let repo: string;
+  beforeAll(() => {
+    repo = mkdtempSync(join(tmpdir(), "crw-total-lines-"));
+    const git = (...a: string[]) => execFileSync("git", a, { cwd: repo, encoding: "utf8" });
+    git("init", "-b", "main");
+    git("config", "user.email", "t@t");
+    git("config", "user.name", "t");
+    writeFileSync(join(repo, "f.txt"), "one\ntwo\nthree\n");
+    git("add", ".");
+    git("commit", "-m", "init");
+    writeFileSync(join(repo, "f.txt"), "one\nTWO\nthree\n"); // working-tree change on line 2
+  });
+  afterAll(() => rmSync(repo, { recursive: true, force: true }));
+
+  it("unchanged node: totalLines is the file's working-tree line count", () => {
+    expect(getNodeDiff("HEAD", "f.txt", 1, 3, "unchanged", repo).totalLines).toBe(3);
+  });
+
+  it("changed node: totalLines rides along with the hunk diff", () => {
+    const d = getNodeDiff("HEAD", "f.txt", 1, 3, "changed", repo);
+    expect(d.lines.some((l) => l.type === "added")).toBe(true);
+    expect(d.totalLines).toBe(3);
+  });
+
+  it("missing file: totalLines is 0", () => {
+    expect(getNodeDiff("HEAD", "gone.txt", 1, 1, "unchanged", repo).totalLines).toBe(0);
+  });
+
+  it("residual ranges diff carries totalLines too", () => {
+    expect(getNodeDiffForRanges("HEAD", "f.txt", [{ start: 2, end: 2 }], repo)?.totalLines).toBe(3);
   });
 });
 

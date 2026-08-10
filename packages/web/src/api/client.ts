@@ -59,7 +59,13 @@ export interface DiffLine {
    *  diff, so never selectable as a comment anchor. */
   expanded?: boolean;
 }
-export interface NodeDiff { oldText: string; newText: string; lines: DiffLine[]; }
+export interface NodeDiff {
+  oldText: string;
+  newText: string;
+  lines: DiffLine[];
+  /** Working-tree line count of the node's file (0 when unreadable). */
+  totalLines: number;
+}
 export interface FlowStep {
   stableId: string;
   label: string;

@@ -20,6 +20,7 @@ const diff: NodeDiff = {
     { type: "removed", oldLine: 11, newLine: null, text: "const b = 2;" },
     { type: "added", oldLine: null, newLine: 11, text: "const b = 3;" },
   ],
+  totalLines: 11,
 };
 
 describe("DiffView", () => {
@@ -54,9 +55,10 @@ describe("DiffView", () => {
         { type: "context", oldLine: 1, newLine: 1, text: "a" },
         { type: "context", oldLine: 30, newLine: 30, text: "z" },
       ],
+      totalLines: 50,
     };
     render(<DiffView node={baseNode} diff={gappy} />);
-    // inner gap (lines 2–29) + bottom-edge expander
+    // inner gap (lines 2–29) + bottom-edge expander (lines 31–50)
     expect(screen.getAllByTestId("diff-gap").length).toBe(2);
   });
 });
@@ -114,6 +116,7 @@ describe("context expansion interaction", () => {
         { type: "context", oldLine: 1, newLine: 1, text: "a" },
         { type: "added", oldLine: null, newLine: 5, text: "z" },
       ],
+      totalLines: 5,
     };
     const spy = vi.spyOn(api, "getNodeContext").mockResolvedValue({
       lines: [
@@ -139,21 +142,42 @@ describe("context expansion interaction", () => {
         { type: "context", oldLine: 1, newLine: 1, text: "a" },
         { type: "context", oldLine: 100, newLine: 100, text: "z" },
       ],
+      totalLines: 100,
     };
     render(<DiffView node={baseNode} diff={gappy} />);
     expect(screen.getByTestId("expand-down")).toBeInTheDocument();
     expect(screen.getByTestId("expand-up")).toBeInTheDocument();
   });
 
-  it("hides the bottom expander once EOF is reached", async () => {
-    vi.spyOn(api, "getNodeContext").mockResolvedValue({ lines: [] });
+  it("renders no bottom expander when the whole file is already shown", () => {
+    // Issue #14: a fully-shown file used to get a speculative "expand 20
+    // lines" control that did nothing when clicked.
     const tiny: NodeDiff = {
       oldText: "", newText: "",
       lines: [{ type: "context", oldLine: 1, newLine: 1, text: "only" }],
+      totalLines: 1,
     };
     render(<DiffView node={baseNode} diff={tiny} />);
-    fireEvent.click(screen.getByTestId("expand-all")); // bottom edge: [2, 21]
-    await waitFor(() => expect(screen.queryByTestId("diff-gap")).not.toBeInTheDocument());
+    expect(screen.queryByTestId("diff-gap")).not.toBeInTheDocument();
+  });
+
+  it("bottom expander offers exactly the remaining lines to EOF", async () => {
+    const spy = vi.spyOn(api, "getNodeContext").mockResolvedValue({
+      lines: [2, 3, 4, 5].map((n) => ({ type: "context" as const, oldLine: n, newLine: n, text: `tail-${n}` })),
+    });
+    const partial: NodeDiff = {
+      oldText: "", newText: "",
+      lines: [{ type: "context", oldLine: 1, newLine: 1, text: "shown" }],
+      totalLines: 5,
+    };
+    render(<DiffView node={baseNode} diff={partial} />);
+    // Rows shown end at 1, file has 5 lines: the gap is exactly [2, 5].
+    expect(screen.getByText(/expand 4 lines/)).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("expand-all"));
+    await waitFor(() => expect(screen.getByText("tail-5")).toBeInTheDocument());
+    expect(spy).toHaveBeenCalledWith("s1", "n1", 2, 5);
+    // Everything through EOF is now visible: no expanders remain below.
+    expect(screen.queryByText(/expand/)).not.toBeInTheDocument();
   });
 });
 
@@ -188,7 +212,7 @@ describe("line selection interaction", () => {
 
   // Row 0 is the top-edge expander (LINES start at line 10); data rows follow.
   it("click on a changed line selects it; shift-click extends; context click is inert", () => {
-    render(<DiffView node={NODE} diff={{ oldText: "", newText: "", lines: LINES }} />);
+    render(<DiffView node={NODE} diff={{ oldText: "", newText: "", lines: LINES, totalLines: 12 }} />);
     const rows = screen.getAllByRole("row");
     fireEvent.click(rows[3]); // added newLine 11
     expect(useUIStore.getState().lineSelection?.anchor).toEqual({ startLine: 11, startSide: "new", endLine: 11, endSide: "new" });
@@ -200,7 +224,7 @@ describe("line selection interaction", () => {
 
   // Row map: row1 = context 10, row2 = removed -11, row3 = added +11, row4 = added +12.
   it("shift-click moves the end from the anchored start: shrink and flip work", () => {
-    render(<DiffView node={NODE} diff={{ oldText: "", newText: "", lines: LINES }} />);
+    render(<DiffView node={NODE} diff={{ oldText: "", newText: "", lines: LINES, totalLines: 12 }} />);
     const rows = screen.getAllByRole("row");
     fireEvent.click(rows[2]); // anchor at -11
     fireEvent.click(rows[4], { shiftKey: true }); // -11…+12
@@ -215,7 +239,7 @@ describe("line selection interaction", () => {
   });
 
   it("mousedown-drag-mouseup selects the dragged range; the trailing click cannot collapse it", () => {
-    render(<DiffView node={NODE} diff={{ oldText: "", newText: "", lines: LINES }} />);
+    render(<DiffView node={NODE} diff={{ oldText: "", newText: "", lines: LINES, totalLines: 12 }} />);
     const rows = screen.getAllByRole("row");
     fireEvent.mouseDown(rows[2]);
     fireEvent.mouseEnter(rows[3]);
@@ -231,7 +255,7 @@ describe("line selection interaction", () => {
   });
 
   it("dragging over context rows keeps the last anchorable endpoint", () => {
-    render(<DiffView node={NODE} diff={{ oldText: "", newText: "", lines: LINES }} />);
+    render(<DiffView node={NODE} diff={{ oldText: "", newText: "", lines: LINES, totalLines: 12 }} />);
     const rows = screen.getAllByRole("row");
     fireEvent.mouseDown(rows[3]); // +11
     fireEvent.mouseEnter(rows[2]); // upward to -11
@@ -243,7 +267,7 @@ describe("line selection interaction", () => {
   it("re-clicking the selected line keeps the selection (only ✕ clears)", () => {
     // A silent toggle-off made "commenting on…" vanish mid-comment; clicks
     // now only ever set or extend the selection.
-    render(<DiffView node={NODE} diff={{ oldText: "", newText: "", lines: LINES }} />);
+    render(<DiffView node={NODE} diff={{ oldText: "", newText: "", lines: LINES, totalLines: 12 }} />);
     const rows = screen.getAllByRole("row");
     fireEvent.click(rows[3]);
     fireEvent.click(rows[3]);
@@ -251,7 +275,7 @@ describe("line selection interaction", () => {
   });
 
   it("selected rows carry a data-selected attribute", () => {
-    render(<DiffView node={NODE} diff={{ oldText: "", newText: "", lines: LINES }} />);
+    render(<DiffView node={NODE} diff={{ oldText: "", newText: "", lines: LINES, totalLines: 12 }} />);
     const rows = screen.getAllByRole("row");
     fireEvent.click(rows[2]);
     fireEvent.click(rows[4], { shiftKey: true });
@@ -263,7 +287,7 @@ describe("line selection interaction", () => {
 
   it("resolves a pending anchor highlight into a selection and clears the request", () => {
     useUIStore.setState({ pendingAnchorHighlight: { startLine: 11, startSide: "new", endLine: 12, endSide: "new" } });
-    render(<DiffView node={NODE} diff={{ oldText: "", newText: "", lines: LINES }} />);
+    render(<DiffView node={NODE} diff={{ oldText: "", newText: "", lines: LINES, totalLines: 12 }} />);
     expect(useUIStore.getState().lineSelection?.startIdx).toBe(2);
     expect(useUIStore.getState().lineSelection?.endIdx).toBe(3);
     expect(useUIStore.getState().pendingAnchorHighlight).toBeNull();

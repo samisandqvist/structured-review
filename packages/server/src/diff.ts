@@ -23,10 +23,17 @@ export interface DiffLine {
   text: string;
 }
 
-export interface NodeDiff {
+/** The pure diff content — what the hunk extractors can compute without file access. */
+export interface NodeDiffContent {
   oldText: string;
   newText: string;
   lines: DiffLine[];
+}
+
+export interface NodeDiff extends NodeDiffContent {
+  /** Working-tree line count of the node's file (0 when unreadable) — lets
+   *  the client render exact bottom-edge expanders instead of speculative ones. */
+  totalLines: number;
 }
 
 interface Hunk {
@@ -275,8 +282,9 @@ export function getNodeDiff(
   changeStatus: "changed" | "unchanged",
   root: string = repoRoot()
 ): NodeDiff {
+  const totalLines = fileTotalLines(file, root);
   if (changeStatus === "unchanged") {
-    return withTexts(contextLines(readSlice(root, file, startLine, endLine), startLine));
+    return { ...withTexts(contextLines(readSlice(root, file, startLine, endLine), startLine)), totalLines };
   }
 
   let raw: string;
@@ -289,12 +297,24 @@ export function getNodeDiff(
       ...QUIET,
     });
   } catch {
-    return withTexts(contextLines(readSlice(root, file, startLine, endLine), startLine));
+    return { ...withTexts(contextLines(readSlice(root, file, startLine, endLine), startLine)), totalLines };
   }
 
   // Changed file, but maybe no hunk inside this node's span (e.g. the change was
   // in a sibling). Then show the current source unchanged, not a misleading diff.
-  return extractHunkDiff(raw, startLine, endLine) ?? sliceBoth(root, file, startLine, endLine);
+  return { ...(extractHunkDiff(raw, startLine, endLine) ?? sliceBoth(root, file, startLine, endLine)), totalLines };
+}
+
+/** Working-tree line count of a file (a trailing newline does not count as an
+ *  extra line); 0 when the file is unreadable (e.g. deleted). */
+export function fileTotalLines(file: string, root: string = repoRoot()): number {
+  try {
+    const lines = readFileSync(join(root, file), "utf8").split("\n");
+    if (lines[lines.length - 1] === "") lines.pop();
+    return lines.length;
+  } catch {
+    return 0;
+  }
 }
 
 /**
@@ -325,7 +345,7 @@ export function anchorRowRange(
  * node — so two functions inside one big hunk get distinct diffs instead of the
  * whole hunk. Returns null if nothing falls in the span. Pure — exported for tests.
  */
-export function extractHunkDiff(rawDiff: string, startLine: number, endLine: number): NodeDiff | null {
+export function extractHunkDiff(rawDiff: string, startLine: number, endLine: number): NodeDiffContent | null {
   const lines: DiffLine[] = [];
   for (const h of parseHunks(rawDiff)) {
     let oldLine = h.oldStart;
@@ -356,7 +376,7 @@ export function extractHunkDiff(rawDiff: string, startLine: number, endLine: num
 /** DiffLines for several disjoint new-file ranges of one file's unified diff.
  *  Each range is clipped exactly (extractHunkDiff), so hunks inside covered
  *  node spans never leak in. Null when nothing falls in any range. */
-export function extractLinesForRanges(rawDiff: string, ranges: LineRange[]): NodeDiff | null {
+export function extractLinesForRanges(rawDiff: string, ranges: LineRange[]): NodeDiffContent | null {
   const lines: DiffLine[] = [];
   for (const r of ranges) {
     const d = extractHunkDiff(rawDiff, r.start, r.end);
@@ -384,7 +404,8 @@ export function getNodeDiffForRanges(
   } catch {
     return null;
   }
-  return extractLinesForRanges(raw, ranges);
+  const d = extractLinesForRanges(raw, ranges);
+  return d && { ...d, totalLines: fileTotalLines(file, root) };
 }
 
 /**
@@ -455,7 +476,7 @@ export function expandedContextSlice(
   return out;
 }
 
-function withTexts(lines: DiffLine[]): NodeDiff {
+function withTexts(lines: DiffLine[]): NodeDiffContent {
   return {
     oldText: lines.filter((l) => l.type !== "added").map((l) => l.text).join("\n"),
     newText: lines.filter((l) => l.type !== "removed").map((l) => l.text).join("\n"),
@@ -553,7 +574,7 @@ export function formatHunkSnippet(lines: DiffLine[], maxLines = 40, maxChars = 2
 
 const MARKER_CHAR: Record<DiffLine["type"], string> = { context: " ", added: "+", removed: "-" };
 
-function sliceBoth(root: string, file: string, startLine: number, endLine: number): NodeDiff {
+function sliceBoth(root: string, file: string, startLine: number, endLine: number): NodeDiffContent {
   return withTexts(contextLines(readSlice(root, file, startLine, endLine), startLine));
 }
 

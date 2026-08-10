@@ -275,29 +275,24 @@ export function DiffView({ node, diff }: { node: Node; diff?: NodeDiff }) {
   // GitHub-style context expansion: revealed blocks live client-side, keyed by
   // their new-file start, and reset when the node changes.
   const [blocks, setBlocks] = useState<{ start: number; lines: DiffLine[] }[]>([]);
-  const [bottomEof, setBottomEof] = useState(false);
-  useEffect(() => { setBlocks([]); setBottomEof(false); }, [node.id]);
+  useEffect(() => { setBlocks([]); }, [node.id]);
   const lines = useMemo(() => mergeExpanded(baseLines, blocks), [baseLines, blocks]);
 
-  // Edge expanders: above the first shown line (bounded — we know the range)
-  // and below the last (unbounded — EOF discovered by a short/empty fetch).
+  // Edge expanders: above the first shown line and below the last, both exact —
+  // the diff carries the file's totalLines, so the bottom range ends at EOF.
   const firstNew = lines.find((l) => l.newLine !== null)?.newLine ?? null;
   const lastNew = lines.reduce<number>((m, l) => Math.max(m, l.newLine ?? 0), 0);
+  const totalLines = diff?.totalLines ?? 0;
 
   const handleExpand = async (start: number, end: number) => {
     const { lines: fetched } = await api.getNodeContext(node.sessionId, node.id, start, end);
-    if (start > lastNew) {
-      // Bottom-edge request: a short or empty slice means we hit EOF.
-      const maxNew = fetched.reduce((m, l) => Math.max(m, l.newLine ?? 0), 0);
-      if (fetched.length === 0 || maxNew < end) setBottomEof(true);
-    }
     if (fetched.length === 0) return;
     setBlocks((b) => [...b, { start, lines: fetched.map((l) => ({ ...l, expanded: true })) }]);
   };
   const edges = {
     top: firstNew !== null && firstNew > 1 ? { hiddenStart: 1, hiddenEnd: firstNew - 1 } : null,
-    bottom: lines.length > 0 && !bottomEof
-      ? { hiddenStart: lastNew + 1, hiddenEnd: lastNew + EXPAND_CHUNK }
+    bottom: lines.length > 0 && lastNew < totalLines
+      ? { hiddenStart: lastNew + 1, hiddenEnd: totalLines }
       : null,
   };
 
