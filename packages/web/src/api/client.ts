@@ -122,6 +122,7 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  listSessions: () => fetchJson<{ sessions: ReviewSession[] }>("/sessions"),
   createSession: (branch: string, baseRef: string) =>
     fetchJson<{ session: ReviewSession; subgraph: ChangeSubgraph }>("/sessions", {
       method: "POST", body: JSON.stringify({ branch, baseRef }),

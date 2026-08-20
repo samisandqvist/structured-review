@@ -1,6 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type Node, type CommentAnchor } from "./client.js";
 
+export function useSessions() {
+  return useQuery({ queryKey: ["sessions"], queryFn: () => api.listSessions() });
+}
 export function useSession(sessionId: string) {
   return useQuery({ queryKey: ["session", sessionId], queryFn: () => api.getSession(sessionId) });
 }

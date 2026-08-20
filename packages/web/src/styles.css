@@ -16,7 +16,7 @@
 
   /* Type */
   --text: #e8ecf4;
-  --dim: #98a2b6;
+  --dim: #b6c0d4;
   --faint: #5c6678;
 
   /* The signal */
@@ -806,3 +806,85 @@ textarea:focus {
 .keys-overlay dt { font-family: var(--mono); color: var(--trace, #4fd6ff); }
 .keys-overlay dd { margin: 0; color: var(--text); }
 .unit--auto { background: color-mix(in srgb, var(--warn, #d98a2b) 8%, transparent); border-radius: 6px; padding-left: 8px; padding-right: 8px; }
+
+/* ---- Session picker (main page when several sessions are open) ---------- */
+.session-picker {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 32px 20px;
+  background: var(--ink);
+}
+.session-picker--loading { color: var(--dim); }
+.session-picker__title {
+  font-family: var(--display);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.session-picker__hint {
+  margin: 0 0 18px;
+  color: var(--dim);
+  font-size: 15px;
+}
+.session-picker__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(640px, 100%);
+}
+.session-picker__row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 16px;
+  cursor: pointer;
+  text-align: left;
+  box-shadow: var(--shadow-card);
+}
+.session-picker__row:hover {
+  background: var(--surface-2);
+  border-color: var(--trace);
+}
+.session-picker__branch { font-weight: 600; }
+.session-picker__base { color: var(--dim); font-size: 14px; }
+.session-picker__status {
+  margin-left: auto;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  padding: 0 7px;
+  border: 1px solid var(--line-bright);
+  border-radius: 4px;
+  color: var(--dim);
+}
+.session-picker__status[data-status="walking"] { color: var(--trace); border-color: var(--trace-deep); }
+.session-picker__status[data-status="complete"] { color: var(--led-clean); }
+.session-picker__date { color: var(--faint); font-size: 14px; flex-shrink: 0; }
+
+/* Branch field becomes a dropdown when several sessions are switchable. */
+.statusbar__session-switcher {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-family: var(--mono);
+  font-size: 16px;
+  padding: 2px 6px;
+  max-width: 260px;
+  cursor: pointer;
+}
+.statusbar__session-switcher:hover { border-color: var(--line-bright); }

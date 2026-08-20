@@ -45,7 +45,9 @@ change.
 - **Local web UI.** Graph and flow views, keyboard walk order (`j`/`k`
   next/prev, `n` next unreviewed, `r` mark reviewed), per-unit progress,
   bulk mark-reviewed, stale-session detection when the working tree moves
-  under a session.
+  under a session. A session selector on the main page lists every open
+  session (branch, base, status) when several exist, and the header's
+  branch field doubles as a session switcher.
 - **Honest degradation.** A missing language toolchain never fails silently:
   the session records per-language `indexWarnings`, the UI banners them, and
   affected files fall back to residual-only review.
@@ -93,8 +95,9 @@ pnpm start
 ```
 
 Then open `http://localhost:3456`. The CLI below opens this URL for you with
-a session already attached (`?session=<id>`); visiting it directly without a
-session query param loads no session data — create a session first.
+a session already attached (`?session=<id>`). Visiting it without a session
+query param loads the only open session directly, or shows a session picker
+when several are open (create a session first if none exist).
 
 **Development mode:** `pnpm dev` runs the server on `:3456` and Vite on
 `:5173` (proxying `/api` to the server), with hot reload for the web UI.
