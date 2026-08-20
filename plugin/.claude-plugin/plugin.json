@@ -1,6 +1,6 @@
 {
   "name": "code-review-walkthrough",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "displayName": "Code Review Walkthrough",
   "description": "Walk a reviewer through code changes along the call/dependency graph instead of a file tree. Structured review plans, a local web UI, and exported line-anchored comments.",
   "author": {

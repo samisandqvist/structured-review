@@ -1,7 +1,11 @@
+import { useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useUIStore } from "./store/ui.js";
-import { useNodes, useSession } from "./api/hooks.js";
+import { useNodes, useSession, useSessions } from "./api/hooks.js";
+import { navigateToSession, sessionUrl } from "./navigation.js";
+import { resolveSession } from "./session-resolution.js";
 import { SplitLayout } from "./components/SplitLayout.js";
+import { SessionPicker } from "./components/SessionPicker.js";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 1000, refetchOnWindowFocus: false } },
@@ -17,14 +21,42 @@ export function App() {
 
 function ReviewShell() {
   const currentNodeId = useUIStore((s) => s.currentNodeId);
-  const sessionId =
-    new URLSearchParams(window.location.search).get("session") ?? "placeholder";
-  return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
-      <StatusBar sessionId={sessionId} />
-      <SplitLayout sessionId={sessionId} currentNodeId={currentNodeId} />
-    </div>
-  );
+  const paramId = new URLSearchParams(window.location.search).get("session");
+  const { data, isError } = useSessions();
+  const resolution = resolveSession(paramId, data?.sessions);
+
+  // A lone session loads without a param; stamp its id into the URL so the
+  // link stays shareable.
+  useEffect(() => {
+    if (!paramId && resolution.kind === "session") {
+      window.history.replaceState(null, "", sessionUrl(resolution.sessionId));
+    }
+  }, [paramId, resolution]);
+
+  if (resolution.kind === "session") {
+    return (
+      <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+        <StatusBar sessionId={resolution.sessionId} />
+        <SplitLayout sessionId={resolution.sessionId} currentNodeId={currentNodeId} />
+      </div>
+    );
+  }
+  if (resolution.kind === "picker") return <SessionPicker sessions={resolution.sessions} />;
+  if (resolution.kind === "empty" || isError) {
+    return (
+      <div className="session-picker" data-testid="session-empty">
+        <h1 className="session-picker__title">
+          {isError ? "Couldn't load sessions" : "No review sessions"}
+        </h1>
+        <p className="session-picker__hint">
+          {isError
+            ? "The review server didn't answer. Is it still running?"
+            : "Start one with the code-review-walkthrough skill, then reload this page."}
+        </p>
+      </div>
+    );
+  }
+  return <div className="session-picker session-picker--loading">Loading sessions…</div>;
 }
 
 /** The header reads like an instrument status line: who we are, what branch /
@@ -61,7 +93,9 @@ export function StatusBar({ sessionId }: { sessionId: string }) {
         </span>
       </div>
 
-      <Field label="branch">{session?.branch ?? "—"}</Field>
+      <Field label="branch">
+        <BranchSwitcher sessionId={sessionId} currentBranch={session?.branch} />
+      </Field>
       {coverage && (
         <div
           className="statusbar__field"
@@ -119,6 +153,36 @@ export function StatusBar({ sessionId }: { sessionId: string }) {
         </div>
       )}
     </header>
+  );
+}
+
+/** Plain branch text normally; a dropdown once the server holds several
+ *  sessions, so switching doesn't require hand-editing the URL. */
+function BranchSwitcher({
+  sessionId,
+  currentBranch,
+}: {
+  sessionId: string;
+  currentBranch?: string;
+}) {
+  const { data } = useSessions();
+  const sessions = data?.sessions ?? [];
+  if (sessions.length < 2) return <>{currentBranch ?? "—"}</>;
+  return (
+    <select
+      className="statusbar__session-switcher"
+      data-testid="session-switcher"
+      value={sessionId}
+      onChange={(e) => {
+        if (e.target.value !== sessionId) navigateToSession(e.target.value);
+      }}
+    >
+      {sessions.map((s) => (
+        <option key={s.id} value={s.id}>
+          {s.branch}
+        </option>
+      ))}
+    </select>
   );
 }
 
