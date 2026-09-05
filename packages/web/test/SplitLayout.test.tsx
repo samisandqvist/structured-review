@@ -106,4 +106,15 @@ describe("SplitLayout walk navigation", () => {
     fireEvent.click(screen.getByTestId("next-unreviewed"));
     expect(useUIStore.getState().currentNodeId).toBe("n-b");
   });
+
+  it("closes the shortcuts overlay on Escape even while an input has focus", () => {
+    useUIStore.setState({ currentNodeId: "n-a" });
+    const { container } = render(<SplitLayout sessionId="s1" currentNodeId="n-a" />);
+    fireEvent.keyDown(window, { key: "?" });
+    expect(container.querySelector(".keys-overlay")).toBeInTheDocument();
+    const input = screen.getByTestId("comment-input");
+    input.focus();
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(container.querySelector(".keys-overlay")).not.toBeInTheDocument();
+  });
 });

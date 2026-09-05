@@ -66,7 +66,7 @@ export function fileChangedRanges(baseRef: string, file: string, root: string = 
     raw = execFileSync("git", ["diff", "--text", "--unified=0", baseRef, "--", file], {
       cwd: root,
       encoding: "utf8",
-      maxBuffer: 32 * 1024 * 1024,
+      maxBuffer: 256 * 1024 * 1024,
       ...QUIET,
     });
   } catch (error) {
@@ -105,8 +105,8 @@ export function repoFingerprint(root: string = repoRoot()): string | null {
     const h = createHash("sha256");
     h.update(execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8", ...QUIET }));
     h.update(execFileSync("git", ["diff", "HEAD"], { cwd: root, maxBuffer: 256 * 1024 * 1024, ...QUIET }));
-    const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard"], { cwd: root, encoding: "utf8", ...QUIET })
-      .split("\n").filter(Boolean);
+    const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard", "-z"], { cwd: root, encoding: "utf8", ...QUIET })
+      .split("\0").filter(Boolean);
     for (const f of untracked) {
       h.update(f);
       try { h.update(readFileSync(join(root, f))); } catch { h.update("<unreadable>"); }
@@ -142,8 +142,8 @@ export function subtreeFingerprint(subdir: string, root: string = repoRoot(), pa
       h.update("<no-tree>");
     }
     h.update(execFileSync("git", ["diff", "HEAD", "--", ...specs], { cwd: root, maxBuffer: 256 * 1024 * 1024, ...QUIET }));
-    const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard", "--", ...specs], { cwd: root, encoding: "utf8", ...QUIET })
-      .split("\n").filter(Boolean);
+    const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard", "-z", "--", ...specs], { cwd: root, encoding: "utf8", ...QUIET })
+      .split("\0").filter(Boolean);
     for (const f of untracked) {
       h.update(f);
       try { h.update(readFileSync(join(root, f))); } catch { h.update("<unreadable>"); }
@@ -187,13 +187,15 @@ export function currentBranch(root: string = repoRoot()): string | null {
 /** Repo-relative paths changed vs baseRef ([] on git failure). */
 export function changedFiles(baseRef: string, root: string = repoRoot()): string[] {
   try {
-    const raw = execFileSync("git", ["diff", "--name-only", baseRef], {
+    // -z: NUL-separated raw paths — core.quotepath would otherwise C-quote
+    // non-ASCII names, which no longer match as pathspecs downstream.
+    const raw = execFileSync("git", ["diff", "--name-only", "-z", baseRef], {
       cwd: root,
       encoding: "utf8",
       maxBuffer: 32 * 1024 * 1024,
       ...QUIET,
     });
-    return raw.split("\n").map((l) => l.trim()).filter(Boolean);
+    return raw.split("\0").filter(Boolean);
   } catch {
     return [];
   }
@@ -226,13 +228,14 @@ export function resolveRef(ref: string, root: string = repoRoot()): string | nul
  */
 export function changedFilesStrict(baseRef: string, root: string = repoRoot()): string[] {
   try {
-    const raw = execFileSync("git", ["diff", "--name-only", baseRef], {
+    // -z: see changedFiles — quoted paths would silently drop files from coverage.
+    const raw = execFileSync("git", ["diff", "--name-only", "-z", baseRef], {
       cwd: root,
       encoding: "utf8",
       maxBuffer: 32 * 1024 * 1024,
       ...QUIET,
     });
-    return raw.split("\n").map((l) => l.trim()).filter(Boolean);
+    return raw.split("\0").filter(Boolean);
   } catch (e) {
     throw new GitError("list-files", `git diff --name-only ${baseRef} failed: ${(e as Error).message}`);
   }

@@ -21,9 +21,21 @@ const data = resolve(process.env.CRW_DATA_DIR || process.env.PLUGIN_DATA || proc
 const indexers = resolve(process.env.CRW_INDEXER_HOME || data);
 const env = { ...process.env, CRW_DATA_DIR: data, CRW_INDEXER_HOME: indexers };
 const setup = args[0] === "--setup";
+// Positionals as the wrapped CLI parses them: flags may appear anywhere, and
+// non-boolean flags consume the next token. Keep BOOL_FLAGS in sync with
+// packages/skill/src/cli.ts.
+const BOOL_FLAGS = new Set(["auto", "open", "pretty", "all", "full", "brief"]);
+const positionals = [];
+for (let i = 0; i < args.length; i++) {
+  if (args[i].startsWith("--")) {
+    if (!BOOL_FLAGS.has(args[i].slice(2))) i++;
+  } else {
+    positionals.push(args[i]);
+  }
+}
 // Only commands that need indexing bootstrap it. Help, status, export and
 // shutdown must remain usable offline, including after an installation failure.
-const needsIndexers = setup || args[0] === "serve" || (args[0] === "session" && args[1] === "create");
+const needsIndexers = setup || positionals[0] === "serve" || (positionals[0] === "session" && positionals[1] === "create");
 
 function indexersPresent() {
   return ["scip-typescript", "scip-python"].every((bin) => existsSync(join(indexers, "node_modules", ".bin", bin)));
@@ -43,8 +55,11 @@ try {
         writeFileSync(join(data, "package.json"), manifest);
         console.error(`Installing review indexers in ${data}. This can take a minute on first use.`);
         // Send npm output to stderr: crw's stdout remains machine-readable JSON.
-        const install = spawnSync("npm", ["install", "--no-audit", "--no-fund"], {
-          cwd: data, env, stdio: ["ignore", 2, 2],
+        // Windows npm is npm.cmd, which Node only spawns through a shell (the
+        // arguments are fixed strings, so shell interpolation is not a concern).
+        const win = process.platform === "win32";
+        const install = spawnSync(win ? "npm.cmd" : "npm", ["install", "--no-audit", "--no-fund"], {
+          cwd: data, env, stdio: ["ignore", 2, 2], shell: win,
         });
         if (install.error || install.status !== 0 || !indexersPresent()) {
           throw new Error(`Indexer installation failed${install.error ? `: ${install.error.message}` : ""}. Check npm/network access and retry the same command.`);
@@ -61,5 +76,8 @@ try {
   }
 } catch (error) {
   console.error(`crw: ${error.message}`);
-  process.exitCode = 1;
+  // --setup is a best-effort pre-warm run by session-start hooks: a failure
+  // (offline, registry down) must not surface a hook error on every session.
+  // Real commands bootstrap for themselves and do fail loudly.
+  process.exitCode = setup ? 0 : 1;
 }

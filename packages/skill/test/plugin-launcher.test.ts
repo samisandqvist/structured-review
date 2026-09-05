@@ -55,6 +55,22 @@ describe("portable plugin launcher", () => {
     expect(existsSync(env.CRW_DATA_DIR!)).toBe(false);
   });
 
+  it("keeps the --setup hook best-effort: a failed install warns but exits 0", () => {
+    const failed = spawnSync(process.execPath, [launcher, "--setup"], { env: { ...env, CRW_TEST_FAIL: "1" }, encoding: "utf8" });
+    expect(failed.status).toBe(0);
+    expect(failed.stderr).toContain("retry");
+    expect(existsSync(join(env.CRW_DATA_DIR!, ".indexers-ready"))).toBe(false);
+    // The next real command still bootstraps for itself.
+    expect(JSON.parse(run("serve")).args).toEqual(["serve"]);
+    expect(readFileSync(join(env.CRW_DATA_DIR!, "install-count"), "utf8")).toBe("11");
+  });
+
+  it("bootstraps indexers when flags precede the command word", () => {
+    run("--pretty", "serve");
+    run("session", "--port", "4000", "create");
+    expect(readFileSync(join(env.CRW_DATA_DIR!, "install-count"), "utf8")).toBe("1");
+  });
+
   it("uses Codex's plugin data directory when no explicit override was supplied", () => {
     env = { ...env, CRW_DATA_DIR: "", PLUGIN_DATA: join(dir, "codex data"), CLAUDE_PLUGIN_DATA: join(dir, "claude data") };
     expect(JSON.parse(run("serve")).data).toBe(env.PLUGIN_DATA);

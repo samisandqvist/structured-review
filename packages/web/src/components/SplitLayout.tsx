@@ -69,8 +69,10 @@ export function SplitLayout({
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+      // Closing the overlay is safe regardless of focus, so Escape comes
+      // before the typing guard — an editing field may sit behind the overlay.
       if (e.key === "Escape") { setShowKeys(false); return; }
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
       const cur = useUIStore.getState().currentNodeId;
       if (e.key === "j") {
         const id = nextInWalk(order, cur, 1);

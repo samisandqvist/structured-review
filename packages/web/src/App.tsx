@@ -69,7 +69,7 @@ function ReviewShell() {
 /** The header reads like an instrument status line: who we are, what branch /
  *  unit is under the lens, and how far the walk has gotten. */
 export function StatusBar({ sessionId }: { sessionId: string }) {
-  const { data: sessionData, isError: freshnessError } = useSession(sessionId);
+  const { data: sessionData } = useSession(sessionId);
   const { data: nodeData } = useNodes(sessionId);
 
   const session = sessionData?.session;
@@ -122,10 +122,6 @@ export function StatusBar({ sessionId }: { sessionId: string }) {
           <span style={{ fontSize: 16 }} title="Recreate this review session to include the current working tree. Saved review marks describe the earlier version.">repo moved since session start — recreate review</span>
         </div>
       )}
-      {freshnessError && <div className="statusbar__field" role="status" style={{ color: "var(--warn, #d98a2b)" }}>
-        Couldn't check review freshness — check the server connection
-      </div>}
-
       <div style={{ flex: 1, minWidth: 8 }} />
 
       {total > 0 && (
