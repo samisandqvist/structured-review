@@ -7,6 +7,7 @@ import { extractHunkDiff, extractLinesForRanges, expandedContextSlice, getNodeDi
 import type { DiffLine } from "../src/diff.js";
 import type { CommentAnchor } from "../src/types.js";
 import { languagePathspecs } from "../src/graph/roots.js";
+import { fileChangedRanges } from "../src/diff.js";
 
 let fixtureRepo: string;
 let emptyTmpDir: string;
@@ -28,6 +29,11 @@ afterAll(() => {
 });
 
 describe("resolveRef", () => {
+  it("distinguishes a failed file diff from an unchanged file at the coverage boundary", () => {
+    expect(fileChangedRanges("HEAD", "a.txt", fixtureRepo, { strict: true })).toBeNull();
+    expect(() => fileChangedRanges("missing-ref", "a.txt", fixtureRepo, { strict: true })).toThrow(GitError);
+    expect(fileChangedRanges("missing-ref", "a.txt", fixtureRepo)).toBeNull();
+  });
   it("resolves HEAD and returns null for unknown refs", () => {
     expect(resolveRef("HEAD", fixtureRepo)).toMatch(/^[0-9a-f]{40}$/);
     expect(resolveRef("no-such-ref", fixtureRepo)).toBeNull();

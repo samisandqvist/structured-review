@@ -1,6 +1,3 @@
-<!-- packages/skill/skill.md — source of truth for the skill instructions.
-     Both host packages' skills/code-review-walkthrough/SKILL.md are GENERATED from this file
-     by scripts/build-plugin.mjs (marked regions swap to plugin-mode text). -->
 ---
 name: code-review-walkthrough
 description: Walk a reviewer through code changes along the call/dependency graph instead of a file tree. Produces a structured review plan, launches a local web UI for graph-based navigation, and exports node- and line-anchored comments.
@@ -26,12 +23,24 @@ it does not establish architectural fit or prove correctness.
 
 ## The crw CLI
 
-<!-- crw-invocation:start (build-plugin.mjs replaces this region with the plugin-mode invocation) -->
-All orchestration goes through `crw` (built binary: `packages/skill/dist/cli.js`;
-dev: `npx tsx packages/skill/src/cli.ts`). Every command prints JSON on stdout;
-add `--pretty` for human-readable output. Never touch the SQLite file or hand-roll
-`curl` — the CLI is the stable surface.
-<!-- crw-invocation:end -->
+Resolve the installed skill's directory from the path of this SKILL.md.
+The launcher is at `../../scripts/crw.mjs` relative to that directory.
+Use its absolute path for every `crw` command, keeping the working directory
+in the repository being reviewed. For example, replace the path below with
+the resolved launcher path:
+
+```bash
+node "/absolute/installed/plugin/scripts/crw.mjs" <command>
+```
+
+The launcher checks indexers on first use, even if no startup hook ran.
+It sets CRW_DATA_DIR and CRW_INDEXER_HOME using the host's plugin data directory
+when available; otherwise it uses `~/.local/share/code-review-walkthrough`
+(or XDG_DATA_HOME). An explicit CRW_DATA_DIR overrides that choice. State stays
+outside the reviewed repo and the installed plugin. Requires Node >= 22.13
+and npm. Relay installation errors; the same command can be retried.
+Every command prints JSON on stdout; add `--pretty` for human-readable output.
+Never touch the SQLite file or hand-roll `curl` — the CLI is the stable surface.
 
 ```bash
 crw serve [--repo <path>] [--port N]            # ensure the hub runs against a repo
@@ -48,7 +57,13 @@ crw gc [--repo <path>] [--all]                  # remove a repo's DB/logs (stops
 crw shutdown                                    # stop the hub (state stays; serve restarts it)
 ```
 
-<!-- plugin:language-support (build-plugin.mjs inserts the indexer-install note here) -->
+Language support: TypeScript and Python indexers are installed automatically
+(the launcher runs `npm install` in its data dir on first use — allow a
+minute once and network access to the npm registry). Java additionally needs the scip-java toolchain on PATH
+(coursier `cs` + JDK + Maven); without it Java changes appear as residual-only
+with a visible warning — relay that warning, it is expected degradation, not
+an error.
+
 Setup flow:
 
 1. `crw serve` — starts (or reuses) the hub for the current repo; prints `baseUrl`.

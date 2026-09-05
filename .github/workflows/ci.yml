@@ -40,13 +40,13 @@ jobs:
 
       - run: pnpm build
 
-      # The plugin ships as a committed bundle (plugin/dist + plugin/web).
+      # Both host packages ship committed bundles from one source.
       # Fail when a runtime change was pushed without rebuilding it.
       - name: Plugin bundle freshness
         run: |
           pnpm build:plugin
-          if ! git diff --exit-code plugin/ || [ -n "$(git status --porcelain plugin/)" ]; then
-            echo "::error::plugin/ bundle is stale — run 'pnpm build && pnpm build:plugin' and commit the result"
-            git status --porcelain plugin/
+          if ! git diff --exit-code plugin/ plugins/ || [ -n "$(git status --porcelain plugin/ plugins/)" ]; then
+            echo "::error::plugin bundles are stale — run 'pnpm build && pnpm build:plugin' and commit the result"
+            git status --porcelain plugin/ plugins/
             exit 1
           fi

@@ -1,9 +1,8 @@
-// Build the committed Claude Code plugin bundle under plugin/.
+// Build both committed host packages from the same runtime and skill source.
 // Bundles the server and crw CLI to single ESM files (node:sqlite is a
 // builtin, so no native deps), copies scip.proto next to the server bundle,
 // and copies the built web UI. The scip indexer packages are NOT bundled —
-// the plugin's SessionStart hook npm-installs them into ${CLAUDE_PLUGIN_DATA}
-// (see plugin/package.json + plugin/hooks/hooks.json).
+// the shared launcher npm-installs them into its writable data directory.
 //
 // Run after `pnpm build`:  node scripts/build-plugin.mjs
 import { build } from "esbuild";
@@ -13,6 +12,7 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const out = join(root, "plugin");
+const codexOut = join(root, "plugins/code-review-walkthrough");
 
 const webDist = join(root, "packages/web/dist");
 if (!existsSync(join(webDist, "index.html"))) {
@@ -48,27 +48,49 @@ copyFileSync(join(root, "packages/server/src/graph/scip.proto"), join(out, "dist
 cpSync(webDist, join(out, "web"), { recursive: true });
 
 // The plugin SKILL.md is packages/skill/skill.md with two plugin-mode swaps:
-// the crw invocation (env-prefixed bundle call instead of the repo binary)
+// the crw invocation (portable launcher instead of the repo binary)
 // and the indexer-install note (repo devs get indexers via pnpm). Generated
 // here so the two files can never drift; the CI freshness guard covers it.
-const PLUGIN_INVOCATION = `Every \`crw\` command below is run as:
+const PLUGIN_INVOCATION = `Resolve the installed skill's directory from the path of this SKILL.md.
+The launcher is at \`../../scripts/crw.mjs\` relative to that directory.
+Use its absolute path for every \`crw\` command, keeping the working directory
+in the repository being reviewed. For example, replace the path below with
+the resolved launcher path:
 
 \`\`\`bash
-CRW_DATA_DIR="\${CLAUDE_PLUGIN_DATA}" CRW_INDEXER_HOME="\${CLAUDE_PLUGIN_DATA}" node "\${CLAUDE_PLUGIN_ROOT}/dist/crw.js" <command>
+node "/absolute/installed/plugin/scripts/crw.mjs" <command>
 \`\`\`
 
-The env prefix is required on every invocation (state and indexers live in the
-plugin data dir, never in the reviewed repo). Requires Node >= 22.13. Every
-command prints JSON on stdout; add \`--pretty\` for human-readable output. Never
-touch the SQLite file or hand-roll \`curl\` — the CLI is the stable surface.`;
+The launcher checks indexers on first use, even if no startup hook ran.
+It sets CRW_DATA_DIR and CRW_INDEXER_HOME using the host's plugin data directory
+when available; otherwise it uses \`~/.local/share/code-review-walkthrough\`
+(or XDG_DATA_HOME). An explicit CRW_DATA_DIR overrides that choice. State stays
+outside the reviewed repo and the installed plugin. Requires Node >= 22.13
+and npm. Relay installation errors; the same command can be retried.
+Every command prints JSON on stdout; add \`--pretty\` for human-readable output.
+Never touch the SQLite file or hand-roll \`curl\` — the CLI is the stable surface.`;
 
 const LANGUAGE_SUPPORT = `Language support: TypeScript and Python indexers are installed automatically
-(first session start runs \`npm install\` in the plugin data dir — allow a
-minute once). Java additionally needs the scip-java toolchain on PATH
+(the launcher runs \`npm install\` in its data dir on first use — allow a
+minute once and network access to the npm registry). Java additionally needs the scip-java toolchain on PATH
 (coursier \`cs\` + JDK + Maven); without it Java changes appear as residual-only
 with a visible warning — relay that warning, it is expected degradation, not
 an error.
 `;
+
+// Preserve Claude's explicit data-dir substitution so existing installations
+// continue to find their saved reviews, even when shell env inheritance varies.
+const CLAUDE_INVOCATION = `Every \`crw\` command below is run as:
+
+\`\`\`bash
+CRW_DATA_DIR="\${CLAUDE_PLUGIN_DATA}" node "\${CLAUDE_PLUGIN_ROOT}/scripts/crw.mjs" <command>
+\`\`\`
+
+The launcher checks indexers on first use, including when the startup hook did
+not run. Requires Node >= 22.13 and npm. Every command prints JSON on stdout;
+add \`--pretty\` for humans. State stays in the plugin data directory. Relay
+installation errors; retry after the reported npm/network problem is fixed.
+Use this CLI for orchestration; never touch SQLite or hand-roll \`curl\`.`;
 
 const skillSrc = readFileSync(join(root, "packages/skill/skill.md"), "utf8");
 const generated = skillSrc
@@ -79,11 +101,26 @@ const generated = skillSrc
   )
   .replace(/<!-- plugin:language-support[^>]*-->\n/, `${LANGUAGE_SUPPORT}\n`);
 for (const marker of ["crw-invocation", "plugin:language-support"]) {
-  if (!generated.includes("CLAUDE_PLUGIN_ROOT") || generated.includes(marker)) {
+  if (!generated.includes("scripts/crw.mjs") || generated.includes(marker)) {
     console.error(`SKILL.md generation failed: marker '${marker}' did not resolve — check packages/skill/skill.md`);
     process.exit(1);
   }
 }
-writeFileSync(join(out, "skills/code-review-walkthrough/SKILL.md"), generated);
+writeFileSync(join(out, "skills/code-review-walkthrough/SKILL.md"), generated.replace(PLUGIN_INVOCATION, CLAUDE_INVOCATION));
 
-console.log("plugin bundle written to plugin/dist + plugin/web (+ generated SKILL.md)");
+// Codex has its own manifest and marketplace; executable payloads and skill
+// instructions are identical. No symlinks outside either installed package.
+mkdirSync(codexOut, { recursive: true });
+for (const dir of ["dist", "web", "skills"]) {
+  rmSync(join(codexOut, dir), { recursive: true, force: true });
+  cpSync(join(out, dir), join(codexOut, dir), { recursive: true });
+}
+copyFileSync(join(out, "package.json"), join(codexOut, "package.json"));
+writeFileSync(join(codexOut, "skills/code-review-walkthrough/SKILL.md"), generated);
+for (const target of [out, codexOut]) {
+  mkdirSync(join(target, "scripts"), { recursive: true });
+  copyFileSync(join(root, "scripts/plugin-launcher.mjs"), join(target, "scripts/crw.mjs"));
+  copyFileSync(join(root, "LICENSE"), join(target, "LICENSE"));
+}
+
+console.log("Claude and Codex plugin bundles written (shared runtime, launcher and generated SKILL.md)");

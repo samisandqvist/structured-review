@@ -68,7 +68,9 @@ export function SplitLayout({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+      if (e.key === "Escape") { setShowKeys(false); return; }
       const cur = useUIStore.getState().currentNodeId;
       if (e.key === "j") {
         const id = nextInWalk(order, cur, 1);
@@ -194,6 +196,9 @@ export function SplitLayout({
           )}
         </div>
       </div>
+      <div style={{ display: "flex", justifyContent: "flex-end", padding: "4px 12px", borderTop: "1px solid var(--line)" }}>
+        <button className="btn" onClick={() => setShowKeys((v) => !v)} aria-expanded={showKeys}>Keyboard shortcuts (?)</button>
+      </div>
       {showKeys && (
         <div className="keys-overlay" onClick={() => setShowKeys(false)}>
           <dl>
@@ -202,6 +207,8 @@ export function SplitLayout({
             <dt>r</dt><dd>mark reviewed &amp; advance</dd>
             <dt>c</dt><dd>comment</dd>
             <dt>?</dt><dd>toggle this overlay</dd>
+            <dt>Esc</dt><dd>close this overlay</dd>
+            <dt>Ctrl / ⌘ + Enter</dt><dd>send a comment or review note</dd>
           </dl>
         </div>
       )}
