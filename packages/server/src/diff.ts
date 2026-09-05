@@ -60,7 +60,7 @@ const QUIET: { stdio: ["ignore", "pipe", "pipe"] } = { stdio: ["ignore", "pipe",
  * if there is no diff (or git errored) — meaning "unknown, don't reclassify".
  * Uses --unified=0 so ranges are the changed lines themselves, no context.
  */
-export function fileChangedRanges(baseRef: string, file: string, root: string = repoRoot()): LineRange[] | null {
+export function fileChangedRanges(baseRef: string, file: string, root: string = repoRoot(), options: { strict?: boolean } = {}): LineRange[] | null {
   let raw: string;
   try {
     raw = execFileSync("git", ["diff", "--text", "--unified=0", baseRef, "--", file], {
@@ -69,7 +69,8 @@ export function fileChangedRanges(baseRef: string, file: string, root: string = 
       maxBuffer: 32 * 1024 * 1024,
       ...QUIET,
     });
-  } catch {
+  } catch (error) {
+    if (options.strict) throw new GitError("read-diff", `Cannot collect changed lines for ${file}: ${(error as Error).message}`);
     return null;
   }
   if (!raw.trim()) return null;

@@ -1,6 +1,6 @@
 # Code Review Walkthrough
 
-A code-structure-based review tool: Claude Code skill + local web UI. Walks a
+A code-structure-based review tool: Claude Code / Codex skill + local web UI. Walks a
 reviewer through changes along the call/dependency graph instead of a file tree.
 
 Design spec: `docs/superpowers/specs/2026-06-19-code-review-walkthrough-design.md`
@@ -8,18 +8,18 @@ Design spec: `docs/superpowers/specs/2026-06-19-code-review-walkthrough-design.m
 ## Stack
 
 - **Runtime:** Node.js, pnpm workspaces monorepo
-- **Server:** Hono + better-sqlite3 (local single-user, localhost, no auth)
-- **Web:** Vite + React 19 + TypeScript, TanStack Query, Zustand, React Flow
+- **Server:** Hono + Node built-in `node:sqlite` (local single-user, localhost, no auth)
+- **Web:** Vite + React 19 + TypeScript, TanStack Query, Zustand
 - **Skill:** Claude Code skill markdown + TypeScript orchestration scripts
-- **Graph:** CRG (code-review-graph) as external graph provider via a GraphProvider interface
-- **Tests:** Vitest (all packages), Playwright (web UI E2E)
+- **Graph:** SCIP indexers (TypeScript, Python, Java) behind a GraphProvider interface; CRG and stub alternatives
+- **Tests:** Vitest unit, React component, and real-indexer integration tests
 
 ## Monorepo layout
 
 ```
 packages/
   skill/     # Claude Code skill + superpowers glue
-  server/    # Local review hub — Hono + better-sqlite3
+  server/    # Local review hub — Hono + Node built-in `node:sqlite`
   web/       # Vite + React UI
 ```
 
@@ -31,7 +31,8 @@ pnpm dev              # start server + Vite concurrently
 pnpm build            # build all packages (static UI served by hub)
 pnpm test             # run Vitest across all packages
 pnpm typecheck        # typecheck all packages
-pnpm lint             # lint all packages
+pnpm build:plugin     # regenerate both committed plugin packages
+pnpm demo             # disposable example review; build first
 ```
 
 ## Agent CLI (crw)
@@ -54,29 +55,29 @@ crw gc [--repo <path>] [--all]                    # remove a repo's DB/logs (sto
 crw shutdown                                      # stop the hub over HTTP
 ```
 
-## Graph provider (CRG)
+## Plugin packages
 
-Without `CRG_COMMAND` set, the server uses `StubGraphProvider` (3 fixed fake
-nodes). For a real call graph, use [code-review-graph](https://github.com/tirth8205/code-review-graph),
-a Python MCP server. One-time setup:
+- `plugin/`: Claude Code package; marketplace at `.claude-plugin/marketplace.json`.
+- `plugins/code-review-walkthrough/`: Codex package; marketplace at `.agents/plugins/marketplace.json`.
+- `scripts/build-plugin.mjs` generates both runtime bundles and skill copies from
+  one source. `scripts/plugin-launcher.mjs` is copied into both packages and
+  bootstraps indexers when needed; don't edit generated files.
+- Rebuild with `pnpm build && pnpm build:plugin` after runtime or skill changes.
+  CI checks freshness of both committed bundles.
+- Node >= 22.13 is required. Plugin state uses the host data directory or the
+  launcher's XDG data fallback, outside the reviewed repository.
 
-```bash
-uv venv .venv-crg
-uv pip install --python .venv-crg code-review-graph
-.venv-crg/bin/code-review-graph build        # build the graph for this repo
-```
+## Graph providers
 
-Then run the hub with CRG enabled:
+`GRAPH_PROVIDER=scip` is the default. It indexes the tracked working tree with
+scip-typescript, scip-python, and (when available) scip-java. A missing Java
+compiler toolchain is reported in `indexWarnings`; affected text changes remain
+reviewable as residuals. SCIP relationships are inferred from references and
+are not execution traces.
 
-```bash
-CRG_COMMAND="$PWD/.venv-crg/bin/code-review-graph serve" pnpm --filter @crw/server dev
-```
-
-`CrgGraphProvider` calls `get_impact_radius_tool` for the change subgraph
-(changed nodes + ±`CRG_IMPACT_DEPTH`-hop context + `CALLS` edges, keyed by
-qualified name) and `query_graph_tool` for callers/callees. Tuning envs:
-`CRG_IMPACT_DEPTH` (default 1), `CRG_REPO_ROOT` (default git root),
-`CRG_SKIP_BUILD` (skip the incremental rebuild on each session).
+`GRAPH_PROVIDER=crg` selects the external code-review-graph provider;
+`CRG_COMMAND` chooses its launch command. `GRAPH_PROVIDER=stub` is for tests.
+See [CLI and configuration](docs/cli-and-configuration.md) for setup and tuning.
 
 ## Conventions
 
@@ -84,7 +85,7 @@ qualified name) and `query_graph_tool` for callers/callees. Tuning envs:
 - Prefer small, well-bounded modules with clear interfaces.
 - The server is the single hub: the web UI never reads CRG or git directly — it goes
   through the server.
-- Graph providers plug in behind a `GraphProvider` interface; CRG is provider #1.
+- Graph providers plug in behind a `GraphProvider` interface; SCIP is the default provider.
 - The skill and the server are separate: the skill is the LLM/planning process and
   orchestrator; the server is the stateful backend the UI depends on.
 

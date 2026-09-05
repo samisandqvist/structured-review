@@ -5,7 +5,13 @@ export function useSessions() {
   return useQuery({ queryKey: ["sessions"], queryFn: () => api.listSessions() });
 }
 export function useSession(sessionId: string) {
-  return useQuery({ queryKey: ["session", sessionId], queryFn: () => api.getSession(sessionId) });
+  return useQuery({
+    queryKey: ["session", sessionId], queryFn: () => api.getSession(sessionId),
+    // Freshness is checked by the server against the working tree. Merely
+    // becoming stale in Query's cache does not cause a new request.
+    refetchInterval: 5000,
+    refetchOnWindowFocus: "always",
+  });
 }
 export function useNodes(sessionId: string) {
   return useQuery({ queryKey: ["nodes", sessionId], queryFn: () => api.getNodes(sessionId) });
@@ -33,6 +39,7 @@ export function useUpdateNodeStatus(sessionId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["nodes", sessionId] });
       qc.invalidateQueries({ queryKey: ["node", sessionId] });
+      qc.invalidateQueries({ queryKey: ["flows", sessionId] });
     },
   });
 }
@@ -68,6 +75,8 @@ export function useCreateComment(sessionId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["comments", sessionId] });
       qc.invalidateQueries({ queryKey: ["nodes", sessionId] });
+      qc.invalidateQueries({ queryKey: ["node", sessionId] });
+      qc.invalidateQueries({ queryKey: ["flows", sessionId] });
     },
   });
 }

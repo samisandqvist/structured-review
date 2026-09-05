@@ -17,21 +17,23 @@ Given a git branch or diff range, this skill:
 
 ## When to use
 
-Use this when reviewing code changes — especially large, AI-generated changes
-where file-tree review doesn't map to the code's actual structure.
+Use this to prepare a human's review of code changes, especially a change
+spanning several files. The inferred call graph suggests a reading order;
+it does not establish architectural fit or prove correctness.
 
 ## The crw CLI
 
 Every `crw` command below is run as:
 
 ```bash
-CRW_DATA_DIR="${CLAUDE_PLUGIN_DATA}" CRW_INDEXER_HOME="${CLAUDE_PLUGIN_DATA}" node "${CLAUDE_PLUGIN_ROOT}/dist/crw.js" <command>
+CRW_DATA_DIR="${CLAUDE_PLUGIN_DATA}" node "${CLAUDE_PLUGIN_ROOT}/scripts/crw.mjs" <command>
 ```
 
-The env prefix is required on every invocation (state and indexers live in the
-plugin data dir, never in the reviewed repo). Requires Node >= 22.13. Every
-command prints JSON on stdout; add `--pretty` for human-readable output. Never
-touch the SQLite file or hand-roll `curl` — the CLI is the stable surface.
+The launcher checks indexers on first use, including when the startup hook did
+not run. Requires Node >= 22.13 and npm. Every command prints JSON on stdout;
+add `--pretty` for humans. State stays in the plugin data directory. Relay
+installation errors; retry after the reported npm/network problem is fixed.
+Use this CLI for orchestration; never touch SQLite or hand-roll `curl`.
 
 ```bash
 crw serve [--repo <path>] [--port N]            # ensure the hub runs against a repo
@@ -49,8 +51,8 @@ crw shutdown                                    # stop the hub (state stays; ser
 ```
 
 Language support: TypeScript and Python indexers are installed automatically
-(first session start runs `npm install` in the plugin data dir — allow a
-minute once). Java additionally needs the scip-java toolchain on PATH
+(the launcher runs `npm install` in its data dir on first use — allow a
+minute once and network access to the npm registry). Java additionally needs the scip-java toolchain on PATH
 (coursier `cs` + JDK + Maven); without it Java changes appear as residual-only
 with a visible warning — relay that warning, it is expected degradation, not
 an error.
@@ -79,6 +81,20 @@ Harvest flow (after the reviewer walks the plan):
 
 ## Building the review plan
 
+Before grouping a substantial change, orient the reviewer to its shape.
+Use the PR description and the changed-file inventory (for example,
+`git diff --name-status <base> --`) to identify new directories, moved files,
+new dependencies and public entry points. Check the repo's documented
+conventions and a comparable existing feature when the change introduces a
+new layout or abstraction. Prefer local evidence over a generic framework
+template. Keep this pass brief and proportional to the change.
+
+Include consequential structural departures or unanswered design questions
+in the plan overview, with concrete paths or convention references. Phrase
+inferences as questions for the reviewer, not automated verdicts. Review-wide
+notes in the UI can capture concerns that have no natural line anchor.
+The human should be able to judge scope and design before following functions.
+
 `crw plan --auto` is the mechanical baseline: one flow-unit per affected flow;
 tests, DTOs and module-scope leftovers attach themselves to those units at
 submit, and anything truly homeless is swept into the auto "Unassigned changes"
@@ -106,7 +122,7 @@ Steps for an LLM-authored plan:
 1. Gather the change's stated intent when available: `gh pr view --json
    title,body`. Commit subjects already arrive in `crw context` as
    `commitSubjects` — no separate `git log` step. This is intent input, not
-   diff reading — the "never run `git diff`" rule below stands. No PR or
+   diff reading — use the node diff command for code bodies. No PR or
    uninformative messages → proceed without; never block on missing intent.
 2. After `crw session create`, run `crw context --session <id> --brief`. It
    prints `{ sessionId, commitSubjects, flows, mergeSuggestions, orphanGroups, changes }`
@@ -120,8 +136,10 @@ Steps for an LLM-authored plan:
    `--brief` the context carries full stableIds and per-pair merge evidence;
    `--full` restores the complete flat dump (all flows with steps) if you
    truly need it.
-3. Make one flow-unit per **affected** flow, using `flowIds: [id]`. Do not
-   split flows. **Merge** flows into one multi-entry flow-unit when they
+3. Start with one flow-unit per **affected** flow, using `flowIds: [id]`.
+   The current plan API assigns whole flows, so don't invent unsupported
+   partial-flow fields. If a flow mixes unrelated concerns, call that out in
+   its rationale and suggest separate review passes. **Merge** flows into one multi-entry flow-unit when they
    substantially review the same change. The guideline (shared changed
    nodes ≥ half of the smaller flow's changed set) is precomputed: write
    `"mergeGroup": <group>` to take a whole suggestion, or list the ids
@@ -161,6 +179,6 @@ Steps for an LLM-authored plan:
    coverage): add orphan-units for exactly those stableIds (or an
    `orphanFiles` glob that covers them) and re-submit.
 
-**Never run `git diff` for planning.** If you must read a node's code to decide
-grouping, use `crw diff --session <id> --node <stableId>` — it returns just that
-one node's diff.
+For code bodies during planning, use `crw diff --session <id> --node <stableId>`.
+File inventories and repository conventions are complementary context; a full
+raw diff should not replace the structured planning input.

@@ -26,7 +26,7 @@ export function computeResiduals(
 ): ResidualNode[] {
   const out: ResidualNode[] = [];
   for (const file of changedFilesStrict(baseRef, root)) {
-    const ranges = fileChangedRanges(baseRef, file, root);
+    const ranges = fileChangedRanges(baseRef, file, root, { strict: true });
     if (!ranges || ranges.length === 0) continue;
     const spans = nodeSpans.get(file) ?? [];
     const residual = subtractRanges(ranges, spans);

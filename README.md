@@ -1,280 +1,223 @@
 # Code Review Walkthrough
 
-A polyglot, coverage-guaranteed code review tool. It orders every changed
-hunk of a diff by execution flow — walking a call graph instead of a file
-tree — and tracks review coverage per unit so nothing changed goes unseen.
-Supports **TypeScript, Python, and Java** in one session. **Status: alpha,
-in active dogfooding.**
+A guided way to read a large code change, with related code and tests together
+and your review progress saved.
 
-## Status
+A change to one endpoint can involve a controller, a service, a helper and a
+handful of tests. Reading those files in alphabetical order leaves you to piece
+that story together. Code Review Walkthrough suggests a reading order from the
+code's call relationships, then opens a local browser where you can follow it,
+take detours and leave comments.
 
-This software has been vibecoded as an experiment to validate a flow-based
-software review process. It is pre-alpha quality and very much subject to
-change.
+I built this because I wanted help understanding changes before approving them.
+It's useful for reviewing a teammate's work as well as code written by an agent.
+Claude Code or Codex prepares the walkthrough; you do the reviewing.
 
-## Features
+**Experimental alpha, in active use.** TypeScript/JavaScript, Python and Java are
+supported, with limitations below. Feedback about confusing reviews and awkward
+first-use experiences is especially welcome.
 
-- **Execution-flow review plans.** Changes are grouped into ordered review
-  units along traced call flows (entry point → callees), not directories.
-  Flow trees are pruned to change-relevant paths; off-path callees collapse
-  into expandable context runs.
-- **Coverage as a contract.** Every changed node belongs to exactly one
-  unit; anything a plan misses is swept into a visible "Unassigned changes"
-  unit (and listed by the plan API so a planner can assign it), and per-unit
-  `reviewed/total` ledgers track progress to 100%.
-- **Plan narrative.** A plan can carry a session **overview** ("the change
-  does X, decomposed as…") and change-relative unit rationales — authored at
-  plan time (never generated server-side), rendered as a collapsible
-  "from plan" block above the unit list, and included in `crw status` and
-  the comment export for PR review bodies.
-- **Context attachments.** At plan submit, the server nests changed tests
-  under the code they exercise (TESTED_BY edges or test-file imports),
-  DTOs/types under their consumers (a file-level requires relation), and
-  module-scope leftovers under their file's unit — so related changes are
-  reviewed together, not as a pile of leftovers. Cross-unit tests appear
-  once for real and as dimmed references elsewhere.
-- **Residual coverage.** Changed lines outside any graph node (types,
-  imports, configs, docs) become per-file pseudo-nodes with their exact
-  ranges, so non-code changes still enter the review universe.
-- **Line-anchored comments.** Comments anchor to diff line ranges with
-  server-validated snippets; the export is GitHub-mappable (file, line
-  range, side, hunk snippet, review status).
-- **Agent CLI (`crw`).** The entire lifecycle is scriptable — start the
-  hub, create sessions, build plans, poll status, wait for the reviewer,
-  harvest comments — JSON on stdout, `--pretty` for humans.
-- **Local web UI.** Graph and flow views, keyboard walk order (`j`/`k`
-  next/prev, `n` next unreviewed, `r` mark reviewed), per-unit progress,
-  bulk mark-reviewed, stale-session detection when the working tree moves
-  under a session. A session selector on the main page lists every open
-  session (branch, base, status) when several exist, and the header's
-  branch field doubles as a session switcher.
-- **Honest degradation.** A missing language toolchain never fails silently:
-  the session records per-language `indexWarnings`, the UI banners them, and
-  affected files fall back to residual-only review.
+![Example review: a call-based plan and related test on the left, an order-pricing diff and review comments on the right.](docs/images/demo-review.png)
 
-## Language support
+*A small order-pricing review. Run `pnpm demo` to try it yourself.*
 
-| Language | Indexer | Setup |
-|---|---|---|
-| TypeScript / JavaScript | `scip-typescript` | Bundled — nothing to install |
-| Python | `scip-python` | Bundled — nothing to install |
-| Java | `scip-java` | Needs coursier (`cs`) + JDK + Maven on PATH; without them Java degrades to residual-only with a visible warning |
-| Rust | `rust-analyzer scip` | Planned (on hold) |
+## Try it
 
-Mixed-language repos work: each detected language root is indexed
-separately and merged into one session (e.g. a TS web app + Python service
-+ Java backend in a single review).
+You'll need **Node >= 22.13**, **npm** and **Git**. Linux and macOS are supported;
+Windows is not currently supported. Indexers download from npm on first use.
 
-## Install as a Claude Code plugin (recommended)
+### Claude Code
 
-Requires **Node >= 22.13** and npm on PATH. In Claude Code:
-
-```
+```text
 /plugin marketplace add samisandqvist/structured-review
 /plugin install code-review-walkthrough@structured-review
 ```
 
-The first session start npm-installs the TypeScript/Python indexers into the
-plugin data dir (give it a minute once). Then ask Claude to review a branch —
-the `code-review-walkthrough` skill drives everything and hands you a local
-web UI URL to walk the review. All state (DB, logs, indexers) lives under
-`~/.claude/plugins/data/`, never in the reviewed repo.
+Then ask:
 
-Update later with `/plugin update code-review-walkthrough@structured-review` — every push
-to main is a new version (commit-SHA versioning). Verified on Linux and
-macOS; Windows is not supported. Maintainers: rebuild the committed bundle
-with `pnpm build && pnpm build:plugin` before pushing runtime changes (CI
-fails if you forget).
+> Use code-review-walkthrough to review my current changes against main and open the review.
 
-## Quick start (from source)
+Replace `main` with your base branch. The agent starts the local server, prepares
+a plan and gives you a browser link. The first run may take a minute to install
+the TypeScript and Python indexers. If installation fails, fix the reported npm
+or network problem and retry the same command.
+
+Update with `/plugin update code-review-walkthrough@structured-review`.
+
+### Codex
+
+Add this repository's marketplace from a terminal:
+
+```bash
+codex plugin marketplace add samisandqvist/structured-review
+```
+
+In Codex CLI, open `/plugins`, install **code-review-walkthrough** from
+**structured-review**, and start a new session. Ask:
+
+> Use $code-review-walkthrough to review my current changes against main and open the review.
+
+For a local checkout, use `codex plugin marketplace add /absolute/path/to/structured-review`.
+The package lives at `plugins/code-review-walkthrough`; the catalog is
+`.agents/plugins/marketplace.json`. The local runtime requires access to your
+checkout and a browser on the same machine. This package is intended for local
+Codex use; it does not provide a hosted ChatGPT review service.
+
+Both packages use the same CLI, UI and skill instructions. The Codex launcher
+checks dependencies when needed, without requiring a startup hook. See OpenAI's
+[plugin documentation](https://developers.openai.com/plugins/build/plugins)
+for marketplace setup and supported hosts.
+
+### From source — including a small example
 
 ```bash
 pnpm install
 pnpm build
-pnpm start
+pnpm demo
 ```
 
-Then open `http://localhost:3456`. The CLI below opens this URL for you with
-a session already attached (`?session=<id>`). Visiting it without a session
-query param loads the only open session directly, or shows a session picker
-when several are open (create a session first if none exist).
+`pnpm demo` creates a temporary example repository and prints its review URL.
+It adds order quantities and bulk discounts: follow the order function into
+pricing, inspect the tests, and consider which inputs are missing validation.
+It uses a separate port and database. The output includes a command to stop
+its server; the temporary files remain available for inspection.
 
-**Development mode:** `pnpm dev` runs the server on `:3456` and Vite on
-`:5173` (proxying `/api` to the server), with hot reload for the web UI.
-
-## The crw CLI
+To review your own working tree from this checkout:
 
 ```bash
-node packages/skill/dist/cli.js <command>       # (the plugin runs the same CLI as `crw`)
-```
-
-```text
-crw serve [--repo <path>] [--port N]            # start or reuse the hub for a repo
-crw session create --branch <b> --base <ref|empty> [--open]   # "empty" = whole-repo review
-crw session list
-crw session delete --session <id>
-crw context --session <id> [--brief|--full]     # planning view: commit subjects, flows + merge suggestions, orphan groups, change summaries (--brief: no stableIds, numeric refs only; --full: raw dump)
-crw plan --session <id> (--auto | --units <file.json>) [--open]
-crw diff --session <id> --node <stableId>       # a single node's diff
-crw status --session <id>                       # coverage, overview, per-unit reviewed/total, unreviewed list
-crw comments --session <id>                     # exported comments, GitHub-mappable
-crw wait --session <id> [--until reviewed|commented] [--interval s] [--timeout s]
-crw gc [--repo <path>] [--all]                  # remove a repo's DB/logs (stops the hub first)
-crw shutdown                                    # stop the hub (state stays; serve restarts it)
-```
-
-Every command prints JSON on stdout (`--pretty` for humans). A typical
-session:
-
-```bash
-node packages/skill/dist/cli.js serve
+node packages/skill/dist/cli.js serve --repo /absolute/path/to/your-repo
 node packages/skill/dist/cli.js session create --branch HEAD --base main
-node packages/skill/dist/cli.js plan --session <id> --auto --open
+# Substitute the sessionId printed by the previous command:
+node packages/skill/dist/cli.js plan --session <sessionId> --auto --open
 ```
 
-This reviews the **current working tree** (staged and unstaged changes
-included) against `--base`, writes a deterministic plan (one unit per
-affected execution flow; tests/DTOs/residuals attach themselves to those
-units at submit), and opens the UI to that session. `crw plan --units`
-takes an LLM- or hand-authored plan instead — a
-`{ "overview": "...", "units": [...] }` file (bare units array also
-accepted). Flow units can reference flows by the numeric ids the context
-prints (`"flowIds": [127]`, `"mergeGroup": 0`) instead of transcribing
-SCIP stableIds, and orphan units can claim files by glob
-(`"orphanFiles": ["docs/**"]`, dotfiles included); the response always
-lists unassigned leftovers (`[]` at full coverage) so the plan can be
-fixed and re-submitted. See
-[`packages/skill/skill.md`](packages/skill/skill.md) for the plan schema
-and authoring guidance.
+This is also usable without an agent: `--auto` generates a mechanical plan.
+If the default port is busy, pass the same `--port N` to each command.
 
-`--branch` defaults to `HEAD`. If you pass an explicit branch name, it must
-be the branch that is actually checked out — the server reviews the working
-tree on disk, so a session for a branch that isn't checked out would
-silently review the wrong code and is rejected with a 400 instead.
+## Walking a review
 
-## Scope and contract
+Start with the overview and unit names. Select a change to read its diff, or
+press `j` to begin. Follow a caller or callee when you need context; **Return to
+review walk** brings you back. Related tests and supporting changes appear with
+the code they belong to.
 
-- A session reviews the current working tree vs. a resolved `baseRef`,
-  including staged and unstaged changes — not just the last commit.
-  Brand-new **untracked** files are not part of the diff universe yet.
-- The session branch must be `HEAD` or the branch currently checked out.
-- If HEAD moves or the working tree changes after a session is created, the
-  UI and `crw status` flag the session stale — recreate it to pick up the
-  new state.
+Click a changed line number to anchor a comment; Shift-click another changed
+line to select a range. Sending a node comment marks that node reviewed with a
+comment. **Review notes** hold broader concerns, such as an unfamiliar directory
+layout, missing behavior or a design question that belongs to the whole change.
 
-## Providers and environment variables
+Mark changes reviewed as you go. The counters record those marks; they aren't a
+correctness score. When you're done, ask the agent to collect the comments, or run:
 
-| Variable | Default | Meaning |
-|---|---|---|
-| `GRAPH_PROVIDER` | `scip` | Graph source: `scip` (multi-language SCIP indexers, default), `crg` (external code-review-graph server), or `stub` (fixed fake graph for testing). |
-| `CRW_DB_PATH` | `review.db` | Path to the local SQLite database file (built-in `node:sqlite`, no native deps). |
-| `PORT` | `3456` | Port the server listens on. |
-| `CRW_HOST` | `127.0.0.1` | Bind address. The API is unauthenticated; a warning is printed if you bind to anything other than `127.0.0.1`/`localhost`. |
-| `CRW_WEB_DIST` | auto | Path to the built web SPA. Auto-resolved for both the monorepo and plugin-bundle layouts. |
-| `CRW_SERVER_URL` | `http://localhost:3456` | Hub URL the `crw` CLI talks to (or pass `--port`). |
-| `CRW_DATA_DIR` | unset | Plugin mode: root for per-repo DBs and logs (keyed by repo name + path hash). Unset = state lands in the repo (`review.db`, `.crw/`). |
-| `CRW_INDEXER_HOME` | unset | Plugin mode: directory whose `node_modules` holds the scip indexers. Unset = resolve from the app's own dependencies. |
-| `SCIP_CONTEXT_DEPTH` | `1` | (scip) Call-graph hops of context around changed nodes. |
-| `SCIP_NO_CACHE` | unset | (scip) Set to `1` to force a full re-index instead of using cached per-root indexes. |
-| `SCIP_JAVA_CMD` | unset | (scip) Explicit scip-java launcher, overriding PATH detection of `scip-java`/`cs`. |
-| `SCIP_JAVA_VERSION` | `0.12.3` | (scip) scip-java version used when launching via coursier. |
-
-A few more exist for advanced setups: `SCIP_REPO_ROOT` and `CRG_REPO_ROOT`
-override the git root the respective provider reads from (default: the
-ambient repo root), and `CRG_COMMAND` sets the command used to launch the
-`crg` provider's server (default `code-review-graph serve`).
-
-## Comment export
-
-`GET /api/sessions/:id/export` (or `crw comments`) returns:
-
-```json
-{
-  "branch": "HEAD",
-  "baseRef": "main",
-  "headSha": "…",
-  "overview": "…",
-  "comments": [ {
-    "id": "…", "nodeId": "…", "stableId": "…", "label": "…",
-    "file": "…", "startLine": 1, "endLine": 20,
-    "anchor": { "startLine": 4, "startSide": "new", "endLine": 6, "endSide": "new" },
-    "hunkSnippet": "…", "text": "…", "structuralContext": "…", "createdAt": 0
-  } ]
-}
+```bash
+node packages/skill/dist/cli.js comments --session <sessionId> --pretty
 ```
 
-`overview` is the plan's session narrative (`""` when the plan carries
-none) — prepend it to a PR review body if exporting there. `comments` is an
-ordered array (insertion order); a node with multiple
-comments has multiple entries. `anchor` is the comment's diff line range
-(`null` for whole-node comments) — with `file` it maps directly onto a
-GitHub PR review comment. `hunkSnippet` is derived by the server when the
-comment is created and validated against the node's current diff;
-`structuralContext` is derived at export time from the session's call/test
-edges. Both are server-owned — `POST /api/sessions/:id/comments` accepts
-only `{ "nodeId", "text", "anchor?" }`. `crw comments` additionally joins
-each comment with its node's current review status.
+Comments include file and line information for mapping to a GitHub review.
+Publishing them to GitHub is a separate step.
 
-## Entry-point configuration
+### Keyboard shortcuts
 
-Flow entry points are inferred from the call graph (functions nothing else
-calls) plus per-language evidence (exports, `main` guards), and scored: an
-explicit configuration scores 1.0, an exported graph root 0.7, a bare graph
-root 0.4. The flows API reports the evidence per flow as `entryReasons`
-(`graph-root` / `exported` / `configured` / detected reasons) and
-`entryConfidence`; the plan view shows the score on each flow unit.
+| Key | Action |
+| --- | --- |
+| `j` / `k` | Next / previous change, wrapping around the walk |
+| `n` | Next unreviewed change |
+| `r` | Mark the current change reviewed and advance |
+| `c` | Focus the comment box |
+| `?` | Show or hide keyboard help (also available as a button) |
+| `Esc` | Close keyboard help; cancel a review-note draft while editing it |
+| `Ctrl+Enter` / `Cmd+Enter` | Send a comment or review note |
 
-Framework-registered entry points (HTTP routes, CLI commands, event
-handlers) often have callers in the graph and are missed by inference —
-declare them in `.crw-entry-points.json` at the repository root:
+Navigation shortcuts pause while you're typing or using a dropdown. You can
+also drag the divider to give the diff or the plan more room. Double-click a
+unit name to rename it; drag a unit onto another to reorder the plan.
 
-```json
-{ "entryPoints": [ { "label": "main", "file": "src/cli.ts" } ] }
+## Take a step back before following the calls
+
+A readable implementation can still introduce the wrong abstraction or put a
+feature in an unexpected part of the project. Before following functions, look
+at the new directories, moved files, dependencies and public interfaces. Compare
+a new feature with an established one and with the project's documented conventions.
+
+The walkthrough helps with behavior and navigation. It doesn't yet provide a
+before/after directory view or check architectural conventions. Use review notes
+to keep those questions visible. [Ideas for improving this part of review](docs/review-experience-direction.md)
+describe possible additions; they are proposals, not shipped features.
+
+## What the review includes
+
+- The current **tracked working tree** against the supplied base ref, including
+  staged and unstaged edits. `--branch` must be `HEAD` or the checked-out branch.
+- Changed functions and methods, plus text changes outside the graph (imports,
+  types, configuration, docs and unindexed code) as per-file review items.
+- A visible **Unassigned changes** group for items a plan hasn't placed.
+- Inferred call relationships, related tests, per-unit progress, line comments
+  and review-wide notes. Plan-authored descriptions are labeled **from plan**.
+
+**Limits to keep in mind:**
+
+- New **untracked files are excluded**. Stage files you intend to include, then
+  create the session. File-mode-only changes and pure renames without text hunks
+  are not represented as review items. Binary changes have no dedicated viewer.
+- Call relationships are inferred from static references, not recorded execution.
+  Some references are not calls; framework callbacks and dependency injection
+  can obscure entry points. You can [configure entry points](docs/cli-and-configuration.md#entry-point-configuration).
+- A multi-language session combines separate language indexes; it doesn't trace
+  requests across processes or service boundaries.
+- A session is not an immutable copy of your source. If the working tree changes,
+  the UI checks freshness every five seconds while active and on window focus.
+  Recreate a stale session before continuing; its marks describe the earlier code.
+- “Reviewed” means a person marked the item. It doesn't establish test coverage,
+  architectural fit, security or correctness.
+
+| Language | Indexing setup |
+| --- | --- |
+| TypeScript / JavaScript | scip-typescript, installed automatically by the plugin |
+| Python | scip-python, installed automatically by the plugin |
+| Java | scip-java; requires coursier (`cs`), a JDK and Maven on PATH |
+
+Missing Java tooling produces a visible warning and a text-only review of the
+affected changes. Install the tools and recreate the session for call relationships.
+
+## Local data
+
+The review hub runs on loopback (`127.0.0.1`) and stores comments and progress
+in SQLite. It has no authentication; keep it on your own machine.
+
+Plugin state uses the host's writable plugin data directory when available,
+otherwise `~/.local/share/code-review-walkthrough` (or `XDG_DATA_HOME`).
+`CRW_DATA_DIR` overrides that location. From source, state defaults to `review.db`
+and `.crw/` in the reviewed repository. `crw gc` removes a repository's review data.
+
+The hub has no telemetry or model API calls. Indexer installation downloads
+packages, and Java tooling may download build dependencies. If you use Claude
+Code or Codex to prepare a review, the source/context those agents read is subject
+to that product's data handling; using a local hub doesn't make the agent offline.
+The browser also requests display fonts from Google Fonts.
+
+## Development and help
+
+```bash
+pnpm dev          # server :3456 and Vite :5173, with hot reload
+pnpm test         # unit, component and integration tests, including real indexers
+pnpm typecheck
+pnpm build
+pnpm build:plugin # rebuild both committed host packages after runtime changes
 ```
 
-`label` matches the function name exactly; `file` (optional) must equal or
-suffix-match the file path. Configured entries head flows even when the
-graph shows callers.
+CI checks tests, types, the build and freshness of both plugin bundles. There is
+currently no separate lint configuration.
 
-## Data & privacy
+If the server isn't reachable, restart it with `crw serve`. If it reports a busy
+port, use another `--port` consistently. If your base ref doesn't resolve, check
+its spelling and that it's available locally. Indexer warnings name the missing
+toolchain; installation errors can be retried after fixing npm or network access.
 
-Everything runs locally. The server binds to loopback (`127.0.0.1`) by
-default and has no authentication — do not bind it to a non-loopback address
-on a shared or untrusted network. The database is a plain local SQLite file
-(no native modules — Node's built-in `node:sqlite`); nothing is sent
-anywhere. From source it lives at `CRW_DB_PATH` (default `review.db` in the
-repo); as a plugin, under `~/.claude/plugins/data/`.
+- [CLI, environment variables, plan and export reference](docs/cli-and-configuration.md)
+- [Agent skill and plan authoring](packages/skill/skill.md)
+- [Contributor architecture and commands](AGENTS.md)
+- [Design notes and experiments](docs/)
 
-## Troubleshooting
-
-- **Stale-session chip** ("repo moved since session start"): HEAD moved or
-  the working tree changed after the session was created. Recreate the
-  session.
-- **Amber index-warnings banner / `indexWarnings` in session output**: a
-  language was indexed in degraded mode (typically the scip-java toolchain
-  missing). Install the named toolchain and recreate the session; until
-  then those files are reviewable as residual pseudo-nodes only.
-- **`crw requires Node >= 22.13`**: upgrade Node — the server uses the
-  built-in `node:sqlite` driver.
-- **`not a git repository (or git unavailable)`**: the server couldn't run
-  git in the repo root — check you're in a git checkout and `git` is on
-  `PATH`.
-- **`cannot resolve base ref '<ref>'`**: the `--base` value doesn't resolve
-  to a commit — check the ref name.
-- **`session branch '<branch>' is not checked out ...`**: pass `HEAD` (the
-  default) or check out the branch you named.
-- **`port is occupied by ...`** (from `crw serve`): another hub (or another
-  process) owns the port — pick a different `--port` or stop it.
-- **`review database schema vN is newer than this application ...`**: the DB
-  file was written by a newer version of this app. Upgrade the app, or
-  delete/archive the database file (`CRW_DB_PATH`).
-- **`web UI not built — run pnpm build`** (printed at server startup): the
-  server didn't find a built SPA. Run `pnpm build` first.
-
-## Learn more
-
-- Design docs: [`docs/`](docs/) — architecture, provider comparisons, and
-  implementation notes (see `docs/superpowers/specs/` for feature designs).
-- Skill / plan authoring: [`packages/skill/skill.md`](packages/skill/skill.md).
-- Contributing: [`AGENTS.md`](AGENTS.md) — stack, monorepo layout, and dev
-  commands for anyone working on this repo.
+MIT licensed. If you try it, I'd particularly like to hear what the walkthrough
+helped you understand, where you had to leave it to find context, and whether
+you'd use it for another review.

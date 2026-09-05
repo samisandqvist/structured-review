@@ -7,6 +7,8 @@ dist/
 !plugin/dist/**
 !plugin/web/
 !plugin/web/**
+!plugins/code-review-walkthrough/dist/
+!plugins/code-review-walkthrough/dist/**
 *.db
 *.db-journal
 *.db-shm
@@ -15,3 +17,5 @@ dist/
 # code-review-graph (CRG) provider — Python venv + its graph store
 .venv-crg/
 .code-review-graph/
+.playwright-mcp/
+opencode.log

@@ -1,0 +1,20 @@
+{
+  "name": "structured-review",
+  "interface": {
+    "displayName": "Structured Review"
+  },
+  "plugins": [
+    {
+      "name": "code-review-walkthrough",
+      "source": {
+        "source": "local",
+        "path": "./plugins/code-review-walkthrough"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

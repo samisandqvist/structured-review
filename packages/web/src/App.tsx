@@ -51,8 +51,15 @@ function ReviewShell() {
         <p className="session-picker__hint">
           {isError
             ? "The review server didn't answer. Is it still running?"
-            : "Start one with the code-review-walkthrough skill, then reload this page."}
+            : "Ask your agent to start a code-review-walkthrough session. For example:"}
         </p>
+        {!isError && <>
+          <pre style={{ whiteSpace: "pre-wrap", maxWidth: 600, padding: 16, background: "var(--surface)" }}>
+            Use code-review-walkthrough to review my current changes against main and open the review.
+          </pre>
+          <p className="session-picker__hint">Replace main with your base branch. The agent will give you a link to the planned review.</p>
+          <p className="session-picker__hint">Trying it from source? Run <code>pnpm demo</code> for a small example review.</p>
+        </>}
       </div>
     );
   }
@@ -62,7 +69,7 @@ function ReviewShell() {
 /** The header reads like an instrument status line: who we are, what branch /
  *  unit is under the lens, and how far the walk has gotten. */
 export function StatusBar({ sessionId }: { sessionId: string }) {
-  const { data: sessionData } = useSession(sessionId);
+  const { data: sessionData, isError: freshnessError } = useSession(sessionId);
   const { data: nodeData } = useNodes(sessionId);
 
   const session = sessionData?.session;
@@ -112,9 +119,12 @@ export function StatusBar({ sessionId }: { sessionId: string }) {
       {sessionData?.stale && (
         <div className="statusbar__field" data-testid="stale-chip" style={{ color: "var(--warn, #d98a2b)" }}>
           <span style={{ fontSize: 15 }}>⚠</span>
-          <span style={{ fontSize: 16 }}>repo moved since session start</span>
+          <span style={{ fontSize: 16 }} title="Recreate this review session to include the current working tree. Saved review marks describe the earlier version.">repo moved since session start — recreate review</span>
         </div>
       )}
+      {freshnessError && <div className="statusbar__field" role="status" style={{ color: "var(--warn, #d98a2b)" }}>
+        Couldn't check review freshness — check the server connection
+      </div>}
 
       <div style={{ flex: 1, minWidth: 8 }} />
 
