@@ -60,7 +60,7 @@ function fileChangedRanges(baseRef, file2, root = repoRoot(), options = {}) {
     raw2 = execFileSync("git", ["diff", "--text", "--unified=0", baseRef, "--", file2], {
       cwd: root,
       encoding: "utf8",
-      maxBuffer: 32 * 1024 * 1024,
+      maxBuffer: 256 * 1024 * 1024,
       ...QUIET
     });
   } catch (error51) {
@@ -89,7 +89,7 @@ function repoFingerprint(root = repoRoot()) {
     const h = createHash("sha256");
     h.update(execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8", ...QUIET }));
     h.update(execFileSync("git", ["diff", "HEAD"], { cwd: root, maxBuffer: 256 * 1024 * 1024, ...QUIET }));
-    const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard"], { cwd: root, encoding: "utf8", ...QUIET }).split("\n").filter(Boolean);
+    const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard", "-z"], { cwd: root, encoding: "utf8", ...QUIET }).split("\0").filter(Boolean);
     for (const f of untracked) {
       h.update(f);
       try {
@@ -114,7 +114,7 @@ function subtreeFingerprint(subdir, root = repoRoot(), pathspecs) {
       h.update("<no-tree>");
     }
     h.update(execFileSync("git", ["diff", "HEAD", "--", ...specs], { cwd: root, maxBuffer: 256 * 1024 * 1024, ...QUIET }));
-    const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard", "--", ...specs], { cwd: root, encoding: "utf8", ...QUIET }).split("\n").filter(Boolean);
+    const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard", "-z", "--", ...specs], { cwd: root, encoding: "utf8", ...QUIET }).split("\0").filter(Boolean);
     for (const f of untracked) {
       h.update(f);
       try {
@@ -158,13 +158,13 @@ function resolveRef(ref, root = repoRoot()) {
 }
 function changedFilesStrict(baseRef, root = repoRoot()) {
   try {
-    const raw2 = execFileSync("git", ["diff", "--name-only", baseRef], {
+    const raw2 = execFileSync("git", ["diff", "--name-only", "-z", baseRef], {
       cwd: root,
       encoding: "utf8",
       maxBuffer: 32 * 1024 * 1024,
       ...QUIET
     });
-    return raw2.split("\n").map((l) => l.trim()).filter(Boolean);
+    return raw2.split("\0").filter(Boolean);
   } catch (e) {
     throw new GitError("list-files", `git diff --name-only ${baseRef} failed: ${e.message}`);
   }

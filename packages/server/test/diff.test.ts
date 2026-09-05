@@ -29,6 +29,43 @@ afterAll(() => {
 });
 
 describe("resolveRef", () => {
+  it("lists and diffs non-ASCII filenames unquoted regardless of core.quotepath", () => {
+    const repo = mkdtempSync(join(tmpdir(), "crw-diff-utf8-"));
+    try {
+      const git = (...a: string[]) => execFileSync("git", a, { cwd: repo, encoding: "utf8" });
+      git("init", "-b", "main");
+      git("config", "user.email", "t@t");
+      git("config", "user.name", "t");
+      git("config", "core.quotepath", "true");
+      writeFileSync(join(repo, "ä.ts"), "one\n");
+      git("add", ".");
+      git("commit", "-m", "init");
+      writeFileSync(join(repo, "ä.ts"), "two\n");
+      expect(changedFilesStrict("HEAD", repo)).toEqual(["ä.ts"]);
+      expect(fileChangedRanges("HEAD", "ä.ts", repo, { strict: true })).toEqual([{ start: 1, end: 1 }]);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+  it("fingerprint moves when an untracked non-ASCII file's content changes", () => {
+    const repo = mkdtempSync(join(tmpdir(), "crw-diff-utf8-fp-"));
+    try {
+      const git = (...a: string[]) => execFileSync("git", a, { cwd: repo, encoding: "utf8" });
+      git("init", "-b", "main");
+      git("config", "user.email", "t@t");
+      git("config", "user.name", "t");
+      git("config", "core.quotepath", "true");
+      writeFileSync(join(repo, "tracked.txt"), "x\n");
+      git("add", ".");
+      git("commit", "-m", "init");
+      writeFileSync(join(repo, "ö.txt"), "first\n");
+      const before = repoFingerprint(repo);
+      writeFileSync(join(repo, "ö.txt"), "second\n");
+      expect(repoFingerprint(repo)).not.toBe(before);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
   it("distinguishes a failed file diff from an unchanged file at the coverage boundary", () => {
     expect(fileChangedRanges("HEAD", "a.txt", fixtureRepo, { strict: true })).toBeNull();
     expect(() => fileChangedRanges("missing-ref", "a.txt", fixtureRepo, { strict: true })).toThrow(GitError);

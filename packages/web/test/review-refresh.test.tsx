@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, type Node, type Flow, type Unit } from "../src/api/client.js";
@@ -44,7 +44,7 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => { client.clear(); vi.restoreAllMocks(); vi.useRealTimers(); });
+afterEach(() => { client.clear(); vi.restoreAllMocks(); });
 
 describe("live review feedback", () => {
   it("updates the flow unit's progress and auto-collapse after reviewing one node", async () => {
@@ -56,13 +56,9 @@ describe("live review feedback", () => {
     expect(container.querySelector(".statusbar__progress")).toHaveTextContent("1/1");
   });
 
-  it("notices a changed working tree while the reviewer leaves the page open", async () => {
-    vi.useFakeTimers();
-    render(<QueryClientProvider client={client}><StatusBar sessionId="s" /></QueryClientProvider>);
-    await act(async () => { await vi.advanceTimersByTimeAsync(100); });
-    expect(screen.queryByTestId("stale-chip")).not.toBeInTheDocument();
+  it("shows the stale chip when the session snapshot no longer matches the tree", async () => {
     stale = true;
-    await act(async () => { await vi.advanceTimersByTimeAsync(5100); });
-    expect(screen.getByTestId("stale-chip")).toHaveTextContent("recreate review");
+    render(<QueryClientProvider client={client}><StatusBar sessionId="s" /></QueryClientProvider>);
+    await waitFor(() => expect(screen.getByTestId("stale-chip")).toHaveTextContent("recreate review"));
   });
 });

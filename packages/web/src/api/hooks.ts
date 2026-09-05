@@ -5,13 +5,7 @@ export function useSessions() {
   return useQuery({ queryKey: ["sessions"], queryFn: () => api.listSessions() });
 }
 export function useSession(sessionId: string) {
-  return useQuery({
-    queryKey: ["session", sessionId], queryFn: () => api.getSession(sessionId),
-    // Freshness is checked by the server against the working tree. Merely
-    // becoming stale in Query's cache does not cause a new request.
-    refetchInterval: 5000,
-    refetchOnWindowFocus: "always",
-  });
+  return useQuery({ queryKey: ["session", sessionId], queryFn: () => api.getSession(sessionId) });
 }
 export function useNodes(sessionId: string) {
   return useQuery({ queryKey: ["nodes", sessionId], queryFn: () => api.getNodes(sessionId) });
@@ -76,7 +70,8 @@ export function useCreateComment(sessionId: string) {
       qc.invalidateQueries({ queryKey: ["comments", sessionId] });
       qc.invalidateQueries({ queryKey: ["nodes", sessionId] });
       qc.invalidateQueries({ queryKey: ["node", sessionId] });
-      qc.invalidateQueries({ queryKey: ["flows", sessionId] });
+      // No flows invalidation: the flows payload carries no comment data, and
+      // the follow-up reviewed-commented status mutation refreshes flows itself.
     },
   });
 }

@@ -117,6 +117,30 @@ for (const dir of ["dist", "web", "skills"]) {
 }
 copyFileSync(join(out, "package.json"), join(codexOut, "package.json"));
 writeFileSync(join(codexOut, "skills/code-review-walkthrough/SKILL.md"), generated);
+
+// The Codex manifest is generated too: shared identity fields come from the
+// hand-maintained Claude manifest, so a version bump there cannot leave the
+// Codex marketplace behind (the CI freshness guard now covers this file).
+const claudeManifest = JSON.parse(readFileSync(join(out, ".claude-plugin/plugin.json"), "utf8"));
+mkdirSync(join(codexOut, ".codex-plugin"), { recursive: true });
+writeFileSync(join(codexOut, ".codex-plugin/plugin.json"), JSON.stringify({
+  name: claudeManifest.name,
+  version: claudeManifest.version,
+  description: "Walk through code changes with related code and tests together, saved review progress, and a local web UI.",
+  author: claudeManifest.author,
+  repository: claudeManifest.repository,
+  license: claudeManifest.license,
+  skills: "./skills/",
+  interface: {
+    displayName: claudeManifest.displayName,
+    shortDescription: "A guided review of your code changes.",
+    longDescription: "Create a review plan from inferred call relationships, walk the changes in a local browser, and export line-anchored comments. Requires local Node 22.13 or newer, npm, and Git. Experimental alpha.",
+    developerName: claudeManifest.author.name,
+    category: "Productivity",
+    capabilities: ["Read", "Write"],
+    defaultPrompt: "Use code-review-walkthrough to review my current changes against main.",
+  },
+}, null, 2) + "\n");
 for (const target of [out, codexOut]) {
   mkdirSync(join(target, "scripts"), { recursive: true });
   copyFileSync(join(root, "scripts/plugin-launcher.mjs"), join(target, "scripts/crw.mjs"));
