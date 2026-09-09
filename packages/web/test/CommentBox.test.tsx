@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CommentBox } from "../src/components/CommentBox.js";
@@ -9,6 +9,11 @@ const anchor = { startLine: 11, startSide: "new" as const, endLine: 12, endSide:
 const mutateSpy = vi.fn((_args: { nodeId: string; text: string }, opts?: { onSuccess?: () => void }) =>
   opts?.onSuccess?.()
 );
+
+const updateSpy = vi.fn((_args: { commentId: string; text: string }, opts?: { onSuccess?: () => void }) =>
+  opts?.onSuccess?.()
+);
+const deleteSpy = vi.fn();
 
 vi.mock("../src/api/hooks.js", () => ({
   useComments: () => ({
@@ -22,6 +27,8 @@ vi.mock("../src/api/hooks.js", () => ({
   }),
   useCreateComment: () => ({ mutate: mutateSpy }),
   useUpdateNodeStatus: () => ({ mutate: vi.fn() }),
+  useUpdateComment: () => ({ mutate: updateSpy }),
+  useDeleteComment: () => ({ mutate: deleteSpy }),
 }));
 
 function renderWithProviders(ui: React.ReactNode) {
@@ -105,5 +112,72 @@ describe("anchored comments", () => {
     await waitFor(() =>
       expect(mutateSpy).toHaveBeenCalledWith({ nodeId: "n1", text: "plain" }, expect.anything())
     );
+  });
+});
+
+describe("editing and deleting comments", () => {
+  beforeEach(() => {
+    updateSpy.mockClear();
+    deleteSpy.mockClear();
+  });
+
+  it("deletes a comment via its ✕ button", () => {
+    renderWithProviders(<CommentBox sessionId="s1" nodeId="n1" />);
+    fireEvent.click(screen.getAllByLabelText("delete comment")[0]);
+    expect(deleteSpy).toHaveBeenCalledWith("c1");
+  });
+
+  it("edits a comment and saves the new text", async () => {
+    renderWithProviders(<CommentBox sessionId="s1" nodeId="n1" />);
+    fireEvent.click(screen.getAllByLabelText("edit comment")[0]);
+    const ta = screen.getByDisplayValue("existing comment");
+    fireEvent.change(ta, { target: { value: "  revised comment " } });
+    fireEvent.click(screen.getByText("Save"));
+    await waitFor(() =>
+      expect(updateSpy).toHaveBeenCalledWith({ commentId: "c1", text: "revised comment" }, expect.anything())
+    );
+    // Back to display mode after a successful save.
+    expect(screen.queryByDisplayValue(/revised comment/)).not.toBeInTheDocument();
+  });
+
+  it("saves an edit with Ctrl+Enter", async () => {
+    renderWithProviders(<CommentBox sessionId="s1" nodeId="n1" />);
+    fireEvent.click(screen.getAllByLabelText("edit comment")[0]);
+    const ta = screen.getByDisplayValue("existing comment");
+    fireEvent.change(ta, { target: { value: "quick save" } });
+    fireEvent.keyDown(ta, { key: "Enter", ctrlKey: true });
+    await waitFor(() =>
+      expect(updateSpy).toHaveBeenCalledWith({ commentId: "c1", text: "quick save" }, expect.anything())
+    );
+  });
+
+  it("discards the draft on Escape or Cancel without saving", () => {
+    renderWithProviders(<CommentBox sessionId="s1" nodeId="n1" />);
+    fireEvent.click(screen.getAllByLabelText("edit comment")[0]);
+    const ta = screen.getByDisplayValue("existing comment");
+    fireEvent.change(ta, { target: { value: "half-typed" } });
+    fireEvent.keyDown(ta, { key: "Escape" });
+    expect(screen.queryByDisplayValue("half-typed")).not.toBeInTheDocument();
+    expect(screen.getByText("existing comment")).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByLabelText("edit comment")[0]);
+    fireEvent.change(screen.getByDisplayValue("existing comment"), { target: { value: "again" } });
+    fireEvent.click(screen.getByText("Cancel"));
+    expect(screen.queryByDisplayValue("again")).not.toBeInTheDocument();
+    expect(updateSpy).not.toHaveBeenCalled();
+  });
+
+  it("disables Save when the draft is blank", () => {
+    renderWithProviders(<CommentBox sessionId="s1" nodeId="n1" />);
+    fireEvent.click(screen.getAllByLabelText("edit comment")[0]);
+    fireEvent.change(screen.getByDisplayValue("existing comment"), { target: { value: "   " } });
+    expect(screen.getByText("Save")).toBeDisabled();
+  });
+
+  it("keeps the anchor chip visible while editing an anchored comment", () => {
+    renderWithProviders(<CommentBox sessionId="s1" nodeId="n1" />);
+    fireEvent.click(screen.getAllByLabelText("edit comment")[1]);
+    expect(screen.getByDisplayValue("anchored one")).toBeInTheDocument();
+    expect(screen.getByText(/lines \+11…\+12/)).toBeInTheDocument();
   });
 });

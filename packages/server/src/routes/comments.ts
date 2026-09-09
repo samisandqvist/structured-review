@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import type { AppContext } from "../app.js";
-import { createComment, getCommentsBySession, exportComments } from "../repo/comments.js";
+import { createComment, getComment, updateCommentText, deleteComment, nodeHasComments, getCommentsBySession, exportComments } from "../repo/comments.js";
 import { getSession } from "../repo/sessions.js";
-import { getNode } from "../repo/nodes.js";
+import { getNode, updateNodeReviewStatus } from "../repo/nodes.js";
 import { getNodeDiff, getNodeDiffForRanges, formatHunkSnippet, anchorRowRange } from "../diff.js";
 import type { CommentAnchor } from "../types.js";
-import { parseBody, commentCreateSchema } from "../validate.js";
+import { parseBody, commentCreateSchema, commentPatchSchema } from "../validate.js";
 
 export function createCommentsRoute(ctx: AppContext) {
   const router = new Hono();
@@ -48,6 +48,31 @@ export function createCommentsRoute(ctx: AppContext) {
     }
     const comment = createComment(ctx.db, sessionId, body.nodeId, formatHunkSnippet(snippetLines), body.text, "", anchor);
     return c.json({ comment });
+  });
+
+  router.patch("/:id/comments/:commentId", async (c) => {
+    const parsed = await parseBody(c, commentPatchSchema);
+    if (!parsed.ok) return parsed.res;
+    const existing = getComment(ctx.db, c.req.param("commentId"));
+    if (!existing || existing.sessionId !== c.req.param("id")) return c.json({ error: "not found" }, 404);
+    const comment = updateCommentText(ctx.db, existing.id, parsed.data.text);
+    return c.json({ comment });
+  });
+
+  router.delete("/:id/comments/:commentId", (c) => {
+    const existing = getComment(ctx.db, c.req.param("commentId"));
+    if (!existing || existing.sessionId !== c.req.param("id")) return c.json({ error: "not found" }, 404);
+    deleteComment(ctx.db, existing.id);
+    // Mirror of the PATCH /nodes rule (a node with comments is reviewed-commented):
+    // once the last comment goes, the node is simply reviewed. reviewedInUnit is
+    // kept so the plan view still shows where it was reviewed.
+    if (existing.nodeId && !nodeHasComments(ctx.db, existing.nodeId)) {
+      const node = getNode(ctx.db, existing.nodeId);
+      if (node && node.reviewStatus === "reviewed-commented") {
+        updateNodeReviewStatus(ctx.db, node.id, "reviewed-clean", node.reviewedInUnit ?? undefined);
+      }
+    }
+    return c.json({ deleted: existing.id });
   });
 
   router.get("/:id/export", (c) => {

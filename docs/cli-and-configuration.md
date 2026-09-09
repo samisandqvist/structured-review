@@ -115,8 +115,12 @@ GitHub PR review comment. `hunkSnippet` is derived by the server when the
 comment is created and validated against the node's current diff;
 `structuralContext` is derived at export time from the session's call/test
 edges. Both are server-owned — `POST /api/sessions/:id/comments` accepts
-only `{ "nodeId", "text", "anchor?" }`. `crw comments` additionally joins
-each comment with its node's current review status.
+only `{ "nodeId", "text", "anchor?" }`. `PATCH /api/sessions/:id/comments/:commentId`
+accepts `{ "text" }` and leaves the anchor and snippet as they are;
+`DELETE /api/sessions/:id/comments/:commentId` removes the comment and, when it
+was the node's last one, moves a `reviewed-commented` node back to
+`reviewed-clean`. `crw comments` additionally joins each comment with its
+node's current review status.
 
 ## Entry-point configuration
 

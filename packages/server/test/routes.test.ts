@@ -1453,3 +1453,120 @@ describe("GET /api/sessions/:id/changes", () => {
     expect(byLabel).toEqual({ main: "function", send: "method" });
   });
 });
+
+describe("DELETE and PATCH /api/sessions/:id/comments/:commentId", () => {
+  const json = (body: unknown, method = "POST") => ({
+    method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  async function sessionWithNode() {
+    const cr = await app.request("/api/sessions", json({ branch: "HEAD", baseRef: "main" }));
+    const { session } = await cr.json();
+    const { nodes } = await (await app.request(`/api/sessions/${session.id}/nodes`)).json();
+    return { sid: session.id as string, nid: nodes[0].id as string };
+  }
+  async function postComment(sid: string, body: Record<string, unknown>) {
+    const res = await app.request(`/api/sessions/${sid}/comments`, json(body));
+    return (await res.json()).comment;
+  }
+
+  it("deletes a comment and removes it from the list", async () => {
+    const { sid, nid } = await sessionWithNode();
+    const a = await postComment(sid, { nodeId: nid, text: "keep" });
+    const b = await postComment(sid, { nodeId: nid, text: "drop" });
+    const res = await app.request(`/api/sessions/${sid}/comments/${b.id}`, { method: "DELETE" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ deleted: b.id });
+    const { comments } = await (await app.request(`/api/sessions/${sid}/comments`)).json();
+    expect(comments.map((c: { id: string }) => c.id)).toEqual([a.id]);
+  });
+
+  it("returns 404 when deleting an unknown comment", async () => {
+    const { sid } = await sessionWithNode();
+    const res = await app.request(`/api/sessions/${sid}/comments/cmt_nope`, { method: "DELETE" });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 404 when deleting a comment through another session", async () => {
+    const { sid, nid } = await sessionWithNode();
+    const other = await sessionWithNode();
+    const c = await postComment(sid, { nodeId: nid, text: "mine" });
+    const res = await app.request(`/api/sessions/${other.sid}/comments/${c.id}`, { method: "DELETE" });
+    expect(res.status).toBe(404);
+    const { comments } = await (await app.request(`/api/sessions/${sid}/comments`)).json();
+    expect(comments).toHaveLength(1);
+  });
+
+  it("reverts a reviewed-commented node to reviewed-clean when its last comment is deleted", async () => {
+    const { sid, nid } = await sessionWithNode();
+    const c = await postComment(sid, { nodeId: nid, text: "only one" });
+    await app.request(`/api/sessions/${sid}/nodes/${nid}`, json({ reviewStatus: "reviewed-commented", reviewedInUnit: 2 }, "PATCH"));
+    await app.request(`/api/sessions/${sid}/comments/${c.id}`, { method: "DELETE" });
+    const { node } = await (await app.request(`/api/sessions/${sid}/nodes/${nid}`)).json();
+    expect(node.reviewStatus).toBe("reviewed-clean");
+    expect(node.reviewedInUnit).toBe(2);
+  });
+
+  it("keeps reviewed-commented while other comments remain on the node", async () => {
+    const { sid, nid } = await sessionWithNode();
+    const a = await postComment(sid, { nodeId: nid, text: "first" });
+    await postComment(sid, { nodeId: nid, text: "second" });
+    await app.request(`/api/sessions/${sid}/nodes/${nid}`, json({ reviewStatus: "reviewed-commented" }, "PATCH"));
+    await app.request(`/api/sessions/${sid}/comments/${a.id}`, { method: "DELETE" });
+    const { node } = await (await app.request(`/api/sessions/${sid}/nodes/${nid}`)).json();
+    expect(node.reviewStatus).toBe("reviewed-commented");
+  });
+
+  it("deleting a session-wide comment leaves node statuses alone", async () => {
+    const { sid, nid } = await sessionWithNode();
+    const c = await postComment(sid, { text: "review-wide" });
+    await app.request(`/api/sessions/${sid}/nodes/${nid}`, json({ reviewStatus: "unreviewed" }, "PATCH"));
+    const res = await app.request(`/api/sessions/${sid}/comments/${c.id}`, { method: "DELETE" });
+    expect(res.status).toBe(200);
+    const { node } = await (await app.request(`/api/sessions/${sid}/nodes/${nid}`)).json();
+    expect(node.reviewStatus).toBe("unreviewed");
+  });
+
+  it("updates comment text and returns the updated comment", async () => {
+    const { sid, nid } = await sessionWithNode();
+    const c = await postComment(sid, { nodeId: nid, text: "typo here" });
+    const res = await app.request(`/api/sessions/${sid}/comments/${c.id}`, json({ text: "  fixed text  " }, "PATCH"));
+    expect(res.status).toBe(200);
+    const { comment } = await res.json();
+    expect(comment.id).toBe(c.id);
+    expect(comment.text).toBe("fixed text");
+    const { comments } = await (await app.request(`/api/sessions/${sid}/comments`)).json();
+    expect(comments[0].text).toBe("fixed text");
+  });
+
+  it("preserves anchor, snippet and createdAt when editing text", async () => {
+    const { sid, nid } = await sessionWithNode();
+    const c = await postComment(sid, { nodeId: nid, text: "before" });
+    // Anchor/snippet are set directly: the stub provider has no real diff to anchor into.
+    db.prepare("UPDATE comments SET anchor = ?, hunk_snippet = ? WHERE id = ?")
+      .run(JSON.stringify({ startLine: 3, startSide: "new", endLine: 4, endSide: "new" }), "@@ snippet @@", c.id);
+    const res = await app.request(`/api/sessions/${sid}/comments/${c.id}`, json({ text: "after" }, "PATCH"));
+    const { comment } = await res.json();
+    expect(comment.anchor).toEqual({ startLine: 3, startSide: "new", endLine: 4, endSide: "new" });
+    expect(comment.hunkSnippet).toBe("@@ snippet @@");
+    expect(comment.createdAt).toBe(c.createdAt);
+  });
+
+  it("rejects an empty edit with 400", async () => {
+    const { sid, nid } = await sessionWithNode();
+    const c = await postComment(sid, { nodeId: nid, text: "content" });
+    const res = await app.request(`/api/sessions/${sid}/comments/${c.id}`, json({ text: "   " }, "PATCH"));
+    expect(res.status).toBe(400);
+    const { comments } = await (await app.request(`/api/sessions/${sid}/comments`)).json();
+    expect(comments[0].text).toBe("content");
+  });
+
+  it("returns 404 when editing an unknown comment or one from another session", async () => {
+    const { sid, nid } = await sessionWithNode();
+    const other = await sessionWithNode();
+    const c = await postComment(sid, { nodeId: nid, text: "mine" });
+    const missing = await app.request(`/api/sessions/${sid}/comments/cmt_nope`, json({ text: "x" }, "PATCH"));
+    expect(missing.status).toBe(404);
+    const cross = await app.request(`/api/sessions/${other.sid}/comments/${c.id}`, json({ text: "x" }, "PATCH"));
+    expect(cross.status).toBe(404);
+  });
+});

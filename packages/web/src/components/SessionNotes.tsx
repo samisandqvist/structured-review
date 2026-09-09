@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useComments, useCreateComment } from "../api/hooks.js";
+import { CommentCard } from "./CommentCard.js";
 
 /** Review-wide remarks that anchor to no diff line — missing functionality,
  *  absent tests, architectural concerns. Exported as scope:"session" comments
@@ -41,22 +42,7 @@ export function SessionNotes({ sessionId }: { sessionId: string }) {
       {notes.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
           {notes.map((n) => (
-            <div
-              key={n.id}
-              data-testid="session-note"
-              style={{
-                padding: "8px 10px",
-                background: "var(--surface)",
-                border: "1px solid var(--line)",
-                borderLeft: "2px solid var(--led-commented)",
-                borderRadius: "var(--radius-sm)",
-                fontSize: 15,
-                lineHeight: 1.55,
-                whiteSpace: "pre-wrap",
-              }}
-            >
-              {n.text}
-            </div>
+            <CommentCard key={n.id} sessionId={sessionId} comment={n} fontSize={15} testId="session-note" />
           ))}
         </div>
       )}

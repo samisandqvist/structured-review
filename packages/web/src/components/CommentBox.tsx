@@ -6,6 +6,7 @@ import {
 } from "../api/hooks.js";
 import { useUIStore } from "../store/ui.js";
 import { selectionLabel } from "./DiffView.js";
+import { CommentCard } from "./CommentCard.js";
 
 // Both Meta+Enter and Ctrl+Enter submit; the hint names the key the viewer's
 // platform actually has (⌘ means nothing on a Linux/Windows keyboard).
@@ -96,34 +97,27 @@ export function CommentBox({
       {comments.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 12 }}>
           {comments.map((c) => (
-            <div
+            <CommentCard
               key={c.id}
-              style={{
-                padding: "10px 12px",
-                background: "var(--surface)",
-                border: "1px solid var(--line)",
-                borderLeft: "2px solid var(--led-commented)",
-                borderRadius: "var(--radius-sm)",
-                fontSize: 17,
-                lineHeight: 1.55,
-                color: "var(--text)",
-              }}
-            >
-              {c.anchor && (
-                <button
-                  onClick={() => requestAnchorHighlight(c.anchor!)}
-                  style={{
-                    display: "inline-block", marginRight: 8, fontSize: 14,
-                    fontFamily: "var(--mono)", color: "var(--dim)",
-                    background: "transparent", border: "1px solid var(--line)",
-                    borderRadius: 4, padding: "0 6px", cursor: "pointer",
-                  }}
-                >
-                  {selectionLabel(c.anchor)}
-                </button>
-              )}
-              {c.text}
-            </div>
+              sessionId={sessionId}
+              comment={c}
+              fontSize={17}
+              leading={
+                c.anchor ? (
+                  <button
+                    onClick={() => requestAnchorHighlight(c.anchor!)}
+                    style={{
+                      display: "inline-block", marginRight: 8, fontSize: 14,
+                      fontFamily: "var(--mono)", color: "var(--dim)",
+                      background: "transparent", border: "1px solid var(--line)",
+                      borderRadius: 4, padding: "0 6px", cursor: "pointer",
+                    }}
+                  >
+                    {selectionLabel(c.anchor)}
+                  </button>
+                ) : undefined
+              }
+            />
           ))}
         </div>
       )}

@@ -158,6 +158,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ ...(nodeId ? { nodeId } : {}), text, ...(anchor ? { anchor } : {}) }),
     }),
+  updateComment: (sessionId: string, commentId: string, text: string) =>
+    fetchJson<{ comment: Comment }>(`/sessions/${sessionId}/comments/${commentId}`, {
+      method: "PATCH", body: JSON.stringify({ text }),
+    }),
+  deleteComment: (sessionId: string, commentId: string) =>
+    fetchJson<{ deleted: string }>(`/sessions/${sessionId}/comments/${commentId}`, { method: "DELETE" }),
   updateUnit: (sessionId: string, unitId: string, patch: { label?: string; position?: number }) =>
     fetchJson<{ units: Unit[] }>(`/sessions/${sessionId}/units/${unitId}`, {
       method: "PATCH", body: JSON.stringify(patch),
