@@ -33157,6 +33157,9 @@ var commentCreateSchema = external_exports.object({
   text: external_exports.string().trim().min(1, "comment text must be nonempty").max(1e4, "comment too long"),
   anchor: commentAnchorSchema.optional()
 }).refine((b) => !(b.anchor && !b.nodeId), { message: "anchor requires nodeId" });
+var commentPatchSchema = external_exports.object({
+  text: external_exports.string().trim().min(1, "comment text must be nonempty").max(1e4, "comment too long")
+});
 async function parseBody2(c, schema) {
   let raw2;
   try {
@@ -33456,6 +33459,17 @@ function createComment(db2, sessionId, nodeId, hunkSnippet, text, structuralCont
 function getCommentsBySession(db2, sessionId) {
   return db2.prepare("SELECT * FROM comments WHERE session_id = ? ORDER BY created_at, rowid").all(sessionId).map(rowToComment);
 }
+function getComment(db2, id) {
+  const row = db2.prepare("SELECT * FROM comments WHERE id = ?").get(id);
+  return row ? rowToComment(row) : void 0;
+}
+function updateCommentText(db2, id, text) {
+  db2.prepare("UPDATE comments SET text = ? WHERE id = ?").run(text, id);
+  return getComment(db2, id);
+}
+function deleteComment(db2, id) {
+  return db2.prepare("DELETE FROM comments WHERE id = ?").run(id).changes > 0;
+}
 function nodeHasComments(db2, nodeId) {
   const row = db2.prepare("SELECT 1 FROM comments WHERE node_id = ? LIMIT 1").get(nodeId);
   return row !== void 0;
@@ -33626,6 +33640,26 @@ function createCommentsRoute(ctx) {
     }
     const comment = createComment(ctx.db, sessionId, body.nodeId, formatHunkSnippet(snippetLines), body.text, "", anchor);
     return c.json({ comment });
+  });
+  router.patch("/:id/comments/:commentId", async (c) => {
+    const parsed = await parseBody2(c, commentPatchSchema);
+    if (!parsed.ok) return parsed.res;
+    const existing = getComment(ctx.db, c.req.param("commentId"));
+    if (!existing || existing.sessionId !== c.req.param("id")) return c.json({ error: "not found" }, 404);
+    const comment = updateCommentText(ctx.db, existing.id, parsed.data.text);
+    return c.json({ comment });
+  });
+  router.delete("/:id/comments/:commentId", (c) => {
+    const existing = getComment(ctx.db, c.req.param("commentId"));
+    if (!existing || existing.sessionId !== c.req.param("id")) return c.json({ error: "not found" }, 404);
+    deleteComment(ctx.db, existing.id);
+    if (existing.nodeId && !nodeHasComments(ctx.db, existing.nodeId)) {
+      const node = getNode(ctx.db, existing.nodeId);
+      if (node && node.reviewStatus === "reviewed-commented") {
+        updateNodeReviewStatus(ctx.db, node.id, "reviewed-clean", node.reviewedInUnit ?? void 0);
+      }
+    }
+    return c.json({ deleted: existing.id });
   });
   router.get("/:id/export", (c) => {
     const session = getSession(ctx.db, c.req.param("id"));

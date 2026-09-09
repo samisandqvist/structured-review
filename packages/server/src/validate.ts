@@ -96,6 +96,10 @@ export const commentCreateSchema = z
   })
   .refine((b) => !(b.anchor && !b.nodeId), { message: "anchor requires nodeId" });
 
+export const commentPatchSchema = z.object({
+  text: z.string().trim().min(1, "comment text must be nonempty").max(10_000, "comment too long"),
+});
+
 export type Parsed<T> = { ok: true; data: T } | { ok: false; res: Response };
 
 /** Parse + validate a JSON body; on failure returns a structured 4xx the

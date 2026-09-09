@@ -7,6 +7,11 @@ const mutateSpy = vi.fn((_args: { nodeId: string | null; text: string }, opts?: 
   opts?.onSuccess?.()
 );
 
+const updateSpy = vi.fn((_args: { commentId: string; text: string }, opts?: { onSuccess?: () => void }) =>
+  opts?.onSuccess?.()
+);
+const deleteSpy = vi.fn();
+
 vi.mock("../src/api/hooks.js", () => ({
   useComments: () => ({
     data: {
@@ -18,6 +23,8 @@ vi.mock("../src/api/hooks.js", () => ({
     isLoading: false,
   }),
   useCreateComment: () => ({ mutate: mutateSpy }),
+  useUpdateComment: () => ({ mutate: updateSpy }),
+  useDeleteComment: () => ({ mutate: deleteSpy }),
 }));
 
 function renderWithProviders(ui: React.ReactNode) {
@@ -25,7 +32,11 @@ function renderWithProviders(ui: React.ReactNode) {
 }
 
 describe("SessionNotes", () => {
-  beforeEach(() => mutateSpy.mockClear());
+  beforeEach(() => {
+    mutateSpy.mockClear();
+    updateSpy.mockClear();
+    deleteSpy.mockClear();
+  });
 
   it("lists only session-wide comments, not node comments", () => {
     renderWithProviders(<SessionNotes sessionId="s1" />);
@@ -41,5 +52,32 @@ describe("SessionNotes", () => {
     await waitFor(() =>
       expect(mutateSpy).toHaveBeenCalledWith({ nodeId: null, text: "big picture concern" }, expect.anything())
     );
+  });
+
+  it("deletes a note via its ✕ button", () => {
+    renderWithProviders(<SessionNotes sessionId="s1" />);
+    fireEvent.click(screen.getByLabelText("delete comment"));
+    expect(deleteSpy).toHaveBeenCalledWith("c2");
+  });
+
+  it("edits a note and saves the new text", async () => {
+    renderWithProviders(<SessionNotes sessionId="s1" />);
+    fireEvent.click(screen.getByLabelText("edit comment"));
+    fireEvent.change(screen.getByDisplayValue("no tests anywhere for retries"), { target: { value: "retries are untested" } });
+    fireEvent.click(screen.getByText("Save"));
+    await waitFor(() =>
+      expect(updateSpy).toHaveBeenCalledWith({ commentId: "c2", text: "retries are untested" }, expect.anything())
+    );
+  });
+
+  it("discards a note edit on Escape", () => {
+    renderWithProviders(<SessionNotes sessionId="s1" />);
+    fireEvent.click(screen.getByLabelText("edit comment"));
+    const ta = screen.getByDisplayValue("no tests anywhere for retries");
+    fireEvent.change(ta, { target: { value: "draft" } });
+    fireEvent.keyDown(ta, { key: "Escape" });
+    expect(screen.queryByDisplayValue("draft")).not.toBeInTheDocument();
+    expect(screen.getByText("no tests anywhere for retries")).toBeInTheDocument();
+    expect(updateSpy).not.toHaveBeenCalled();
   });
 });

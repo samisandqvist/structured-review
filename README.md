@@ -105,6 +105,9 @@ Click a changed line number to anchor a comment; Shift-click another changed
 line to select a range. Sending a node comment marks that node reviewed with a
 comment. **Review notes** hold broader concerns, such as an unfamiliar directory
 layout, missing behavior or a design question that belongs to the whole change.
+Each comment and note has edit (✎) and delete (✕) buttons; editing keeps the
+line anchor, and deleting a node's last comment sets the node back to reviewed
+without a comment.
 
 Mark changes reviewed as you go. The counters record those marks; they aren't a
 correctness score. When you're done, ask the agent to collect the comments, or run:
@@ -125,8 +128,8 @@ Publishing them to GitHub is a separate step.
 | `r` | Mark the current change reviewed and advance |
 | `c` | Focus the comment box |
 | `?` | Show or hide keyboard help (also available as a button) |
-| `Esc` | Close keyboard help; cancel a review-note draft while editing it |
-| `Ctrl+Enter` / `Cmd+Enter` | Send a comment or review note |
+| `Esc` | Close keyboard help; cancel a review-note draft or a comment edit |
+| `Ctrl+Enter` / `Cmd+Enter` | Send a comment or review note; save a comment edit |
 
 Navigation shortcuts pause while you're typing or using a dropdown. You can
 also drag the divider to give the diff or the plan more room. Double-click a

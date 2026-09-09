@@ -75,3 +75,27 @@ export function useCreateComment(sessionId: string) {
     },
   });
 }
+export function useUpdateComment(sessionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ commentId, text }: { commentId: string; text: string }) =>
+      api.updateComment(sessionId, commentId, text),
+    // Only the text changed; nodes and flows carry no comment text.
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["comments", sessionId] }),
+  });
+}
+export function useDeleteComment(sessionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (commentId: string) => api.deleteComment(sessionId, commentId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["comments", sessionId] });
+      // Deleting a node's last comment may flip it back to reviewed-clean on
+      // the server, so every view that shows review status must refetch.
+      qc.invalidateQueries({ queryKey: ["nodes", sessionId] });
+      qc.invalidateQueries({ queryKey: ["node", sessionId] });
+      qc.invalidateQueries({ queryKey: ["flows", sessionId] });
+      qc.invalidateQueries({ queryKey: ["session", sessionId] });
+    },
+  });
+}

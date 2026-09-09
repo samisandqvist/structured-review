@@ -34,6 +34,22 @@ export function getCommentsBySession(db: DB, sessionId: string): Comment[] {
   return (db.prepare("SELECT * FROM comments WHERE session_id = ? ORDER BY created_at, rowid").all(sessionId) as CommentRow[]).map(rowToComment);
 }
 
+export function getComment(db: DB, id: string): Comment | undefined {
+  const row = db.prepare("SELECT * FROM comments WHERE id = ?").get(id) as CommentRow | undefined;
+  return row ? rowToComment(row) : undefined;
+}
+
+/** Text is the only editable field: anchor and snippet still describe the
+ *  same lines, and createdAt keeps the comment's place in the export order. */
+export function updateCommentText(db: DB, id: string, text: string): Comment | undefined {
+  db.prepare("UPDATE comments SET text = ? WHERE id = ?").run(text, id);
+  return getComment(db, id);
+}
+
+export function deleteComment(db: DB, id: string): boolean {
+  return db.prepare("DELETE FROM comments WHERE id = ?").run(id).changes > 0;
+}
+
 export function nodeHasComments(db: DB, nodeId: string): boolean {
   const row = db.prepare("SELECT 1 FROM comments WHERE node_id = ? LIMIT 1").get(nodeId);
   return row !== undefined;
