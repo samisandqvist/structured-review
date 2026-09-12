@@ -110,6 +110,10 @@ export type Parsed<T> = { ok: true; data: T } | { ok: false; res: Response };
  *  caller returns as-is. Unknown keys are stripped, so older clients that
  *  still send extra fields keep working. */
 export async function parseBody<S extends z.ZodTypeAny>(c: Context, schema: S): Promise<Parsed<z.infer<S>>> {
+  const mediaType = c.req.header("Content-Type")?.split(";", 1)[0]?.trim().toLowerCase();
+  if (mediaType !== "application/json") {
+    return { ok: false, res: c.json({ error: "Content-Type must be application/json" }, 415) };
+  }
   let raw: unknown;
   try {
     raw = await c.req.json();

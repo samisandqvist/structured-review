@@ -1,6 +1,6 @@
 {
   "name": "code-review-walkthrough",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Walk through code changes with related code and tests together, saved review progress, and a local web UI.",
   "author": {
     "name": "Sami Sandqvist"

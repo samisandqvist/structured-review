@@ -33574,6 +33574,10 @@ var commentPatchSchema = external_exports.object({
   text: external_exports.string().trim().min(1, "comment text must be nonempty").max(1e4, "comment too long")
 });
 async function parseBody2(c, schema) {
+  const mediaType = c.req.header("Content-Type")?.split(";", 1)[0]?.trim().toLowerCase();
+  if (mediaType !== "application/json") {
+    return { ok: false, res: c.json({ error: "Content-Type must be application/json" }, 415) };
+  }
   let raw2;
   try {
     raw2 = await c.req.json();
@@ -34354,10 +34358,32 @@ function createChangesRoute(ctx) {
   return router;
 }
 
+// node_modules/.pnpm/hono@4.12.26/node_modules/hono/dist/helper/factory/index.js
+var createMiddleware = (middleware) => middleware;
+
+// packages/server/src/request-security.ts
+var loopbackAuthority = /^(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{1,5})?$/i;
+var localRequestsOnly = createMiddleware(async (c, next) => {
+  const url2 = new URL(c.req.url);
+  const host = c.req.header("Host") ?? url2.host;
+  if (!loopbackAuthority.test(url2.host) || !loopbackAuthority.test(host)) {
+    return c.json({ error: "loopback host required" }, 403);
+  }
+  const origin = c.req.header("Origin");
+  if (origin !== void 0 && origin !== url2.origin) {
+    return c.json({ error: "same-origin request required" }, 403);
+  }
+  if (c.req.header("Sec-Fetch-Site") === "cross-site") {
+    return c.json({ error: "cross-site request rejected" }, 403);
+  }
+  await next();
+});
+
 // packages/server/src/app.ts
 function createApp(ctx) {
   const resolved = { ...ctx, repoRoot: ctx.repoRoot ?? repoRoot() };
   const app2 = new Hono2();
+  app2.use("*", localRequestsOnly);
   app2.get(
     "/health",
     (c) => c.json({ ok: true, repoRoot: resolved.repoRoot, pid: process.pid, provider: resolved.providerName ?? "unknown" })

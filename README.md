@@ -70,8 +70,12 @@ for marketplace setup and supported hosts.
 
 ### From source — including a small example
 
+Install **pnpm 10.15.1** (`npm install --global pnpm@10.15.1`), then:
+
 ```bash
-pnpm install
+git clone https://github.com/samisandqvist/structured-review.git
+cd structured-review
+pnpm install --frozen-lockfile
 pnpm build
 pnpm demo
 ```
@@ -186,6 +190,12 @@ affected changes. Install the tools and recreate the session for call relationsh
 
 The review hub runs on loopback (`127.0.0.1`) and stores comments and progress
 in SQLite. It has no authentication; keep it on your own machine.
+It accepts only loopback hostnames and rejects foreign browser origins and
+cross-site requests. JSON write endpoints require `Content-Type: application/json`.
+These checks protect the browser boundary; local processes can still use the API.
+
+Review only repositories and build configurations you trust. Java indexing runs
+the project's build (including build plugins); indexing is not sandboxed.
 
 Plugin state uses the host's writable plugin data directory when available,
 otherwise `~/.local/share/code-review-walkthrough` (or `XDG_DATA_HOME`).
@@ -206,10 +216,16 @@ pnpm test         # unit, component and integration tests, including real indexe
 pnpm typecheck
 pnpm build
 pnpm build:plugin # rebuild both committed host packages after runtime changes
+pnpm verify       # aggregate quality checks; see setup prerequisites below
 ```
 
-CI checks tests, types, the build and freshness of both plugin bundles. There is
-currently no separate lint configuration.
+CI runs type, formatting, lint/complexity, architecture, test/coverage, build,
+plugin freshness, browser, and security checks. Existing debt is recorded in
+explicit baselines; passing CI does not mean every strict target is met.
+See the [quality harness guide](docs/harness.md) for verification prerequisites,
+coverage policies, and commands. PRs and pushes to `main` run ordinary verification;
+Mondays run only the security refresh/check job. The full platform and mutation
+workflow is available manually.
 
 If the server isn't reachable, restart it with `crw serve`. If it reports a busy
 port, use another `--port` consistently. If your base ref doesn't resolve, check
