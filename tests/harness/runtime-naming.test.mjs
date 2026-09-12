@@ -149,18 +149,22 @@ it("starts the source CLI with renamed state paths and garbage-collects that sta
   const { runCli } = await import("../../packages/skill/src/cli.ts");
   const { statePaths } = await import("../../packages/skill/src/serve.ts");
   const output = vi.spyOn(console, "log").mockImplementation(() => {});
+  let started = false;
   try {
     await runCli(["serve", "--repo", workspace, "--port", String(port)]);
+    started = true;
     const health = await fetch(`http://127.0.0.1:${port}/health`).then((r) => r.json());
     expect(health.repoRoot).toBe(workspace);
     expect(existsSync(statePaths(workspace).dbPath)).toBe(true);
     await runCli(["gc", "--all"]);
     expect(JSON.parse(output.mock.calls.at(-1)[0]).skipped).toHaveLength(1);
   } finally {
-    await runCli(["shutdown", "--port", String(port)]);
-    await vi.waitFor(async () => {
-      await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow();
-    });
+    if (started) {
+      await runCli(["shutdown", "--port", String(port)]);
+      await vi.waitFor(async () => {
+        await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow();
+      });
+    }
   }
   await runCli(["gc", "--repo", workspace, "--port", String(port)]);
   expect(JSON.parse(output.mock.calls.at(-1)[0]).removed.length).toBeGreaterThan(0);

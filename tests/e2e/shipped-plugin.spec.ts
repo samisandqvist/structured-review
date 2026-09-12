@@ -79,7 +79,7 @@ test("shipped CLI, server, and UI preserve an anchored comment through edit and 
   await expect(input).toBeFocused();
   await input.fill("Quantity should reject negative values");
   await input.press("Control+Enter");
-  await expect(page.getByText("Quantity should reject negative values", { exact: true })).toBeVisible();
+  await expectComment(page, "Quantity should reject negative values");
 
   const savedAnchor = page.getByRole("button", { name: originalAnchor?.replace("commenting on ", "") ?? "" });
   await expect(savedAnchor).toHaveScreenshot("anchored-comment-chip.png");
@@ -112,7 +112,9 @@ test("shipped CLI, server, and UI preserve an anchored comment through edit and 
   });
 
   await page.getByRole("button", { name: "delete comment" }).click();
-  await expect(page.getByText("Quantity must reject negative values before pricing", { exact: true })).toBeHidden();
+  await expect(page.getByRole("heading", { name: "Comments" }).locator("../..")).not.toContainText(
+    "Quantity must reject negative values before pricing",
+  );
   await expect(page.getByText("reviewed", { exact: true })).toBeVisible();
   await expect
     .poll(async () => (await review.srev<Exported>("comments", "--session", session.sessionId)).comments.length)

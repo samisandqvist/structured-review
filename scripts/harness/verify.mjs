@@ -10,9 +10,10 @@ export function verificationNames({ strict, full }) {
     "format:check",
     strict ? "lint:strict" : "lint",
     "architecture",
+    // Runtime integration tests execute the built CLI, server, and web UI.
+    "build",
     "test:coverage",
     strict ? "coverage:strict" : "coverage:check",
-    "build",
     "plugin:check",
     "test:e2e",
     "security:check",
