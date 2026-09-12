@@ -125,18 +125,20 @@ describe("setup migration exceptions", () => {
 });
 
 describe("source-bound branch debt policy", () => {
-  it("rejects edited debt or source while accepting the recorded manifest", () => {
+  it("rejects the retired manifest for changed source and rejects altered debt", () => {
     const root = fixture();
     const repo = new URL("../../", import.meta.url);
     const source = "packages/server/src/graph/scip.ts";
     const contents = readFileSync(new URL(source, repo), "utf8");
-    const { branchDebt } = JSON.parse(readFileSync(new URL(".harness/coverage-baseline.json", repo), "utf8"));
+    const branchDebt = JSON.parse(
+      readFileSync(new URL("fixtures/retired-scip-branch-debt.json", import.meta.url), "utf8"),
+    );
     const policy = { files: {}, branchDebt };
     const save = () => writeFileSync(join(root, ".harness/coverage-baseline.json"), JSON.stringify(policy));
     mkdirSync(join(root, "packages/server/src/graph"));
     writeFileSync(join(root, source), contents);
     save();
-    expect(runCoverage({ root }).failures).toEqual([`${source}: missing from coverage report`]);
+    expect(() => runCoverage({ root })).toThrow(/branch debt source changed/);
     writeFileSync(join(root, source), contents + "\n// changed source\n");
     expect(() => runCoverage({ root })).toThrow(/branch debt source changed/);
     writeFileSync(join(root, source), contents);

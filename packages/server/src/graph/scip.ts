@@ -551,95 +551,123 @@ function span1(arr?: number[]): [number, number] | null {
   return [start + 1, (end ?? start) + 1];
 }
 
-export function buildGraphFromIndex(idx: ScipIndex, root: string): BuiltGraph {
-  const rootSlash = root.endsWith("/") ? root : `${root}/`;
-  const rel = (p: string) => (p.startsWith(rootSlash) ? p.slice(rootSlash.length) : p);
+interface GraphDocument {
+  file: string;
+  occurrences: ScipOccurrence[];
+}
 
+/** Types and namespaces still define file dependencies, but only callable
+ * definitions with body spans become graph nodes. Java fields also have spans. */
+function callableNode(symbol: string, occurrence: ScipOccurrence, file: string): RawNode | undefined {
+  if (/[#/]$/.test(symbol)) return undefined;
+  if (file.endsWith(".java") && !/\)\.$/.test(symbol)) return undefined;
+  const span = span1(occurrence.enclosingRange);
+  if (!span) return undefined;
+  const label = labelOf(symbol);
+  if (!label) return undefined;
+  return { label, file, startLine: span[0], endLine: span[1], isTest: isTestFile(file) };
+}
+
+function collectDefinitions(documents: GraphDocument[]) {
   const nodes = new Map<string, RawNode>();
-  for (const d of idx.documents) {
-    const file = rel(d.relativePath ?? "");
-    for (const o of d.occurrences ?? []) {
-      if (!((o.symbolRoles ?? 0) & ROLE_DEFINITION)) continue;
-      if (!o.symbol || o.symbol.startsWith("local ")) continue;
-      if (/[#/]$/.test(o.symbol)) continue; // skip types / namespaces
-      // scip-java attaches enclosingRange to fields/enum constants too (TS and
-      // Python indexers only give it to callables): in Java documents, only a
-      // method descriptor (`…(...).`) is a graph node.
-      if (file.endsWith(".java") && !/\)\.$/.test(o.symbol)) continue;
-      const span = span1(o.enclosingRange);
-      if (!span) continue; // require a body span -> function/method
-      const label = labelOf(o.symbol);
-      if (!label) continue;
-      nodes.set(o.symbol, { label, file, startLine: span[0], endLine: span[1], isTest: isTestFile(file) });
+  const definitionFiles = new Map<string, string>();
+  for (const { file, occurrences } of documents) {
+    for (const occurrence of occurrences) {
+      if (!((occurrence.symbolRoles ?? 0) & ROLE_DEFINITION)) continue;
+      const symbol = occurrence.symbol;
+      if (!symbol || symbol.startsWith("local ")) continue;
+      definitionFiles.set(symbol, file);
+      const node = callableNode(symbol, occurrence, file);
+      if (node) nodes.set(symbol, node);
     }
   }
+  return { nodes, definitionFiles };
+}
 
-  // File-level requires: map every non-local definition (types `#`, functions
-  // `().`, methods, fields) to its defining file, then every cross-file
-  // reference or import makes the referencing file "require" the defining
-  // file. Types are deliberately NOT graph nodes but carry the DTO→consumer
-  // relation (required-by attachment); function/value entries let changed
-  // tests attach to the covered files they import (test-import attachment).
-  const defFile = new Map<string, string>();
-  for (const d of idx.documents) {
-    const file = rel(d.relativePath ?? "");
-    for (const o of d.occurrences ?? []) {
-      if (!((o.symbolRoles ?? 0) & ROLE_DEFINITION)) continue;
-      if (!o.symbol || o.symbol.startsWith("local ")) continue;
-      defFile.set(o.symbol, file);
-    }
-  }
-  const fileRequires: FileRequires = new Map();
-  for (const d of idx.documents) {
-    const file = rel(d.relativePath ?? "");
-    for (const o of d.occurrences ?? []) {
-      if ((o.symbolRoles ?? 0) & ROLE_DEFINITION) continue;
-      if (!o.symbol) continue;
-      const def = defFile.get(o.symbol);
-      if (!def || def === file) continue;
-      // A bare type-descriptor symbol (`…User#`) is a type reference; anything
-      // deeper (`…User#create().`, terms) is a value reference and upgrades
-      // the edge. Kind isn't emitted by scip-typescript, so the suffix is the
-      // only classification we have — classes still surface as value refs via
-      // their methods.
-      const isValue = !o.symbol.endsWith("#");
-      const edges = fileRequires.get(file) ?? fileRequires.set(file, new Map()).get(file)!;
-      const edge = edges.get(def);
-      if (edge) edge.hasValueRef ||= isValue;
-      else edges.set(def, { hasValueRef: isValue });
-    }
-  }
+function addFileReference(
+  file: string,
+  occurrence: ScipOccurrence,
+  definitionFiles: Map<string, string>,
+  requires: FileRequires,
+) {
+  if ((occurrence.symbolRoles ?? 0) & ROLE_DEFINITION) return;
+  if (!occurrence.symbol) return;
+  const definition = definitionFiles.get(occurrence.symbol);
+  if (!definition || definition === file) return;
+  // Bare type descriptors are type-only; deeper method/term references upgrade
+  // the same edge to a value dependency, regardless of occurrence order.
+  const hasValueRef = !occurrence.symbol.endsWith("#");
+  const edges = requires.get(file) ?? new Map<string, { hasValueRef: boolean }>();
+  const edge = edges.get(definition);
+  if (edge) edge.hasValueRef ||= hasValueRef;
+  else edges.set(definition, { hasValueRef });
+  requires.set(file, edges);
+}
 
-  const callSets = new Map<string, Set<string>>();
-  for (const d of idx.documents) {
-    const file = rel(d.relativePath ?? "");
-    // node bodies defined in this document, innermost first (so refs attribute
-    // to the tightest enclosing function).
-    const localDefs: { symbol: string; sl: number; el: number }[] = [];
-    for (const o of d.occurrences ?? []) {
-      if ((o.symbolRoles ?? 0) & ROLE_DEFINITION && o.symbol && nodes.has(o.symbol)) {
-        const n = nodes.get(o.symbol)!;
-        if (n.file === file) localDefs.push({ symbol: o.symbol, sl: n.startLine, el: n.endLine });
-      }
-    }
-    localDefs.sort((a, b) => a.el - a.sl - (b.el - b.sl));
-    for (const o of d.occurrences ?? []) {
-      const roles = o.symbolRoles ?? 0;
-      if (roles & ROLE_DEFINITION || roles & ROLE_IMPORT) continue;
-      if (!o.symbol || !nodes.has(o.symbol)) continue;
-      const line = o.range?.[0] === undefined ? null : o.range[0] + 1;
-      if (line == null) continue;
-      const caller = localDefs.find((c) => line >= c.sl && line <= c.el && c.symbol !== o.symbol);
-      if (!caller) continue;
-      (callSets.get(caller.symbol) ?? callSets.set(caller.symbol, new Set()).get(caller.symbol)!).add(o.symbol);
+function collectFileRequires(documents: GraphDocument[], definitionFiles: Map<string, string>): FileRequires {
+  const requires: FileRequires = new Map();
+  for (const { file, occurrences } of documents) {
+    for (const occurrence of occurrences) addFileReference(file, occurrence, definitionFiles, requires);
+  }
+  return requires;
+}
+
+/** Innermost first; stable sorting preserves document order for equal spans. */
+function documentCallers(document: GraphDocument, nodes: Map<string, RawNode>) {
+  const callers: { symbol: string; sl: number; el: number }[] = [];
+  for (const occurrence of document.occurrences) {
+    if (!((occurrence.symbolRoles ?? 0) & ROLE_DEFINITION) || !occurrence.symbol) continue;
+    const node = nodes.get(occurrence.symbol);
+    if (node?.file === document.file) {
+      callers.push({ symbol: occurrence.symbol, sl: node.startLine, el: node.endLine });
     }
   }
+  return callers.sort((a, b) => a.el - a.sl - (b.el - b.sl));
+}
 
+function collectDocumentCalls(document: GraphDocument, nodes: Map<string, RawNode>, calls: Map<string, Set<string>>) {
+  const callers = documentCallers(document, nodes);
+  for (const occurrence of document.occurrences) {
+    const roles = occurrence.symbolRoles ?? 0;
+    if (roles & ROLE_DEFINITION || roles & ROLE_IMPORT) continue;
+    if (!occurrence.symbol || !nodes.has(occurrence.symbol)) continue;
+    const start = occurrence.range?.[0];
+    if (start === undefined) continue;
+    const line = start + 1;
+    const caller = callers.find((c) => line >= c.sl && line <= c.el && c.symbol !== occurrence.symbol);
+    if (!caller) continue;
+    const targets = calls.get(caller.symbol) ?? new Set<string>();
+    targets.add(occurrence.symbol);
+    calls.set(caller.symbol, targets);
+  }
+}
+
+function callAdjacency(calls: Map<string, Set<string>>) {
   const callAdj = new Map<string, string[]>();
   const callRev = new Map<string, string[]>();
-  for (const [src, tgts] of callSets) {
-    callAdj.set(src, [...tgts]);
-    for (const t of tgts) (callRev.get(t) ?? callRev.set(t, []).get(t)!).push(src);
+  for (const [source, targets] of calls) {
+    callAdj.set(source, [...targets]);
+    for (const target of targets) {
+      const callers = callRev.get(target) ?? [];
+      callers.push(source);
+      callRev.set(target, callers);
+    }
   }
-  return { nodes, callAdj, callRev, fileRequires };
+  return { callAdj, callRev };
+}
+
+export function buildGraphFromIndex(idx: ScipIndex, root: string): BuiltGraph {
+  const rootSlash = root.endsWith("/") ? root : `${root}/`;
+  const documents = idx.documents.map((document) => {
+    const path = document.relativePath ?? "";
+    return {
+      file: path.startsWith(rootSlash) ? path.slice(rootSlash.length) : path,
+      occurrences: document.occurrences ?? [],
+    };
+  });
+  const { nodes, definitionFiles } = collectDefinitions(documents);
+  const fileRequires = collectFileRequires(documents, definitionFiles);
+  const calls = new Map<string, Set<string>>();
+  for (const document of documents) collectDocumentCalls(document, nodes, calls);
+  return { nodes, ...callAdjacency(calls), fileRequires };
 }

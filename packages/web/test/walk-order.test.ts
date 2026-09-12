@@ -109,3 +109,18 @@ describe("navigation", () => {
     expect(nextUnreviewed(order, allDone, "n-a")).toBeNull();
   });
 });
+
+describe("unresolved navigation inputs", () => {
+  it("skips an unresolved flow and still walks the next unit", () => {
+    const units = [unit("missing", "flow", ["not-indexed"], 0), unit("available", "orphans", ["a"], 1)];
+    expect(buildWalkOrder(units, [], [node("a")])).toEqual([{ nodeId: "n-a", stableId: "a" }]);
+  });
+
+  it("starts backward navigation at the last node when selection is absent", () => {
+    const order = [
+      { nodeId: "n-a", stableId: "a" },
+      { nodeId: "n-b", stableId: "b" },
+    ];
+    expect(nextInWalk(order, null, -1)).toBe("n-b");
+  });
+});

@@ -84,12 +84,97 @@ function walkPositions(
   return walk;
 }
 
-/**
- * Three passes over the plan's unassigned changed nodes, first match wins.
- * Parents are always plan-covered nodes (no chaining); explicit plan
- * membership wins because covered nodes are never candidates here.
- * Returns per-unit attachment lists, indexed like `units`.
- */
+interface AttachmentContext {
+  byStable: Map<string, AttachNode>;
+  covered: Set<string>;
+  walk: Map<string, WalkPos>;
+  byWalk: (a: string, b: string) => number;
+  testsByTest: Map<string, string[]>;
+  fileRequires: FileRequires;
+}
+
+function indexTestEdges(edges: TestEdge[]): Map<string, string[]> {
+  const byTest = new Map<string, string[]>();
+  for (const edge of edges) {
+    const targets = byTest.get(edge.testStableId) ?? [];
+    targets.push(edge.productionStableId);
+    byTest.set(edge.testStableId, targets);
+  }
+  return byTest;
+}
+
+/** First exercised covered node owns the test; other units get one reference each. */
+function exercisedAttachments(node: AttachNode, context: AttachmentContext): AttachedMember[] | null {
+  if (!node.isTest) return null;
+  const { covered, testsByTest, byWalk, walk } = context;
+  const exercised = [...new Set(testsByTest.get(node.stableId) ?? [])].filter((id) => covered.has(id)).sort(byWalk);
+  if (exercised.length === 0) return null;
+  const parent = exercised[0];
+  if (!parent) return [];
+  const members: AttachedMember[] = [
+    { stableId: node.stableId, parentStableId: parent, reason: "tested-by", counted: true },
+  ];
+  const refUnits = new Set([walk.get(parent)!.unitIndex]);
+  for (const other of exercised.slice(1)) {
+    const unitIndex = walk.get(other)!.unitIndex;
+    if (refUnits.has(unitIndex)) continue;
+    refUnits.add(unitIndex);
+    members.push({ stableId: node.stableId, parentStableId: other, reason: "tested-by", counted: false });
+  }
+  return members;
+}
+
+/** Match the first covered node of this file, including module-scope residuals. */
+function sameFileAttachments(node: AttachNode, context: AttachmentContext): AttachedMember[] | null {
+  const parents = [...context.covered]
+    .filter((id) => context.byStable.get(id)?.file === node.file)
+    .sort(context.byWalk);
+  if (parents.length === 0) return null;
+  const parentStableId = parents[0];
+  return parentStableId ? [{ stableId: node.stableId, parentStableId, reason: "same-file", counted: true }] : [];
+}
+
+/** A changed definition belongs under the first covered consumer of its file. */
+function consumerAttachments(node: AttachNode, context: AttachmentContext): AttachedMember[] | null {
+  const parents = [...context.covered]
+    .filter((id) => context.fileRequires.get(context.byStable.get(id)?.file ?? "")?.has(node.file))
+    .sort(context.byWalk);
+  if (parents.length === 0) return null;
+  const parentStableId = parents[0];
+  return parentStableId ? [{ stableId: node.stableId, parentStableId, reason: "required-by", counted: true }] : [];
+}
+
+/** Test imports are fallback evidence only: basename matches beat walk order,
+ * and type-only references qualify only with a matching subject name (#11/#12). */
+function importedTestAttachments(node: AttachNode, context: AttachmentContext): AttachedMember[] {
+  if (!node.isTest) return [];
+  const { byStable, covered, fileRequires, byWalk } = context;
+  const stems = testNameStems(node.file);
+  const nameMatch = (id: string) => stems.has(fileStem(byStable.get(id)!.file));
+  const rank = (id: string) => (nameMatch(id) ? 0 : 1);
+  const reqs = fileRequires.get(node.file);
+  const imported = [...covered]
+    .filter((id) => {
+      const edge = reqs?.get(byStable.get(id)?.file ?? "");
+      return edge != null && (edge.hasValueRef || nameMatch(id));
+    })
+    .sort((a, b) => rank(a) - rank(b) || byWalk(a, b));
+  const parentStableId = imported[0];
+  return parentStableId ? [{ stableId: node.stableId, parentStableId, reason: "tested-by", counted: true }] : [];
+}
+
+function appendAttachments(attached: AttachedMember[][], members: AttachedMember[], walk: Map<string, WalkPos>) {
+  for (const member of members) {
+    const position = walk.get(member.parentStableId);
+    if (!position) throw new Error(`attachment parent '${member.parentStableId}' is outside the review walk`);
+    const unitMembers = attached[position.unitIndex];
+    if (!unitMembers) throw new Error(`review walk references missing unit ${position.unitIndex}`);
+    unitMembers.push(member);
+  }
+}
+
+/** Four ordered rules, first match wins. Only explicitly covered nodes can be
+ * parents (no attachment chaining); explicitly planned nodes are never candidates. */
 export function deriveAttachments(
   units: PlanUnitInput[],
   flows: Flow[],
@@ -101,97 +186,24 @@ export function deriveAttachments(
   const changed = new Set(nodes.filter((n) => n.changeStatus === "changed").map((n) => n.stableId));
   const covered = new Set(units.flatMap((u) => unitCoverage(u, flows, changed)));
   const walk = walkPositions(units, flows, changed, byStable);
-  const byWalk = (a: string, b: string) => walk.get(a)!.pos - walk.get(b)!.pos;
-
-  const testsByTest = new Map<string, string[]>();
-  for (const e of testEdges) {
-    (testsByTest.get(e.testStableId) ?? testsByTest.set(e.testStableId, []).get(e.testStableId)!).push(
-      e.productionStableId,
-    );
-  }
-
-  const attached: AttachedMember[][] = units.map(() => []);
-  const attach = (m: AttachedMember) => {
-    const position = walk.get(m.parentStableId);
-    if (!position) throw new Error(`attachment parent '${m.parentStableId}' is outside the review walk`);
-    const members = attached[position.unitIndex];
-    if (!members) throw new Error(`review walk references missing unit ${position.unitIndex}`);
-    members.push(m);
+  const context: AttachmentContext = {
+    byStable,
+    covered,
+    walk,
+    fileRequires,
+    byWalk: (a, b) => walk.get(a)!.pos - walk.get(b)!.pos,
+    testsByTest: indexTestEdges(testEdges),
   };
-
+  const attached: AttachedMember[][] = units.map(() => []);
   const unassigned = [...changed].filter((id) => !covered.has(id)).sort();
   for (const stableId of unassigned) {
     const node = byStable.get(stableId)!;
-
-    // Pass 1 — tested-by: nest under the first exercised covered node; other
-    // exercised nodes in *other* units get render-only references.
-    if (node.isTest) {
-      const exercised = [...new Set(testsByTest.get(stableId) ?? [])].filter((p) => covered.has(p)).sort(byWalk);
-      if (exercised.length > 0) {
-        const [parent] = exercised;
-        if (!parent) continue;
-        attach({ stableId, parentStableId: parent, reason: "tested-by", counted: true });
-        const refUnits = new Set<number>();
-        for (const other of exercised.slice(1)) {
-          const unitIndex = walk.get(other)!.unitIndex;
-          if (unitIndex === walk.get(parent)!.unitIndex || refUnits.has(unitIndex)) continue;
-          refUnits.add(unitIndex);
-          attach({ stableId, parentStableId: other, reason: "tested-by", counted: false });
-        }
-        continue;
-      }
-    }
-
-    // Pass 2 — same-file: module-scope residuals (and friends) nest under the
-    // first covered node of their own file.
-    const sameFile = [...covered].filter((c) => byStable.get(c)?.file === node.file).sort(byWalk);
-    if (sameFile.length > 0) {
-      const [parentStableId] = sameFile;
-      if (!parentStableId) continue;
-      attach({ stableId, parentStableId, reason: "same-file", counted: true });
-      continue;
-    }
-
-    // Pass 3 — required-by: nest under the first covered node whose file
-    // requires this node's file (DTO -> consumer).
-    const consumers = [...covered]
-      .filter((c) => fileRequires.get(byStable.get(c)?.file ?? "")?.has(node.file))
-      .sort(byWalk);
-    if (consumers.length > 0) {
-      const [parentStableId] = consumers;
-      if (!parentStableId) continue;
-      attach({ stableId, parentStableId, reason: "required-by", counted: true });
-      continue;
-    }
-
-    // Pass 4 — test imports: a test whose call edges didn't resolve (e.g.
-    // vitest `it()` bodies are anonymous callbacks, so no TESTED_BY edge
-    // forms) still names what it exercises via its file's imports. Nest it
-    // under the covered node its file requires, ranked by evidence strength:
-    // a basename match (users.service.spec -> users.service) beats walk
-    // order — otherwise an early unit holding a widely-imported hub file
-    // (schema, shared types) becomes a magnet for every changed test (#11).
-    // Type-only edges (import type for fixture convenience) say nothing
-    // about what the spec exercises, so they are candidates only when the
-    // basename matches, e.g. a type-test spec (#12). Tests only — for
-    // production code this reversed direction would attach on far weaker
-    // evidence.
-    if (node.isTest) {
-      const stems = testNameStems(node.file);
-      const nameMatch = (id: string) => stems.has(fileStem(byStable.get(id)!.file));
-      const rank = (id: string) => (nameMatch(id) ? 0 : 1);
-      const reqs = fileRequires.get(node.file);
-      const imported = [...covered]
-        .filter((c) => {
-          const edge = reqs?.get(byStable.get(c)?.file ?? "");
-          return edge != null && (edge.hasValueRef || nameMatch(c));
-        })
-        .sort((a, b) => rank(a) - rank(b) || byWalk(a, b));
-      if (imported.length > 0) {
-        const [parentStableId] = imported;
-        if (parentStableId) attach({ stableId, parentStableId, reason: "tested-by", counted: true });
-      }
-    }
+    const members =
+      exercisedAttachments(node, context) ??
+      sameFileAttachments(node, context) ??
+      consumerAttachments(node, context) ??
+      importedTestAttachments(node, context);
+    appendAttachments(attached, members, walk);
   }
   return attached;
 }

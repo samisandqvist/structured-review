@@ -281,3 +281,56 @@ describe("java symbol shapes (spike deltas)", () => {
     expect(g.nodes.get(TS_TERM)?.label).toBe("handlers");
   });
 });
+
+describe("call attribution boundaries", () => {
+  it("attributes duplicate references to the innermost eligible caller and keeps reverse order", () => {
+    const outer = `${TS_MAIN}outer().`;
+    const inner = `${TS_MAIN}inner().`;
+    const documents: ScipDocument[] = [
+      {
+        relativePath: "src/nested.ts",
+        occurrences: [
+          { symbol: outer, symbolRoles: 1, enclosingRange: [0, 0, 20, 0] },
+          { symbol: inner, symbolRoles: 1, enclosingRange: [3, 0, 8, 0] },
+          { symbol: TS_UTIL, symbolRoles: 1, enclosingRange: [25, 0, 27, 0] },
+          { symbol: TS_UTIL, range: [4, 0, 1] },
+          { symbol: TS_UTIL, range: [5, 0, 1] },
+          { symbol: TS_UTIL, range: [12, 0, 1] },
+          { symbol: TS_UTIL, symbolRoles: 2, range: [1, 0, 1] },
+          { symbol: TS_UTIL, range: [30, 0, 1] },
+          { symbol: "unknown", range: [4, 0, 1] },
+          { symbol: TS_UTIL },
+          {},
+        ],
+      },
+    ];
+    const graph = buildGraphFromIndex({ documents }, "/repo");
+    expect([...graph.callAdj]).toEqual([
+      [inner, [TS_UTIL]],
+      [outer, [TS_UTIL]],
+    ]);
+    expect([...graph.callRev]).toEqual([[TS_UTIL, [inner, outer]]]);
+  });
+
+  it("excludes local, namespace, typelike, and bodyless definitions from callable nodes", () => {
+    const graph = buildGraphFromIndex(
+      {
+        documents: [
+          {
+            occurrences: [
+              { symbol: "local 0", symbolRoles: 1, enclosingRange: [0, 0, 2, 0] },
+              { symbol: "namespace/", symbolRoles: 1, enclosingRange: [0, 0, 2, 0] },
+              { symbol: "Type#", symbolRoles: 1, enclosingRange: [0, 0, 2, 0] },
+              { symbol: TS_MAIN, symbolRoles: 1 },
+              { symbolRoles: 1, enclosingRange: [0, 0, 2, 0] },
+            ],
+          },
+        ],
+      },
+      "/repo/",
+    );
+    expect([...graph.nodes]).toEqual([]);
+    expect([...graph.callAdj]).toEqual([]);
+    expect([...graph.fileRequires]).toEqual([]);
+  });
+});

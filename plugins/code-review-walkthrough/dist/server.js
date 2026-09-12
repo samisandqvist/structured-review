@@ -18673,77 +18673,103 @@ function span1(arr) {
   const end = arr.length === 4 ? arr[2] : start;
   return [start + 1, (end ?? start) + 1];
 }
-function buildGraphFromIndex(idx, root) {
-  const rootSlash = root.endsWith("/") ? root : `${root}/`;
-  const rel = (p) => p.startsWith(rootSlash) ? p.slice(rootSlash.length) : p;
+function callableNode(symbol2, occurrence, file2) {
+  if (/[#/]$/.test(symbol2)) return void 0;
+  if (file2.endsWith(".java") && !/\)\.$/.test(symbol2)) return void 0;
+  const span = span1(occurrence.enclosingRange);
+  if (!span) return void 0;
+  const label = labelOf(symbol2);
+  if (!label) return void 0;
+  return { label, file: file2, startLine: span[0], endLine: span[1], isTest: isTestFile(file2) };
+}
+function collectDefinitions(documents) {
   const nodes = /* @__PURE__ */ new Map();
-  for (const d of idx.documents) {
-    const file2 = rel(d.relativePath ?? "");
-    for (const o of d.occurrences ?? []) {
-      if (!((o.symbolRoles ?? 0) & ROLE_DEFINITION)) continue;
-      if (!o.symbol || o.symbol.startsWith("local ")) continue;
-      if (/[#/]$/.test(o.symbol)) continue;
-      if (file2.endsWith(".java") && !/\)\.$/.test(o.symbol)) continue;
-      const span = span1(o.enclosingRange);
-      if (!span) continue;
-      const label = labelOf(o.symbol);
-      if (!label) continue;
-      nodes.set(o.symbol, { label, file: file2, startLine: span[0], endLine: span[1], isTest: isTestFile(file2) });
+  const definitionFiles = /* @__PURE__ */ new Map();
+  for (const { file: file2, occurrences } of documents) {
+    for (const occurrence of occurrences) {
+      if (!((occurrence.symbolRoles ?? 0) & ROLE_DEFINITION)) continue;
+      const symbol2 = occurrence.symbol;
+      if (!symbol2 || symbol2.startsWith("local ")) continue;
+      definitionFiles.set(symbol2, file2);
+      const node = callableNode(symbol2, occurrence, file2);
+      if (node) nodes.set(symbol2, node);
     }
   }
-  const defFile = /* @__PURE__ */ new Map();
-  for (const d of idx.documents) {
-    const file2 = rel(d.relativePath ?? "");
-    for (const o of d.occurrences ?? []) {
-      if (!((o.symbolRoles ?? 0) & ROLE_DEFINITION)) continue;
-      if (!o.symbol || o.symbol.startsWith("local ")) continue;
-      defFile.set(o.symbol, file2);
+  return { nodes, definitionFiles };
+}
+function addFileReference(file2, occurrence, definitionFiles, requires) {
+  if ((occurrence.symbolRoles ?? 0) & ROLE_DEFINITION) return;
+  if (!occurrence.symbol) return;
+  const definition = definitionFiles.get(occurrence.symbol);
+  if (!definition || definition === file2) return;
+  const hasValueRef = !occurrence.symbol.endsWith("#");
+  const edges = requires.get(file2) ?? /* @__PURE__ */ new Map();
+  const edge = edges.get(definition);
+  if (edge) edge.hasValueRef ||= hasValueRef;
+  else edges.set(definition, { hasValueRef });
+  requires.set(file2, edges);
+}
+function collectFileRequires(documents, definitionFiles) {
+  const requires = /* @__PURE__ */ new Map();
+  for (const { file: file2, occurrences } of documents) {
+    for (const occurrence of occurrences) addFileReference(file2, occurrence, definitionFiles, requires);
+  }
+  return requires;
+}
+function documentCallers(document, nodes) {
+  const callers = [];
+  for (const occurrence of document.occurrences) {
+    if (!((occurrence.symbolRoles ?? 0) & ROLE_DEFINITION) || !occurrence.symbol) continue;
+    const node = nodes.get(occurrence.symbol);
+    if (node?.file === document.file) {
+      callers.push({ symbol: occurrence.symbol, sl: node.startLine, el: node.endLine });
     }
   }
-  const fileRequires = /* @__PURE__ */ new Map();
-  for (const d of idx.documents) {
-    const file2 = rel(d.relativePath ?? "");
-    for (const o of d.occurrences ?? []) {
-      if ((o.symbolRoles ?? 0) & ROLE_DEFINITION) continue;
-      if (!o.symbol) continue;
-      const def = defFile.get(o.symbol);
-      if (!def || def === file2) continue;
-      const isValue = !o.symbol.endsWith("#");
-      const edges = fileRequires.get(file2) ?? fileRequires.set(file2, /* @__PURE__ */ new Map()).get(file2);
-      const edge = edges.get(def);
-      if (edge) edge.hasValueRef ||= isValue;
-      else edges.set(def, { hasValueRef: isValue });
-    }
+  return callers.sort((a, b) => a.el - a.sl - (b.el - b.sl));
+}
+function collectDocumentCalls(document, nodes, calls) {
+  const callers = documentCallers(document, nodes);
+  for (const occurrence of document.occurrences) {
+    const roles = occurrence.symbolRoles ?? 0;
+    if (roles & ROLE_DEFINITION || roles & ROLE_IMPORT) continue;
+    if (!occurrence.symbol || !nodes.has(occurrence.symbol)) continue;
+    const start = occurrence.range?.[0];
+    if (start === void 0) continue;
+    const line = start + 1;
+    const caller = callers.find((c) => line >= c.sl && line <= c.el && c.symbol !== occurrence.symbol);
+    if (!caller) continue;
+    const targets = calls.get(caller.symbol) ?? /* @__PURE__ */ new Set();
+    targets.add(occurrence.symbol);
+    calls.set(caller.symbol, targets);
   }
-  const callSets = /* @__PURE__ */ new Map();
-  for (const d of idx.documents) {
-    const file2 = rel(d.relativePath ?? "");
-    const localDefs = [];
-    for (const o of d.occurrences ?? []) {
-      if ((o.symbolRoles ?? 0) & ROLE_DEFINITION && o.symbol && nodes.has(o.symbol)) {
-        const n = nodes.get(o.symbol);
-        if (n.file === file2) localDefs.push({ symbol: o.symbol, sl: n.startLine, el: n.endLine });
-      }
-    }
-    localDefs.sort((a, b) => a.el - a.sl - (b.el - b.sl));
-    for (const o of d.occurrences ?? []) {
-      const roles = o.symbolRoles ?? 0;
-      if (roles & ROLE_DEFINITION || roles & ROLE_IMPORT) continue;
-      if (!o.symbol || !nodes.has(o.symbol)) continue;
-      const line = o.range?.[0] === void 0 ? null : o.range[0] + 1;
-      if (line == null) continue;
-      const caller = localDefs.find((c) => line >= c.sl && line <= c.el && c.symbol !== o.symbol);
-      if (!caller) continue;
-      (callSets.get(caller.symbol) ?? callSets.set(caller.symbol, /* @__PURE__ */ new Set()).get(caller.symbol)).add(o.symbol);
-    }
-  }
+}
+function callAdjacency(calls) {
   const callAdj = /* @__PURE__ */ new Map();
   const callRev = /* @__PURE__ */ new Map();
-  for (const [src, tgts] of callSets) {
-    callAdj.set(src, [...tgts]);
-    for (const t of tgts) (callRev.get(t) ?? callRev.set(t, []).get(t)).push(src);
+  for (const [source, targets] of calls) {
+    callAdj.set(source, [...targets]);
+    for (const target of targets) {
+      const callers = callRev.get(target) ?? [];
+      callers.push(source);
+      callRev.set(target, callers);
+    }
   }
-  return { nodes, callAdj, callRev, fileRequires };
+  return { callAdj, callRev };
+}
+function buildGraphFromIndex(idx, root) {
+  const rootSlash = root.endsWith("/") ? root : `${root}/`;
+  const documents = idx.documents.map((document) => {
+    const path = document.relativePath ?? "";
+    return {
+      file: path.startsWith(rootSlash) ? path.slice(rootSlash.length) : path,
+      occurrences: document.occurrences ?? []
+    };
+  });
+  const { nodes, definitionFiles } = collectDefinitions(documents);
+  const fileRequires = collectFileRequires(documents, definitionFiles);
+  const calls = /* @__PURE__ */ new Map();
+  for (const document of documents) collectDocumentCalls(document, nodes, calls);
+  return { nodes, ...callAdjacency(calls), fileRequires };
 }
 
 // packages/server/src/residuals.ts
@@ -18847,73 +18873,88 @@ function walkPositions(units, flows, changed, byStable) {
   });
   return walk2;
 }
+function indexTestEdges(edges) {
+  const byTest = /* @__PURE__ */ new Map();
+  for (const edge of edges) {
+    const targets = byTest.get(edge.testStableId) ?? [];
+    targets.push(edge.productionStableId);
+    byTest.set(edge.testStableId, targets);
+  }
+  return byTest;
+}
+function exercisedAttachments(node, context) {
+  if (!node.isTest) return null;
+  const { covered, testsByTest, byWalk, walk: walk2 } = context;
+  const exercised = [...new Set(testsByTest.get(node.stableId) ?? [])].filter((id) => covered.has(id)).sort(byWalk);
+  if (exercised.length === 0) return null;
+  const parent = exercised[0];
+  if (!parent) return [];
+  const members = [
+    { stableId: node.stableId, parentStableId: parent, reason: "tested-by", counted: true }
+  ];
+  const refUnits = /* @__PURE__ */ new Set([walk2.get(parent).unitIndex]);
+  for (const other of exercised.slice(1)) {
+    const unitIndex = walk2.get(other).unitIndex;
+    if (refUnits.has(unitIndex)) continue;
+    refUnits.add(unitIndex);
+    members.push({ stableId: node.stableId, parentStableId: other, reason: "tested-by", counted: false });
+  }
+  return members;
+}
+function sameFileAttachments(node, context) {
+  const parents = [...context.covered].filter((id) => context.byStable.get(id)?.file === node.file).sort(context.byWalk);
+  if (parents.length === 0) return null;
+  const parentStableId = parents[0];
+  return parentStableId ? [{ stableId: node.stableId, parentStableId, reason: "same-file", counted: true }] : [];
+}
+function consumerAttachments(node, context) {
+  const parents = [...context.covered].filter((id) => context.fileRequires.get(context.byStable.get(id)?.file ?? "")?.has(node.file)).sort(context.byWalk);
+  if (parents.length === 0) return null;
+  const parentStableId = parents[0];
+  return parentStableId ? [{ stableId: node.stableId, parentStableId, reason: "required-by", counted: true }] : [];
+}
+function importedTestAttachments(node, context) {
+  if (!node.isTest) return [];
+  const { byStable, covered, fileRequires, byWalk } = context;
+  const stems = testNameStems(node.file);
+  const nameMatch = (id) => stems.has(fileStem(byStable.get(id).file));
+  const rank = (id) => nameMatch(id) ? 0 : 1;
+  const reqs = fileRequires.get(node.file);
+  const imported = [...covered].filter((id) => {
+    const edge = reqs?.get(byStable.get(id)?.file ?? "");
+    return edge != null && (edge.hasValueRef || nameMatch(id));
+  }).sort((a, b) => rank(a) - rank(b) || byWalk(a, b));
+  const parentStableId = imported[0];
+  return parentStableId ? [{ stableId: node.stableId, parentStableId, reason: "tested-by", counted: true }] : [];
+}
+function appendAttachments(attached, members, walk2) {
+  for (const member of members) {
+    const position = walk2.get(member.parentStableId);
+    if (!position) throw new Error(`attachment parent '${member.parentStableId}' is outside the review walk`);
+    const unitMembers = attached[position.unitIndex];
+    if (!unitMembers) throw new Error(`review walk references missing unit ${position.unitIndex}`);
+    unitMembers.push(member);
+  }
+}
 function deriveAttachments(units, flows, nodes, testEdges, fileRequires) {
   const byStable = new Map(nodes.map((n) => [n.stableId, n]));
   const changed = new Set(nodes.filter((n) => n.changeStatus === "changed").map((n) => n.stableId));
   const covered = new Set(units.flatMap((u) => unitCoverage(u, flows, changed)));
   const walk2 = walkPositions(units, flows, changed, byStable);
-  const byWalk = (a, b) => walk2.get(a).pos - walk2.get(b).pos;
-  const testsByTest = /* @__PURE__ */ new Map();
-  for (const e of testEdges) {
-    (testsByTest.get(e.testStableId) ?? testsByTest.set(e.testStableId, []).get(e.testStableId)).push(
-      e.productionStableId
-    );
-  }
-  const attached = units.map(() => []);
-  const attach = (m) => {
-    const position = walk2.get(m.parentStableId);
-    if (!position) throw new Error(`attachment parent '${m.parentStableId}' is outside the review walk`);
-    const members = attached[position.unitIndex];
-    if (!members) throw new Error(`review walk references missing unit ${position.unitIndex}`);
-    members.push(m);
+  const context = {
+    byStable,
+    covered,
+    walk: walk2,
+    fileRequires,
+    byWalk: (a, b) => walk2.get(a).pos - walk2.get(b).pos,
+    testsByTest: indexTestEdges(testEdges)
   };
+  const attached = units.map(() => []);
   const unassigned = [...changed].filter((id) => !covered.has(id)).sort();
   for (const stableId of unassigned) {
     const node = byStable.get(stableId);
-    if (node.isTest) {
-      const exercised = [...new Set(testsByTest.get(stableId) ?? [])].filter((p) => covered.has(p)).sort(byWalk);
-      if (exercised.length > 0) {
-        const [parent] = exercised;
-        if (!parent) continue;
-        attach({ stableId, parentStableId: parent, reason: "tested-by", counted: true });
-        const refUnits = /* @__PURE__ */ new Set();
-        for (const other of exercised.slice(1)) {
-          const unitIndex = walk2.get(other).unitIndex;
-          if (unitIndex === walk2.get(parent).unitIndex || refUnits.has(unitIndex)) continue;
-          refUnits.add(unitIndex);
-          attach({ stableId, parentStableId: other, reason: "tested-by", counted: false });
-        }
-        continue;
-      }
-    }
-    const sameFile = [...covered].filter((c) => byStable.get(c)?.file === node.file).sort(byWalk);
-    if (sameFile.length > 0) {
-      const [parentStableId] = sameFile;
-      if (!parentStableId) continue;
-      attach({ stableId, parentStableId, reason: "same-file", counted: true });
-      continue;
-    }
-    const consumers = [...covered].filter((c) => fileRequires.get(byStable.get(c)?.file ?? "")?.has(node.file)).sort(byWalk);
-    if (consumers.length > 0) {
-      const [parentStableId] = consumers;
-      if (!parentStableId) continue;
-      attach({ stableId, parentStableId, reason: "required-by", counted: true });
-      continue;
-    }
-    if (node.isTest) {
-      const stems = testNameStems(node.file);
-      const nameMatch = (id) => stems.has(fileStem(byStable.get(id).file));
-      const rank = (id) => nameMatch(id) ? 0 : 1;
-      const reqs = fileRequires.get(node.file);
-      const imported = [...covered].filter((c) => {
-        const edge = reqs?.get(byStable.get(c)?.file ?? "");
-        return edge != null && (edge.hasValueRef || nameMatch(c));
-      }).sort((a, b) => rank(a) - rank(b) || byWalk(a, b));
-      if (imported.length > 0) {
-        const [parentStableId] = imported;
-        if (parentStableId) attach({ stableId, parentStableId, reason: "tested-by", counted: true });
-      }
-    }
+    const members = exercisedAttachments(node, context) ?? sameFileAttachments(node, context) ?? consumerAttachments(node, context) ?? importedTestAttachments(node, context);
+    appendAttachments(attached, members, walk2);
   }
   return attached;
 }
