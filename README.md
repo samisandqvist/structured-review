@@ -235,4 +235,6 @@ toolchain; installation errors can be retried after fixing npm or network access
 - [CLI, environment variables, plan and export reference](docs/cli-and-configuration.md)
 - [Agent skill and plan authoring](packages/skill/skill.md)
 - [Contributor architecture and commands](AGENTS.md)
-- [Design notes](docs/)
+- [Architecture](docs/architecture.md)
+- [Review model and design decisions](docs/review-model.md)
+- [Candidate indexing follow-ups](docs/indexing-follow-ups.md)

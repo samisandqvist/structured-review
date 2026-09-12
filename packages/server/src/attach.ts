@@ -1,7 +1,7 @@
 // Plan-time attachment derivation: nest unassigned changed nodes (tests, DTOs,
 // module-scope residuals) under the covered node that gives them context.
 // Runs inside PUT /plan; results persist on units and die with them (spec:
-// docs/superpowers/specs/2026-07-17-unassigned-changes-design.md).
+// docs/review-model.md#attachments).
 import { flowEntries, unitCoverage, type PlanUnitInput } from "./coverage.js";
 import type { FileRequires, Flow } from "./graph/provider.js";
 import type { AttachedMember } from "./types.js";

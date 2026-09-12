@@ -3,7 +3,9 @@
 A code-structure-based review tool: Claude Code / Codex skill + local web UI. Walks a
 reviewer through changes along the call/dependency graph instead of a file tree.
 
-Design spec: `docs/superpowers/specs/2026-06-19-structured-review-design.md`
+Current design: [architecture](docs/architecture.md) and
+[review model](docs/review-model.md). Candidate indexing work is recorded in
+[indexing follow-ups](docs/indexing-follow-ups.md).
 
 ## Stack
 
