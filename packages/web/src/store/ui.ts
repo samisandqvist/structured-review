@@ -76,7 +76,7 @@ export const useUIStore = create<UIState>()(
       clearAnchorHighlight: () => set({ pendingAnchorHighlight: null }),
     }),
     {
-      name: `crw-ui:${sessionKey}`,
+      name: `srev-ui:${sessionKey}`,
       partialize: (s) => ({
         currentNodeId: s.currentNodeId,
         splitRatio: s.splitRatio,

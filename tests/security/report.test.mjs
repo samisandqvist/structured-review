@@ -8,7 +8,7 @@ import { advisoryFreshness, assessOsvReport, main, runCli, summarizeGitleaks } f
 let fixtureDir;
 
 beforeAll(() => {
-  fixtureDir = mkdtempSync(join(tmpdir(), "crw-security-report-"));
+  fixtureDir = mkdtempSync(join(tmpdir(), "srev-security-report-"));
 });
 
 afterAll(() => {

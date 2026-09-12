@@ -1,5 +1,5 @@
 // Build both committed host packages from the same runtime and skill source.
-// Bundles the server and crw CLI to single ESM files (node:sqlite is a
+// Bundles the server and srev CLI to single ESM files (node:sqlite is a
 // builtin, so no native deps), copies scip.proto next to the server bundle,
 // and copies the built web UI. The scip indexer packages are NOT bundled —
 // the shared launcher npm-installs them into its writable data directory.
@@ -11,11 +11,11 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const outputRoot = process.env.CRW_PLUGIN_OUTPUT_ROOT || root;
+const outputRoot = process.env.SREV_PLUGIN_OUTPUT_ROOT || root;
 const out = join(outputRoot, "plugin");
-const codexOut = join(outputRoot, "plugins/code-review-walkthrough");
+const codexOut = join(outputRoot, "plugins/structured-review");
 
-const webDist = process.env.CRW_WEB_DIST ? resolve(root, process.env.CRW_WEB_DIST) : join(root, "packages/web/dist");
+const webDist = process.env.SREV_WEB_DIST ? resolve(root, process.env.SREV_WEB_DIST) : join(root, "packages/web/dist");
 if (!existsSync(join(webDist, "index.html"))) {
   console.error("web UI not built — run `pnpm build` first");
   process.exit(1);
@@ -48,28 +48,28 @@ await build({
   entryPoints: [join(root, "packages/server/src/index.ts")],
   outfile: join(out, "dist/server.js"),
 });
-await build({ ...common, entryPoints: [join(root, "packages/skill/src/cli.ts")], outfile: join(out, "dist/crw.js") });
+await build({ ...common, entryPoints: [join(root, "packages/skill/src/cli.ts")], outfile: join(out, "dist/srev.js") });
 copyFileSync(join(root, "packages/server/src/graph/scip.proto"), join(out, "dist/scip.proto"));
 cpSync(webDist, join(out, "web"), { recursive: true });
 
 // The plugin SKILL.md is packages/skill/skill.md with two plugin-mode swaps:
-// the crw invocation (portable launcher instead of the repo binary)
+// the srev invocation (portable launcher instead of the repo binary)
 // and the indexer-install note (repo devs get indexers via pnpm). Generated
 // here so the two files can never drift; the CI freshness guard covers it.
 const PLUGIN_INVOCATION = `Resolve the installed skill's directory from the path of this SKILL.md.
-The launcher is at \`../../scripts/crw.mjs\` relative to that directory.
-Use its absolute path for every \`crw\` command, keeping the working directory
+The launcher is at \`../../scripts/srev.mjs\` relative to that directory.
+Use its absolute path for every \`srev\` command, keeping the working directory
 in the repository being reviewed. For example, replace the path below with
 the resolved launcher path:
 
 \`\`\`bash
-node "/absolute/installed/plugin/scripts/crw.mjs" <command>
+node "/absolute/installed/plugin/scripts/srev.mjs" <command>
 \`\`\`
 
 The launcher checks indexers on first use, even if no startup hook ran.
-It sets CRW_DATA_DIR and CRW_INDEXER_HOME using the host's plugin data directory
-when available; otherwise it uses \`~/.local/share/code-review-walkthrough\`
-(or XDG_DATA_HOME). An explicit CRW_DATA_DIR overrides that choice. State stays
+It sets SREV_DATA_DIR and SREV_INDEXER_HOME using the host's plugin data directory
+when available; otherwise it uses \`~/.local/share/structured-review\`
+(or XDG_DATA_HOME). An explicit SREV_DATA_DIR overrides that choice. State stays
 outside the reviewed repo and the installed plugin. Requires Node >= 22.13
 and npm. Relay installation errors; the same command can be retried.
 Every command prints JSON on stdout; add \`--pretty\` for human-readable output.
@@ -85,10 +85,10 @@ an error.
 
 // Preserve Claude's explicit data-dir substitution so existing installations
 // continue to find their saved reviews, even when shell env inheritance varies.
-const CLAUDE_INVOCATION = `Every \`crw\` command below is run as:
+const CLAUDE_INVOCATION = `Every \`srev\` command below is run as:
 
 \`\`\`bash
-CRW_DATA_DIR="\${CLAUDE_PLUGIN_DATA}" node "\${CLAUDE_PLUGIN_ROOT}/scripts/crw.mjs" <command>
+SREV_DATA_DIR="\${CLAUDE_PLUGIN_DATA}" node "\${CLAUDE_PLUGIN_ROOT}/scripts/srev.mjs" <command>
 \`\`\`
 
 The launcher checks indexers on first use, including when the startup hook did
@@ -100,18 +100,15 @@ Use this CLI for orchestration; never touch SQLite or hand-roll \`curl\`.`;
 const skillSrc = readFileSync(join(root, "packages/skill/skill.md"), "utf8");
 const generated = skillSrc
   .replace(/^<!--[\s\S]*?-->\n/, "") // source-of-truth header comment
-  .replace(/<!-- crw-invocation:start[\s\S]*?crw-invocation:end -->/, PLUGIN_INVOCATION)
+  .replace(/<!-- srev-invocation:start[\s\S]*?srev-invocation:end -->/, PLUGIN_INVOCATION)
   .replace(/<!-- plugin:language-support[^>]*-->\n/, `${LANGUAGE_SUPPORT}\n`);
-for (const marker of ["crw-invocation", "plugin:language-support"]) {
-  if (!generated.includes("scripts/crw.mjs") || generated.includes(marker)) {
+for (const marker of ["srev-invocation", "plugin:language-support"]) {
+  if (!generated.includes("scripts/srev.mjs") || generated.includes(marker)) {
     console.error(`SKILL.md generation failed: marker '${marker}' did not resolve — check packages/skill/skill.md`);
     process.exit(1);
   }
 }
-writeFileSync(
-  join(out, "skills/code-review-walkthrough/SKILL.md"),
-  generated.replace(PLUGIN_INVOCATION, CLAUDE_INVOCATION),
-);
+writeFileSync(join(out, "skills/structured-review/SKILL.md"), generated.replace(PLUGIN_INVOCATION, CLAUDE_INVOCATION));
 
 // Codex has its own manifest and marketplace; executable payloads and skill
 // instructions are identical. No symlinks outside either installed package.
@@ -121,7 +118,7 @@ for (const dir of ["dist", "web", "skills"]) {
   cpSync(join(out, dir), join(codexOut, dir), { recursive: true });
 }
 copyFileSync(join(out, "package.json"), join(codexOut, "package.json"));
-writeFileSync(join(codexOut, "skills/code-review-walkthrough/SKILL.md"), generated);
+writeFileSync(join(codexOut, "skills/structured-review/SKILL.md"), generated);
 
 // The Codex manifest is generated too: shared identity fields come from the
 // hand-maintained Claude manifest, so a version bump there cannot leave the
@@ -148,7 +145,7 @@ writeFileSync(
         developerName: claudeManifest.author.name,
         category: "Productivity",
         capabilities: ["Read", "Write"],
-        defaultPrompt: "Use code-review-walkthrough to review my current changes against main.",
+        defaultPrompt: "Use structured-review to review my current changes against main.",
       },
     },
     null,
@@ -157,7 +154,7 @@ writeFileSync(
 );
 for (const target of [out, codexOut]) {
   mkdirSync(join(target, "scripts"), { recursive: true });
-  copyFileSync(join(root, "scripts/plugin-launcher.mjs"), join(target, "scripts/crw.mjs"));
+  copyFileSync(join(root, "scripts/plugin-launcher.mjs"), join(target, "scripts/srev.mjs"));
   copyFileSync(join(root, "LICENSE"), join(target, "LICENSE"));
 }
 

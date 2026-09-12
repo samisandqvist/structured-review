@@ -1,19 +1,19 @@
 ---
-name: code-review-walkthrough
+name: structured-review
 description: Walk a reviewer through code changes along the call/dependency graph instead of a file tree. Produces a structured review plan, launches a local web UI for graph-based navigation, and exports node- and line-anchored comments.
 ---
 
-# Code Review Walkthrough
+# Structured Review
 
 ## What this skill does
 
 Given a git branch or diff range, this skill:
 
-1. Ensures the local review hub is running (`crw serve`)
-2. Creates a review session from the change subgraph (`crw session create`)
-3. Builds the review plan — mechanical (`crw plan --auto`) or LLM-authored (`crw plan --units`)
+1. Ensures the local review hub is running (`srev serve`)
+2. Creates a review session from the change subgraph (`srev session create`)
+3. Builds the review plan — mechanical (`srev plan --auto`) or LLM-authored (`srev plan --units`)
 4. Launches the web UI for the reviewer to walk the graph
-5. Harvests the reviewer's output (`crw status`, `crw comments`) for wrap-up
+5. Harvests the reviewer's output (`srev status`, `srev comments`) for wrap-up
 
 ## When to use
 
@@ -21,12 +21,12 @@ Use this to prepare a human's review of code changes, especially a change
 spanning several files. The inferred call graph suggests a reading order;
 it does not establish architectural fit or prove correctness.
 
-## The crw CLI
+## The srev CLI
 
-Every `crw` command below is run as:
+Every `srev` command below is run as:
 
 ```bash
-CRW_DATA_DIR="${CLAUDE_PLUGIN_DATA}" node "${CLAUDE_PLUGIN_ROOT}/scripts/crw.mjs" <command>
+SREV_DATA_DIR="${CLAUDE_PLUGIN_DATA}" node "${CLAUDE_PLUGIN_ROOT}/scripts/srev.mjs" <command>
 ```
 
 The launcher checks indexers on first use, including when the startup hook did
@@ -36,18 +36,18 @@ installation errors; retry after the reported npm/network problem is fixed.
 Use this CLI for orchestration; never touch SQLite or hand-roll `curl`.
 
 ```bash
-crw serve [--repo <path>] [--port N]            # ensure the hub runs against a repo
-crw session create --branch <b> --base <ref|empty> [--open]   # base "empty" = whole-repo review
-crw context --session <id> [--brief|--full]     # planning view: commit subjects, flows + merge suggestions, orphan groups, change summaries (--brief: no stableIds, numeric refs only; --full: raw dump)
-crw plan --session <id> (--auto | --units <file.json>) [--open]
-crw diff --session <id> --node <stableId>       # one node's diff, for grouping decisions
-crw status --session <id>                       # coverage, per-unit reviewed/total, unreviewed list
-crw comments --session <id>                     # exported comments, GitHub-mappable
-crw wait --session <id> [--until reviewed|commented] [--interval s] [--timeout s]
-crw session list                                # sessions in this repo's hub, newest first
-crw session delete --session <id>               # remove one session's state (cascades)
-crw gc [--repo <path>] [--all]                  # remove a repo's DB/logs (stops the hub first); --all sweeps dead repos
-crw shutdown                                    # stop the hub (state stays; serve restarts it)
+srev serve [--repo <path>] [--port N]            # ensure the hub runs against a repo
+srev session create --branch <b> --base <ref|empty> [--open]   # base "empty" = whole-repo review
+srev context --session <id> [--brief|--full]     # planning view: commit subjects, flows + merge suggestions, orphan groups, change summaries (--brief: no stableIds, numeric refs only; --full: raw dump)
+srev plan --session <id> (--auto | --units <file.json>) [--open]
+srev diff --session <id> --node <stableId>       # one node's diff, for grouping decisions
+srev status --session <id>                       # coverage, per-unit reviewed/total, unreviewed list
+srev comments --session <id>                     # exported comments, GitHub-mappable
+srev wait --session <id> [--until reviewed|commented] [--interval s] [--timeout s]
+srev session list                                # sessions in this repo's hub, newest first
+srev session delete --session <id>               # remove one session's state (cascades)
+srev gc [--repo <path>] [--all]                  # remove a repo's DB/logs (stops the hub first); --all sweeps dead repos
+srev shutdown                                    # stop the hub (state stays; serve restarts it)
 ```
 
 Language support: TypeScript and Python indexers are installed automatically
@@ -59,8 +59,8 @@ an error.
 
 Setup flow:
 
-1. `crw serve` — starts (or reuses) the hub for the current repo; prints `baseUrl`.
-2. `crw session create --branch <b> --base <ref>` (`--base empty` reviews the
+1. `srev serve` — starts (or reuses) the hub for the current repo; prints `baseUrl`.
+2. `srev session create --branch <b> --base <ref>` (`--base empty` reviews the
    entire repo) — prints `sessionId`, `uiUrl`,
    node/flow counts, and `indexWarnings`. **Always relay `indexWarnings` to the
    user** — they mean a language was indexed in degraded mode.
@@ -69,11 +69,11 @@ Setup flow:
 
 Harvest flow (after the reviewer walks the plan):
 
-- `crw status --session <id>` — check progress; `stale: true` means the working
+- `srev status --session <id>` — check progress; `stale: true` means the working
   tree moved under the session.
-- `crw wait --session <id>` — block until every changed node is reviewed
+- `srev wait --session <id>` — block until every changed node is reviewed
   (exit code 2 on timeout).
-- `crw comments --session <id>` — each `scope: "node"` comment carries node
+- `srev comments --session <id>` — each `scope: "node"` comment carries node
   label, file, line anchor (`anchor.startLine/startSide/endLine/endSide`), hunk
   snippet, and the node's review status — ready to map onto GitHub PR inline
   comments. `scope: "session"` comments are review-wide remarks (no node, no
@@ -95,7 +95,7 @@ inferences as questions for the reviewer, not automated verdicts. Review-wide
 notes in the UI can capture concerns that have no natural line anchor.
 The human should be able to judge scope and design before following functions.
 
-`crw plan --auto` is the mechanical baseline: one flow-unit per affected flow;
+`srev plan --auto` is the mechanical baseline: one flow-unit per affected flow;
 tests, DTOs and module-scope leftovers attach themselves to those units at
 submit, and anything truly homeless is swept into the auto "Unassigned changes"
 unit. Prefer an LLM-authored plan when the change warrants judgment. The plan
@@ -120,11 +120,11 @@ each either a **flow** or an **orphan group**. The plan file is
 Steps for an LLM-authored plan:
 
 1. Gather the change's stated intent when available: `gh pr view --json
-   title,body`. Commit subjects already arrive in `crw context` as
+   title,body`. Commit subjects already arrive in `srev context` as
    `commitSubjects` — no separate `git log` step. This is intent input, not
    diff reading — use the node diff command for code bodies. No PR or
    uninformative messages → proceed without; never block on missing intent.
-2. After `crw session create`, run `crw context --session <id> --brief`. It
+2. After `srev session create`, run `srev context --session <id> --brief`. It
    prints `{ sessionId, commitSubjects, flows, mergeSuggestions, orphanGroups, changes }`
    with **no stableIds anywhere**: `flows` are the **affected** flows as
    `{ id, name, entry, changedCount }` — reference them in the plan by that
@@ -172,13 +172,13 @@ Steps for an LLM-authored plan:
 7. Order units for a sensible walk (foundational/helper changes first, then the
    flows that depend on them — your judgment).
 8. Write the plan file (`{ "overview": "...", "units": [...] }`) and run
-   `crw plan --session <id> --units plan.json`. It prints `coverage` and
+   `srev plan --session <id> --units plan.json`. It prints `coverage` and
    per-unit `attached` counts. `coverage.unassigned > 0` now means true
    leftovers (nothing could attach them) — the response lists each under
    `unassigned` (`stableId`, `label`, `file`; always present, `[]` at full
    coverage): add orphan-units for exactly those stableIds (or an
    `orphanFiles` glob that covers them) and re-submit.
 
-For code bodies during planning, use `crw diff --session <id> --node <stableId>`.
+For code bodies during planning, use `srev diff --session <id> --node <stableId>`.
 File inventories and repository conventions are complementary context; a full
 raw diff should not replace the structured planning input.

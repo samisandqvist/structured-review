@@ -42,7 +42,7 @@ function expectLintRules(relativePath, expectedRules) {
 }
 
 beforeEach(() => {
-  fixtureRoot = mkdtempSync(join(tmpdir(), "crw-negative-gates-"));
+  fixtureRoot = mkdtempSync(join(tmpdir(), "srev-negative-gates-"));
   symlinkSync(join(REPOSITORY_ROOT, "node_modules"), join(fixtureRoot, "node_modules"), "dir");
   copyFileSync(join(REPOSITORY_ROOT, "eslint.config.mjs"), join(fixtureRoot, "eslint.config.mjs"));
   copyFileSync(join(REPOSITORY_ROOT, ".dependency-cruiser.cjs"), join(fixtureRoot, ".dependency-cruiser.cjs"));

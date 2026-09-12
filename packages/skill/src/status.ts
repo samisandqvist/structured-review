@@ -85,7 +85,7 @@ export function computeStatus(info: SessionInfo, nodes: SessionNode[], flows: Fl
   };
 }
 
-/** Wait-condition predicates for `crw wait`. */
+/** Wait-condition predicates for `srev wait`. */
 export function waitConditionMet(
   until: "reviewed" | "commented",
   status: SessionStatus,

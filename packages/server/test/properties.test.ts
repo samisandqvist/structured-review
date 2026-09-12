@@ -144,7 +144,7 @@ describe("generated coverage invariants", () => {
         expect(sorted(repeated.covered)).toEqual(sorted(expectedCovered));
         expect(sorted(repeated.unassigned)).toEqual(sorted(expectedUnassigned));
       }),
-      propertyParameters(2026091201, "CRW_FC_COVERAGE_PATH"),
+      propertyParameters(2026091201, "SREV_FC_COVERAGE_PATH"),
     );
   });
 });
@@ -165,7 +165,7 @@ describe("generated range invariants", () => {
           expect(expandRanges(subtractRanges(ranges, [...spans].reverse()))).toEqual(expected);
         },
       ),
-      propertyParameters(2026091202, "CRW_FC_RANGES_PATH"),
+      propertyParameters(2026091202, "SREV_FC_RANGES_PATH"),
     );
   });
 });
@@ -209,7 +209,7 @@ describe("generated glob invariants", () => {
           }
         },
       ),
-      propertyParameters(2026091203, "CRW_FC_GLOBS_PATH"),
+      propertyParameters(2026091203, "SREV_FC_GLOBS_PATH"),
     );
   });
 });

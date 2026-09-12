@@ -30,7 +30,7 @@ import { fileChangedRanges } from "../src/diff.js";
 let fixtureRepo: string;
 let emptyTmpDir: string;
 beforeAll(() => {
-  fixtureRepo = mkdtempSync(join(tmpdir(), "crw-diff-fixture-"));
+  fixtureRepo = mkdtempSync(join(tmpdir(), "srev-diff-fixture-"));
   const git = (...a: string[]) => execFileSync("git", a, { cwd: fixtureRepo, encoding: "utf8" });
   git("init", "-b", "main");
   git("config", "user.email", "t@t");
@@ -39,7 +39,7 @@ beforeAll(() => {
   git("add", ".");
   git("commit", "-m", "init");
 
-  emptyTmpDir = mkdtempSync(join(tmpdir(), "crw-diff-empty-"));
+  emptyTmpDir = mkdtempSync(join(tmpdir(), "srev-diff-empty-"));
 });
 afterAll(() => {
   rmSync(fixtureRepo, { recursive: true, force: true });
@@ -48,7 +48,7 @@ afterAll(() => {
 
 describe("resolveRef", () => {
   it("lists and diffs non-ASCII filenames unquoted regardless of core.quotepath", () => {
-    const repo = mkdtempSync(join(tmpdir(), "crw-diff-utf8-"));
+    const repo = mkdtempSync(join(tmpdir(), "srev-diff-utf8-"));
     try {
       const git = (...a: string[]) => execFileSync("git", a, { cwd: repo, encoding: "utf8" });
       git("init", "-b", "main");
@@ -66,7 +66,7 @@ describe("resolveRef", () => {
     }
   });
   it("fingerprint moves when an untracked non-ASCII file's content changes", () => {
-    const repo = mkdtempSync(join(tmpdir(), "crw-diff-utf8-fp-"));
+    const repo = mkdtempSync(join(tmpdir(), "srev-diff-utf8-fp-"));
     try {
       const git = (...a: string[]) => execFileSync("git", a, { cwd: repo, encoding: "utf8" });
       git("init", "-b", "main");
@@ -105,7 +105,7 @@ describe("resolveRef", () => {
 describe("commitSubjects", () => {
   let repo: string;
   beforeAll(() => {
-    repo = mkdtempSync(join(tmpdir(), "crw-subjects-"));
+    repo = mkdtempSync(join(tmpdir(), "srev-subjects-"));
     const git = (...a: string[]) => execFileSync("git", a, { cwd: repo, encoding: "utf8" });
     git("init", "-b", "main");
     git("config", "user.email", "t@t");
@@ -210,7 +210,7 @@ describe("nodeChangeStats", () => {
 describe("repoFingerprint", () => {
   let dir: string;
   beforeAll(() => {
-    dir = mkdtempSync(join(tmpdir(), "crw-fp-"));
+    dir = mkdtempSync(join(tmpdir(), "srev-fp-"));
     const git = (...a: string[]) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
     git("init", "-b", "main");
     git("config", "user.email", "t@t");
@@ -314,7 +314,7 @@ describe("node diff totalLines", () => {
   // expanders (issue #14) — every node-diff shape carries totalLines.
   let repo: string;
   beforeAll(() => {
-    repo = mkdtempSync(join(tmpdir(), "crw-total-lines-"));
+    repo = mkdtempSync(join(tmpdir(), "srev-total-lines-"));
     const git = (...a: string[]) => execFileSync("git", a, { cwd: repo, encoding: "utf8" });
     git("init", "-b", "main");
     git("config", "user.email", "t@t");
@@ -440,7 +440,7 @@ describe("expandedContextSlice", () => {
   let dir: string;
   const git = (...a: string[]) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
   beforeAll(() => {
-    dir = mkdtempSync(join(tmpdir(), "crw-expand-"));
+    dir = mkdtempSync(join(tmpdir(), "srev-expand-"));
     git("init", "-b", "main");
     git("config", "user.email", "t@t");
     git("config", "user.name", "t");
@@ -551,7 +551,7 @@ describe("subtractRanges", () => {
 
 describe("subtreeFingerprint", () => {
   function makeRepo(): { dir: string; git: (...a: string[]) => string } {
-    const dir = mkdtempSync(join(tmpdir(), "crw-subtree-"));
+    const dir = mkdtempSync(join(tmpdir(), "srev-subtree-"));
     const git = (...a: string[]) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
     git("init", "-b", "main");
     git("config", "user.email", "t@t");
@@ -617,7 +617,7 @@ describe("subtreeFingerprint", () => {
   });
 
   it("returns null when git is unavailable", () => {
-    const dir = mkdtempSync(join(tmpdir(), "crw-subtree-nogit-"));
+    const dir = mkdtempSync(join(tmpdir(), "srev-subtree-nogit-"));
     try {
       expect(subtreeFingerprint("a", dir)).toBeNull();
     } finally {
@@ -626,7 +626,7 @@ describe("subtreeFingerprint", () => {
   });
 
   it("with pathspecs, only moves when files of that language (or its markers) change", () => {
-    const dir = mkdtempSync(join(tmpdir(), "crw-fp-lang-"));
+    const dir = mkdtempSync(join(tmpdir(), "srev-fp-lang-"));
     try {
       const g = (...a: string[]) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
       g("init", "-b", "main");

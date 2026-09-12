@@ -1,12 +1,12 @@
 {
   "name": "structured-review",
-  "description": "Code Review Walkthrough — graph-based review sessions with a local web UI.",
+  "description": "Structured Review — graph-based review sessions with a local web UI.",
   "owner": {
     "name": "Sami Sandqvist"
   },
   "plugins": [
     {
-      "name": "code-review-walkthrough",
+      "name": "structured-review",
       "source": "./plugin",
       "description": "Graph-based code review walkthrough: review plans along call flows, local web UI, exported line-anchored comments. TS/Python bundled; Java via scip-java toolchain on PATH."
     }

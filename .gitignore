@@ -1,5 +1,5 @@
 .superpowers/
-.crw/
+.srev/
 node_modules/
 dist/
 # The plugin bundle is a committed release artifact (built by scripts/build-plugin.mjs).
@@ -7,8 +7,8 @@ dist/
 !plugin/dist/**
 !plugin/web/
 !plugin/web/**
-!plugins/code-review-walkthrough/dist/
-!plugins/code-review-walkthrough/dist/**
+!plugins/structured-review/dist/
+!plugins/structured-review/dist/**
 *.db
 *.db-journal
 *.db-shm

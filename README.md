@@ -1,11 +1,11 @@
-# Code Review Walkthrough
+# Structured Review
 
 A guided way to read a large code change, with related code and tests together
 and your review progress saved.
 
 A change to one endpoint can involve a controller, a service, a helper and a
 handful of tests. Reading those files in alphabetical order leaves you to piece
-that story together. Code Review Walkthrough suggests a reading order from the
+that story together. Structured Review suggests a reading order from the
 code's call relationships, then opens a local browser where you can follow it,
 take detours and leave comments.
 
@@ -30,19 +30,19 @@ Windows is not currently supported. Indexers download from npm on first use.
 
 ```text
 /plugin marketplace add samisandqvist/structured-review
-/plugin install code-review-walkthrough@structured-review
+/plugin install structured-review@structured-review
 ```
 
 Then ask:
 
-> Use code-review-walkthrough to review my current changes against main and open the review.
+> Use structured-review to review my current changes against main and open the review.
 
 Replace `main` with your base branch. The agent starts the local server, prepares
 a plan and gives you a browser link. The first run may take a minute to install
 the TypeScript and Python indexers. If installation fails, fix the reported npm
 or network problem and retry the same command.
 
-Update with `/plugin update code-review-walkthrough@structured-review`.
+Update with `/plugin update structured-review@structured-review`.
 
 ### Codex
 
@@ -52,13 +52,13 @@ Add this repository's marketplace from a terminal:
 codex plugin marketplace add samisandqvist/structured-review
 ```
 
-In Codex CLI, open `/plugins`, install **code-review-walkthrough** from
+In Codex CLI, open `/plugins`, install **structured-review** from
 **structured-review**, and start a new session. Ask:
 
-> Use $code-review-walkthrough to review my current changes against main and open the review.
+> Use $structured-review to review my current changes against main and open the review.
 
 For a local checkout, use `codex plugin marketplace add /absolute/path/to/structured-review`.
-The package lives at `plugins/code-review-walkthrough`; the catalog is
+The package lives at `plugins/structured-review`; the catalog is
 `.agents/plugins/marketplace.json`. The local runtime requires access to your
 checkout and a browser on the same machine. This package is intended for local
 Codex use; it does not provide a hosted ChatGPT review service.
@@ -198,9 +198,9 @@ Review only repositories and build configurations you trust. Java indexing runs
 the project's build (including build plugins); indexing is not sandboxed.
 
 Plugin state uses the host's writable plugin data directory when available,
-otherwise `~/.local/share/code-review-walkthrough` (or `XDG_DATA_HOME`).
-`CRW_DATA_DIR` overrides that location. From source, state defaults to `review.db`
-and `.crw/` in the reviewed repository. `crw gc` removes a repository's review data.
+otherwise `~/.local/share/structured-review` (or `XDG_DATA_HOME`).
+`SREV_DATA_DIR` overrides that location. From source, state defaults to `review.db`
+and `.srev/` in the reviewed repository. `srev gc` removes a repository's review data.
 
 The hub has no telemetry or model API calls. Indexer installation downloads
 packages, and Java tooling may download build dependencies. If you use Claude
@@ -227,7 +227,7 @@ coverage policies, and commands. PRs and pushes to `main` run ordinary verificat
 Mondays run only the security refresh/check job. The full platform and mutation
 workflow is available manually.
 
-If the server isn't reachable, restart it with `crw serve`. If it reports a busy
+If the server isn't reachable, restart it with `srev serve`. If it reports a busy
 port, use another `--port` consistently. If your base ref doesn't resolve, check
 its spelling and that it's available locally. Indexer warnings name the missing
 toolchain; installation errors can be retried after fixing npm or network access.

@@ -19,7 +19,7 @@ beforeEach(() => {
   app = createApp({
     db,
     graphProvider: new StubGraphProvider(),
-    repoRoot: "/tmp/crw-request-security",
+    repoRoot: "/tmp/srev-request-security",
     onShutdown: () => {
       stopped = true;
     },

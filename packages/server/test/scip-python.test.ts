@@ -8,7 +8,7 @@ import { ScipGraphProvider } from "../src/graph/scip.js";
 // Real scip-python run over a tiny fixture — slow-ish (~seconds), so one test.
 describe("scip-python integration", () => {
   it("indexes a python root and derives a call flow with repo-relative paths", { timeout: 120_000 }, async () => {
-    const dir = mkdtempSync(join(tmpdir(), "crw-py-"));
+    const dir = mkdtempSync(join(tmpdir(), "srev-py-"));
     try {
       const git = (...a: string[]) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
       git("init", "-b", "main");

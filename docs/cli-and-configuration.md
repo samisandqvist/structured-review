@@ -2,25 +2,25 @@
 
 For installation and a first review, see the [README](../README.md).
 
-## The crw CLI
+## The srev CLI
 
 ```bash
-node packages/skill/dist/cli.js <command>       # (the plugin runs the same CLI as `crw`)
+node packages/skill/dist/cli.js <command>       # (the plugin runs the same CLI as `srev`)
 ```
 
 ```text
-crw serve [--repo <path>] [--port N]            # start or reuse the hub for a repo
-crw session create --branch <b> --base <ref|empty> [--open]   # "empty" = whole-repo review
-crw session list
-crw session delete --session <id>
-crw context --session <id> [--brief|--full]     # planning view: commit subjects, flows + merge suggestions, orphan groups, change summaries (--brief: no stableIds, numeric refs only; --full: raw dump)
-crw plan --session <id> (--auto | --units <file.json>) [--open]
-crw diff --session <id> --node <stableId>       # a single node's diff
-crw status --session <id>                       # coverage, overview, per-unit reviewed/total, unreviewed list
-crw comments --session <id>                     # exported comments, GitHub-mappable
-crw wait --session <id> [--until reviewed|commented] [--interval s] [--timeout s]
-crw gc [--repo <path>] [--all]                  # remove a repo's DB/logs (stops the hub first)
-crw shutdown                                    # stop the hub (state stays; serve restarts it)
+srev serve [--repo <path>] [--port N]            # start or reuse the hub for a repo
+srev session create --branch <b> --base <ref|empty> [--open]   # "empty" = whole-repo review
+srev session list
+srev session delete --session <id>
+srev context --session <id> [--brief|--full]     # planning view: commit subjects, flows + merge suggestions, orphan groups, change summaries (--brief: no stableIds, numeric refs only; --full: raw dump)
+srev plan --session <id> (--auto | --units <file.json>) [--open]
+srev diff --session <id> --node <stableId>       # a single node's diff
+srev status --session <id>                       # coverage, overview, per-unit reviewed/total, unreviewed list
+srev comments --session <id>                     # exported comments, GitHub-mappable
+srev wait --session <id> [--until reviewed|commented] [--interval s] [--timeout s]
+srev gc [--repo <path>] [--all]                  # remove a repo's DB/logs (stops the hub first)
+srev shutdown                                    # stop the hub (state stays; serve restarts it)
 ```
 
 Every command prints JSON on stdout (`--pretty` for humans). A typical
@@ -35,7 +35,7 @@ node packages/skill/dist/cli.js plan --session <id> --auto --open
 This reviews the **current working tree** (staged and unstaged changes
 included) against `--base`, writes a deterministic plan (one unit per
 affected execution flow; tests/DTOs/residuals attach themselves to those
-units at submit), and opens the UI to that session. `crw plan --units`
+units at submit), and opens the UI to that session. `srev plan --units`
 takes an LLM- or hand-authored plan instead — a
 `{ "overview": "...", "units": [...] }` file (bare units array also
 accepted). Flow units can reference flows by the numeric ids the context
@@ -59,7 +59,7 @@ silently review the wrong code and is rejected with a 400 instead.
   Brand-new **untracked** files are not part of the diff universe yet.
 - The session branch must be `HEAD` or the branch currently checked out.
 - If HEAD moves or the working tree changes after a session is created, the
-  UI and `crw status` flag the session stale — recreate it to pick up the
+  UI and `srev status` flag the session stale — recreate it to pick up the
   new state.
 
 Review marks cover represented changed text items, not every Git metadata change
@@ -70,13 +70,13 @@ or proof of correctness. See the [README's limits](../README.md#what-the-review-
 | Variable | Default | Meaning |
 |---|---|---|
 | `GRAPH_PROVIDER` | `scip` | Graph source: `scip` (multi-language SCIP indexers, default), `crg` (external code-review-graph server), or `stub` (fixed fake graph for testing). |
-| `CRW_DB_PATH` | `review.db` | Path to the local SQLite database file (built-in `node:sqlite`, no native deps). |
+| `SREV_DB_PATH` | `review.db` | Path to the local SQLite database file (built-in `node:sqlite`, no native deps). |
 | `PORT` | `3456` | Port the server listens on. |
-| `CRW_HOST` | `127.0.0.1` | Bind address. Keep it loopback-only: the API has no authentication and rejects request hosts other than `localhost`, `127.0.0.1`, or `[::1]`. |
-| `CRW_WEB_DIST` | auto | Path to the built web SPA. Auto-resolved for both the monorepo and plugin-bundle layouts. |
-| `CRW_SERVER_URL` | `http://localhost:3456` | Hub URL the `crw` CLI talks to (or pass `--port`). |
-| `CRW_DATA_DIR` | unset | Plugin mode: root for per-repo DBs and logs (keyed by repo name + path hash). Unset = state lands in the repo (`review.db`, `.crw/`). |
-| `CRW_INDEXER_HOME` | unset | Plugin mode: directory whose `node_modules` holds the scip indexers. Unset = resolve from the app's own dependencies. |
+| `SREV_HOST` | `127.0.0.1` | Bind address. Keep it loopback-only: the API has no authentication and rejects request hosts other than `localhost`, `127.0.0.1`, or `[::1]`. |
+| `SREV_WEB_DIST` | auto | Path to the built web SPA. Auto-resolved for both the monorepo and plugin-bundle layouts. |
+| `SREV_SERVER_URL` | `http://localhost:3456` | Hub URL the `srev` CLI talks to (or pass `--port`). |
+| `SREV_DATA_DIR` | unset | Plugin mode: root for per-repo DBs and logs (keyed by repo name + path hash). Unset = state lands in the repo (`review.db`, `.srev/`). |
+| `SREV_INDEXER_HOME` | unset | Plugin mode: directory whose `node_modules` holds the scip indexers. Unset = resolve from the app's own dependencies. |
 | `SCIP_CONTEXT_DEPTH` | `1` | (scip) Call-graph hops of context around changed nodes. |
 | `SCIP_NO_CACHE` | unset | (scip) Set to `1` to force a full re-index instead of using cached per-root indexes. |
 | `SCIP_JAVA_CMD` | unset | (scip) Explicit scip-java launcher, overriding PATH detection of `scip-java`/`cs`. |
@@ -96,7 +96,7 @@ HTTP 415; bodyless shutdown and DELETE requests do not need a content type.
 
 ## Comment export
 
-`GET /api/sessions/:id/export` (or `crw comments`) returns:
+`GET /api/sessions/:id/export` (or `srev comments`) returns:
 
 ```json
 {
@@ -126,7 +126,7 @@ only `{ "nodeId", "text", "anchor?" }`. `PATCH /api/sessions/:id/comments/:comme
 accepts `{ "text" }` and leaves the anchor and snippet as they are;
 `DELETE /api/sessions/:id/comments/:commentId` removes the comment and, when it
 was the node's last one, moves a `reviewed-commented` node back to
-`reviewed-clean`. `crw comments` additionally joins each comment with its
+`reviewed-clean`. `srev comments` additionally joins each comment with its
 node's current review status.
 
 ## Entry-point configuration
@@ -140,7 +140,7 @@ root 0.4. The flows API reports the evidence per flow as `entryReasons`
 
 Framework-registered entry points (HTTP routes, CLI commands, event
 handlers) often have callers in the graph and are missed by inference —
-declare them in `.crw-entry-points.json` at the repository root:
+declare them in `.srev-entry-points.json` at the repository root:
 
 ```json
 { "entryPoints": [ { "label": "main", "file": "src/cli.ts" } ] }

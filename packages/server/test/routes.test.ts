@@ -17,7 +17,7 @@ beforeEach(() => {
   db = createMemoryDatabase();
   // A minimal git repo on "main" so baseRef resolution succeeds by default;
   // tests that need real diffs add commits/changes on top of this.
-  fixtureRoot = mkdtempSync(join(tmpdir(), "crw-routes-"));
+  fixtureRoot = mkdtempSync(join(tmpdir(), "srev-routes-"));
   const g = (...a: string[]) => execFileSync("git", a, { cwd: fixtureRoot, encoding: "utf8" });
   g("init", "-b", "main");
   g("config", "user.email", "t@t");
@@ -84,7 +84,7 @@ describe("POST /api/sessions", () => {
   });
 
   it("fails with 400 when the repo is unusable", async () => {
-    const badRoot = mkdtempSync(join(tmpdir(), "crw-routes-nogit-"));
+    const badRoot = mkdtempSync(join(tmpdir(), "srev-routes-nogit-"));
     const badApp = createApp({ db, graphProvider: new StubGraphProvider(), repoRoot: badRoot });
     try {
       const res = await badApp.request("/api/sessions", {

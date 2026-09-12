@@ -16,7 +16,7 @@ export interface ConfiguredEntry {
 /** Optional explicit entry-point config at the repo root. Malformed or missing → []. */
 export function loadConfiguredEntries(root: string): ConfiguredEntry[] {
   try {
-    const raw = JSON.parse(readFileSync(join(root, ".crw-entry-points.json"), "utf8")) as {
+    const raw = JSON.parse(readFileSync(join(root, ".srev-entry-points.json"), "utf8")) as {
       entryPoints?: unknown;
     };
     if (!Array.isArray(raw.entryPoints)) return [];

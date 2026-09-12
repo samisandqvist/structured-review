@@ -1,14 +1,14 @@
 {
-  "name": "code-review-walkthrough",
+  "name": "structured-review",
   "private": true,
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@10.15.1",
   "scripts": {
-    "dev": "concurrently -n server,web -c blue,green \"pnpm --filter @crw/server dev\" \"pnpm --filter @crw/web dev\"",
+    "dev": "concurrently -n server,web -c blue,green \"pnpm --filter @srev/server dev\" \"pnpm --filter @srev/web dev\"",
     "build": "pnpm -r build",
     "build:plugin": "node scripts/build-plugin.mjs",
-    "start": "pnpm --filter @crw/server start",
+    "start": "pnpm --filter @srev/server start",
     "demo": "node scripts/demo.mjs",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// packages/skill/src/cli.ts — `crw`: agent-facing CLI over the review hub.
+// packages/skill/src/cli.ts — `srev`: agent-facing CLI over the review hub.
 // JSON on stdout for agent consumption; --pretty for humans. Thin wrapper over
 // the HTTP API (api.ts) and server lifecycle (serve.ts) — never SQLite.
 import { readFileSync } from "node:fs";
@@ -33,18 +33,18 @@ import { ensureServer } from "./serve.js";
 import { gcRepo, gcSweep } from "./gc.js";
 
 const USAGE = `usage:
-  crw serve [--repo <path>] [--port N]
-  crw session create --branch <b> --base <ref|empty> [--open]
-  crw session list
-  crw session delete --session <id>
-  crw context --session <id> [--brief|--full]
-  crw plan --session <id> (--auto | --units <file.json>) [--open]
-  crw diff --session <id> --node <stableId>
-  crw status --session <id>
-  crw comments --session <id>
-  crw wait --session <id> [--until reviewed|commented] [--interval sec] [--timeout sec]
-  crw gc [--repo <path>] [--all]
-  crw shutdown
+  srev serve [--repo <path>] [--port N]
+  srev session create --branch <b> --base <ref|empty> [--open]
+  srev session list
+  srev session delete --session <id>
+  srev context --session <id> [--brief|--full]
+  srev plan --session <id> (--auto | --units <file.json>) [--open]
+  srev diff --session <id> --node <stableId>
+  srev status --session <id>
+  srev comments --session <id>
+  srev wait --session <id> [--until reviewed|commented] [--interval sec] [--timeout sec]
+  srev gc [--repo <path>] [--all]
+  srev shutdown
 global flags: --port N (hub port), --pretty (human-readable output)`;
 
 const BOOL_FLAGS = new Set(["auto", "open", "pretty", "all", "full", "brief"]);
@@ -173,8 +173,8 @@ async function cmdSessionDelete(base: string, flags: Record<string, string | boo
 // under a live process.
 async function cmdGc(base: string, flags: Record<string, string | boolean>): Promise<CommandResult> {
   if (flags.all) {
-    const dataDir = process.env.CRW_DATA_DIR;
-    if (!dataDir) throw new Error("crw gc --all needs CRW_DATA_DIR (plugin mode); use crw gc --repo <path> instead");
+    const dataDir = process.env.SREV_DATA_DIR;
+    if (!dataDir) throw new Error("srev gc --all needs SREV_DATA_DIR (plugin mode); use srev gc --repo <path> instead");
     const result = gcSweep(dataDir);
     return {
       json: result,
@@ -287,7 +287,7 @@ async function cmdPlan(base: string, flags: Record<string, string | boolean>): P
   } else if (typeof flags.units === "string") {
     ({ units, overview } = parsePlanFile(readFileSync(flags.units, "utf8")));
     // Numeric refs (flowIds / mergeGroup) resolve against the same compacted
-    // flows + merge suggestions `crw context` printed, so the numbers a
+    // flows + merge suggestions `srev context` printed, so the numbers a
     // planner read are the numbers that resolve here.
     if (units.some((u) => u.kind === "flow" && (u.flowIds !== undefined || u.mergeGroup !== undefined))) {
       const { flows, orphans } = await getFlows(base, sessionId);
@@ -387,7 +387,7 @@ function checkNodeVersion(): void {
   const major = Number(majorText);
   const minor = Number(minorText);
   if (major > 22 || (major === 22 && minor >= 13)) return;
-  throw new Error(`crw requires Node >= 22.13 (found ${process.versions.node})`);
+  throw new Error(`srev requires Node >= 22.13 (found ${process.versions.node})`);
 }
 
 export async function runCli(argv: string[]): Promise<void> {
@@ -451,7 +451,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const err = isConnRefused(e)
       ? {
           error: `review hub not running at ${baseUrlFor(parseCliArgs(process.argv.slice(2)).flags)}`,
-          hint: "run: crw serve",
+          hint: "run: srev serve",
         }
       : { error: e instanceof Error ? e.message : String(e) };
     console.error(JSON.stringify(err));

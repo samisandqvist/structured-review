@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const shippedCli = join(projectRoot, "plugin", "dist", "crw.js");
+const shippedCli = join(projectRoot, "plugin", "dist", "srev.js");
 
 interface CommandFailure extends Error {
   stdout?: string;
@@ -24,9 +24,9 @@ export interface ShippedReview {
   port: number;
   baseUrl: string;
   env: NodeJS.ProcessEnv;
-  crw<T = Record<string, unknown>>(...args: string[]): Promise<T>;
-  crwFrom<T = Record<string, unknown>>(cwd: string, ...args: string[]): Promise<T>;
-  crwFailure(...args: string[]): Promise<CommandFailure>;
+  srev<T = Record<string, unknown>>(...args: string[]): Promise<T>;
+  srevFrom<T = Record<string, unknown>>(cwd: string, ...args: string[]): Promise<T>;
+  srevFailure(...args: string[]): Promise<CommandFailure>;
   stop(): Promise<void>;
   start(): Promise<void>;
   cleanup(): Promise<void>;
@@ -147,7 +147,7 @@ export async function createShippedReview(): Promise<ShippedReview> {
     stat(join(projectRoot, "plugin", "dist", "server.js")),
     stat(join(projectRoot, "plugin", "web", "index.html")),
   ]);
-  const workspace = await mkdtemp(join(tmpdir(), "crw-shipped-e2e-"));
+  const workspace = await mkdtemp(join(tmpdir(), "srev-shipped-e2e-"));
   const repo = join(workspace, "orders");
   const otherRepo = join(workspace, "other-repo");
   const dataDir = join(workspace, "state");
@@ -159,9 +159,9 @@ export async function createShippedReview(): Promise<ShippedReview> {
     ...process.env,
     GRAPH_PROVIDER: "scip",
     SCIP_REPO_ROOT: repo,
-    CRW_DATA_DIR: dataDir,
-    CRW_INDEXER_HOME: join(projectRoot, "packages", "server"),
-    CRW_SERVER_URL: baseUrl,
+    SREV_DATA_DIR: dataDir,
+    SREV_INDEXER_HOME: join(projectRoot, "packages", "server"),
+    SREV_SERVER_URL: baseUrl,
   };
 
   const command = async <T>(cwd: string, args: string[]): Promise<T> => {
@@ -176,12 +176,12 @@ export async function createShippedReview(): Promise<ShippedReview> {
     port,
     baseUrl,
     env,
-    crw: <T>(...args: string[]) => command<T>(repo, args),
-    crwFrom: <T>(cwd: string, ...args: string[]) => command<T>(cwd, args),
-    async crwFailure(...args: string[]) {
+    srev: <T>(...args: string[]) => command<T>(repo, args),
+    srevFrom: <T>(cwd: string, ...args: string[]) => command<T>(cwd, args),
+    async srevFailure(...args: string[]) {
       try {
         await command(repo, args);
-        throw new Error(`expected crw ${args.join(" ")} to fail`);
+        throw new Error(`expected srev ${args.join(" ")} to fail`);
       } catch (error) {
         return error as CommandFailure;
       }

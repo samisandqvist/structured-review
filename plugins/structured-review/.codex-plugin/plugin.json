@@ -1,6 +1,6 @@
 {
-  "name": "code-review-walkthrough",
-  "version": "0.9.1",
+  "name": "structured-review",
+  "version": "0.10.0",
   "description": "Walk through code changes with related code and tests together, saved review progress, and a local web UI.",
   "author": {
     "name": "Sami Sandqvist"
@@ -9,7 +9,7 @@
   "license": "MIT",
   "skills": "./skills/",
   "interface": {
-    "displayName": "Code Review Walkthrough",
+    "displayName": "Structured Review",
     "shortDescription": "A guided review of your code changes.",
     "longDescription": "Create a review plan from inferred call relationships, walk the changes in a local browser, and export line-anchored comments. Requires local Node 22.13 or newer, npm, and Git. Experimental alpha.",
     "developerName": "Sami Sandqvist",
@@ -18,6 +18,6 @@
       "Read",
       "Write"
     ],
-    "defaultPrompt": "Use code-review-walkthrough to review my current changes against main."
+    "defaultPrompt": "Use structured-review to review my current changes against main."
   }
 }

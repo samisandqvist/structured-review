@@ -36,7 +36,7 @@ describe("App with ?session in the URL", () => {
   });
   it("renders the header", () => {
     render(<App />);
-    expect(screen.getByText("Trace")).toBeInTheDocument();
+    expect(screen.getByText("Structured Review")).toBeInTheDocument();
   });
   it("renders graph and diff placeholders", () => {
     render(<App />);

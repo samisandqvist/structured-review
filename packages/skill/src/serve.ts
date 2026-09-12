@@ -1,4 +1,4 @@
-// packages/skill/src/serve.ts — review hub lifecycle for `crw serve`.
+// packages/skill/src/serve.ts — review hub lifecycle for `srev serve`.
 // Probe /health; reuse a healthy hub serving the same repo, refuse a port
 // occupied by anything else, otherwise spawn the built server detached.
 import { execFileSync, spawn } from "node:child_process";
@@ -54,7 +54,7 @@ export function decideServe(health: Health | null, wantRoot: string): ServeActio
   };
 }
 
-/** Server entry: a bundled sibling (plugin layout: crw.js next to server.js)
+/** Server entry: a bundled sibling (plugin layout: srev.js next to server.js)
  *  or the monorepo build (packages/skill/{src,dist} → packages/server/dist). */
 export function serverEntryPath(): string {
   const here = dirname(fileURLToPath(import.meta.url));
@@ -63,12 +63,12 @@ export function serverEntryPath(): string {
   return join(here, "..", "..", "server", "dist", "index.js");
 }
 
-/** Per-repo state paths. With CRW_DATA_DIR set (plugin mode:
+/** Per-repo state paths. With SREV_DATA_DIR set (plugin mode:
  *  ${CLAUDE_PLUGIN_DATA}), the DB and logs live there — keyed by repo name +
  *  path hash so one hub per repo never collides — and the reviewed repo stays
  *  untouched. Without it, state lands in the repo as before (review.db,
- *  .crw/server.log). */
-/** State key for one repo under CRW_DATA_DIR: repo name + path hash. Shared by
+ *  .srev/server.log). */
+/** State key for one repo under SREV_DATA_DIR: repo name + path hash. Shared by
  *  serve and gc so the two can never disagree on which files belong to a repo. */
 export function repoStateKey(repoRoot: string): string {
   const name = repoRoot.split("/").filter(Boolean).pop() ?? "repo";
@@ -78,8 +78,8 @@ export function repoStateKey(repoRoot: string): string {
 }
 
 export function statePaths(repoRoot: string): { dbPath?: string; logDir: string } {
-  const dataDir = process.env.CRW_DATA_DIR;
-  if (!dataDir) return { logDir: join(repoRoot, ".crw") };
+  const dataDir = process.env.SREV_DATA_DIR;
+  if (!dataDir) return { logDir: join(repoRoot, ".srev") };
   const key = repoStateKey(repoRoot);
   return { dbPath: join(dataDir, "db", `${key}.db`), logDir: join(dataDir, "logs", key) };
 }
@@ -101,7 +101,7 @@ export async function ensureServer(opts: { repo: string; port: number }): Promis
   const { dbPath, logDir } = statePaths(repoRoot);
   mkdirSync(logDir, { recursive: true });
   if (dbPath) mkdirSync(dirname(dbPath), { recursive: true });
-  // Sidecar for `crw gc --all`: maps a state key back to the repo it serves,
+  // Sidecar for `srev gc --all`: maps a state key back to the repo it serves,
   // so the sweep can tell "repo is gone" from "repo still exists".
   writeFileSync(join(logDir, "repo-root"), `${repoRoot}\n`);
   const logFile = join(logDir, "server.log");
@@ -111,7 +111,7 @@ export async function ensureServer(opts: { repo: string; port: number }): Promis
     env: {
       ...process.env,
       PORT: String(opts.port),
-      ...(dbPath ? { CRW_DB_PATH: dbPath } : {}),
+      ...(dbPath ? { SREV_DB_PATH: dbPath } : {}),
     },
     detached: true,
     stdio: ["ignore", logFd, logFd],

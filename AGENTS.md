@@ -1,9 +1,9 @@
-# Code Review Walkthrough
+# Structured Review
 
 A code-structure-based review tool: Claude Code / Codex skill + local web UI. Walks a
 reviewer through changes along the call/dependency graph instead of a file tree.
 
-Design spec: `docs/superpowers/specs/2026-06-19-code-review-walkthrough-design.md`
+Design spec: `docs/superpowers/specs/2026-06-19-structured-review-design.md`
 
 ## Stack
 
@@ -35,30 +35,30 @@ pnpm build:plugin     # regenerate both committed plugin packages
 pnpm demo             # disposable example review; build first
 ```
 
-## Agent CLI (crw)
+## Agent CLI (srev)
 
-`crw` (built: `packages/skill/dist/cli.js`, bin of `@crw/skill`; dev:
+`srev` (built: `packages/skill/dist/cli.js`, bin of `@srev/skill`; dev:
 `npx tsx packages/skill/src/cli.ts`) is the stable agent-facing surface for
 setting up and harvesting reviews — no curl or direct SQLite access. JSON on
 stdout; `--pretty` for humans.
 
 ```bash
-crw serve [--repo <path>] [--port N]              # start or reuse the hub (checks /health repoRoot)
-crw session create --branch <b> --base <ref|empty># prints sessionId, uiUrl, counts, indexWarnings; "empty" = whole-repo
-crw context --session <id> [--brief|--full]       # planning view: commit subjects, flows + merge suggestions, orphan groups, change summaries (--brief: numeric refs, no stableIds)
-crw plan --session <id> (--auto | --units <f>)    # mechanical or LLM-authored plan (flowIds/mergeGroup numeric refs, orphanFiles globs); always lists unassigned leftovers
-crw diff --session <id> --node <stableId>         # single node diff
-crw status --session <id>                         # coverage, overview, per-unit reviewed/total, unreviewed
-crw comments --session <id>                       # exported comments + review status (GitHub-mappable)
-crw wait --session <id> [--until reviewed|commented]
-crw gc [--repo <path>] [--all]                    # remove a repo's DB/logs (stops the hub first)
-crw shutdown                                      # stop the hub over HTTP
+srev serve [--repo <path>] [--port N]              # start or reuse the hub (checks /health repoRoot)
+srev session create --branch <b> --base <ref|empty># prints sessionId, uiUrl, counts, indexWarnings; "empty" = whole-repo
+srev context --session <id> [--brief|--full]       # planning view: commit subjects, flows + merge suggestions, orphan groups, change summaries (--brief: numeric refs, no stableIds)
+srev plan --session <id> (--auto | --units <f>)    # mechanical or LLM-authored plan (flowIds/mergeGroup numeric refs, orphanFiles globs); always lists unassigned leftovers
+srev diff --session <id> --node <stableId>         # single node diff
+srev status --session <id>                         # coverage, overview, per-unit reviewed/total, unreviewed
+srev comments --session <id>                       # exported comments + review status (GitHub-mappable)
+srev wait --session <id> [--until reviewed|commented]
+srev gc [--repo <path>] [--all]                    # remove a repo's DB/logs (stops the hub first)
+srev shutdown                                      # stop the hub over HTTP
 ```
 
 ## Plugin packages
 
 - `plugin/`: Claude Code package; marketplace at `.claude-plugin/marketplace.json`.
-- `plugins/code-review-walkthrough/`: Codex package; marketplace at `.agents/plugins/marketplace.json`.
+- `plugins/structured-review/`: Codex package; marketplace at `.agents/plugins/marketplace.json`.
 - `scripts/build-plugin.mjs` generates both runtime bundles and skill copies from
   one source. `scripts/plugin-launcher.mjs` is copied into both packages and
   bootstraps indexers when needed; don't edit generated files.

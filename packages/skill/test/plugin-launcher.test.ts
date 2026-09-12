@@ -9,17 +9,17 @@ let dir: string;
 let launcher: string;
 let env: NodeJS.ProcessEnv;
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), "crw-plugin-test-"));
+  dir = mkdtempSync(join(tmpdir(), "srev-plugin-test-"));
   for (const name of ["package/scripts", "package/dist", "bin"]) mkdirSync(join(dir, name), { recursive: true });
-  launcher = join(dir, "package/scripts/crw.mjs");
+  launcher = join(dir, "package/scripts/srev.mjs");
   writeFileSync(
     launcher,
     readFileSync(fileURLToPath(new URL("../../../scripts/plugin-launcher.mjs", import.meta.url))),
   );
   writeFileSync(join(dir, "package/package.json"), '{"dependencies":{"test":"1"}}');
   writeFileSync(
-    join(dir, "package/dist/crw.js"),
-    "console.log(JSON.stringify({ args: process.argv.slice(2), data: process.env.CRW_DATA_DIR, indexers: process.env.CRW_INDEXER_HOME }));",
+    join(dir, "package/dist/srev.js"),
+    "console.log(JSON.stringify({ args: process.argv.slice(2), data: process.env.SREV_DATA_DIR, indexers: process.env.SREV_INDEXER_HOME }));",
   );
   // An actual child executable simulates npm, including interrupted installs.
   writeFileSync(
@@ -28,7 +28,7 @@ beforeEach(() => {
 const fs = require('node:fs');
 fs.appendFileSync('install-count', '1');
 console.log('npm progress');
-if (process.env.CRW_TEST_FAIL === '1') process.exit(1);
+if (process.env.SREV_TEST_FAIL === '1') process.exit(1);
 fs.mkdirSync('node_modules/.bin', { recursive: true });
 for (const bin of ['scip-typescript', 'scip-python']) fs.writeFileSync('node_modules/.bin/' + bin, 'ready');
 `,
@@ -37,8 +37,8 @@ for (const bin of ['scip-typescript', 'scip-python']) fs.writeFileSync('node_mod
   env = {
     ...process.env,
     PATH: `${join(dir, "bin")}:${process.env.PATH}`,
-    CRW_DATA_DIR: join(dir, "writable data"),
-    CRW_INDEXER_HOME: "",
+    SREV_DATA_DIR: join(dir, "writable data"),
+    SREV_INDEXER_HOME: "",
     GRAPH_PROVIDER: "scip",
   };
 });
@@ -50,54 +50,54 @@ describe("portable plugin launcher", () => {
   it("bootstraps without a hook, preserves JSON stdout and reuses the installation", () => {
     const first = JSON.parse(run("serve", "--repo", "/some repo"));
     expect(first.args).toEqual(["serve", "--repo", "/some repo"]);
-    expect(first.data).toBe(env.CRW_DATA_DIR);
-    expect(first.indexers).toBe(env.CRW_DATA_DIR);
+    expect(first.data).toBe(env.SREV_DATA_DIR);
+    expect(first.indexers).toBe(env.SREV_DATA_DIR);
     run("serve");
-    expect(readFileSync(join(env.CRW_DATA_DIR!, "install-count"), "utf8")).toBe("1");
+    expect(readFileSync(join(env.SREV_DATA_DIR!, "install-count"), "utf8")).toBe("1");
     expect(existsSync(join(dir, "package/node_modules"))).toBe(false);
   });
 
   it("reports an install failure and retries successfully on the next invocation", () => {
     const failed = spawnSync(process.execPath, [launcher, "serve"], {
-      env: { ...env, CRW_TEST_FAIL: "1" },
+      env: { ...env, SREV_TEST_FAIL: "1" },
       encoding: "utf8",
     });
     expect(failed.status).toBe(1);
     expect(failed.stderr).toContain("retry the same command");
-    expect(existsSync(join(env.CRW_DATA_DIR!, ".indexers-ready"))).toBe(false);
+    expect(existsSync(join(env.SREV_DATA_DIR!, ".indexers-ready"))).toBe(false);
     expect(JSON.parse(run("serve")).args).toEqual(["serve"]);
-    expect(readFileSync(join(env.CRW_DATA_DIR!, "install-count"), "utf8")).toBe("11");
+    expect(readFileSync(join(env.SREV_DATA_DIR!, "install-count"), "utf8")).toBe("11");
   });
 
   it("keeps help and shutdown usable without installing indexers", () => {
     expect(JSON.parse(run("--help")).args).toEqual(["--help"]);
     expect(JSON.parse(run("shutdown")).args).toEqual(["shutdown"]);
-    expect(existsSync(env.CRW_DATA_DIR!)).toBe(false);
+    expect(existsSync(env.SREV_DATA_DIR!)).toBe(false);
   });
 
   it("keeps the --setup hook best-effort: a failed install warns but exits 0", () => {
     const failed = spawnSync(process.execPath, [launcher, "--setup"], {
-      env: { ...env, CRW_TEST_FAIL: "1" },
+      env: { ...env, SREV_TEST_FAIL: "1" },
       encoding: "utf8",
     });
     expect(failed.status).toBe(0);
     expect(failed.stderr).toContain("retry");
-    expect(existsSync(join(env.CRW_DATA_DIR!, ".indexers-ready"))).toBe(false);
+    expect(existsSync(join(env.SREV_DATA_DIR!, ".indexers-ready"))).toBe(false);
     // The next real command still bootstraps for itself.
     expect(JSON.parse(run("serve")).args).toEqual(["serve"]);
-    expect(readFileSync(join(env.CRW_DATA_DIR!, "install-count"), "utf8")).toBe("11");
+    expect(readFileSync(join(env.SREV_DATA_DIR!, "install-count"), "utf8")).toBe("11");
   });
 
   it("bootstraps indexers when flags precede the command word", () => {
     run("--pretty", "serve");
     run("session", "--port", "4000", "create");
-    expect(readFileSync(join(env.CRW_DATA_DIR!, "install-count"), "utf8")).toBe("1");
+    expect(readFileSync(join(env.SREV_DATA_DIR!, "install-count"), "utf8")).toBe("1");
   });
 
   it("uses Codex's plugin data directory when no explicit override was supplied", () => {
     env = {
       ...env,
-      CRW_DATA_DIR: "",
+      SREV_DATA_DIR: "",
       PLUGIN_DATA: join(dir, "codex data"),
       CLAUDE_PLUGIN_DATA: join(dir, "claude data"),
     };
@@ -106,8 +106,8 @@ describe("portable plugin launcher", () => {
 
   it("repairs an incomplete install even when its success marker survived", () => {
     run("serve");
-    rmSync(join(env.CRW_DATA_DIR!, "node_modules/.bin/scip-python"));
+    rmSync(join(env.SREV_DATA_DIR!, "node_modules/.bin/scip-python"));
     run("serve");
-    expect(readFileSync(join(env.CRW_DATA_DIR!, "install-count"), "utf8")).toBe("11");
+    expect(readFileSync(join(env.SREV_DATA_DIR!, "install-count"), "utf8")).toBe("11");
   });
 });

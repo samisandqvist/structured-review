@@ -13,8 +13,8 @@ let repoRoot: string;
 
 beforeEach(() => {
   db = createMemoryDatabase();
-  dist = mkdtempSync(join(tmpdir(), "crw-dist-"));
-  repoRoot = mkdtempSync(join(tmpdir(), "crw-static-repo-"));
+  dist = mkdtempSync(join(tmpdir(), "srev-dist-"));
+  repoRoot = mkdtempSync(join(tmpdir(), "srev-static-repo-"));
   mkdirSync(join(dist, "assets"), { recursive: true });
   writeFileSync(join(dist, "index.html"), "<!doctype html><div id=root></div>");
   writeFileSync(join(dist, "assets", "app.js"), "console.log(1)");

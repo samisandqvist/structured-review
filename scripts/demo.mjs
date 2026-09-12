@@ -1,4 +1,4 @@
-// A disposable example driven exclusively through the public crw CLI.
+// A disposable example driven exclusively through the public srev CLI.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
@@ -13,7 +13,7 @@ if (!existsSync(cli) || !existsSync(join(project, "packages/web/dist/index.html"
   process.exit(1);
 }
 async function main() {
-  const workspace = mkdtempSync(join(tmpdir(), "crw-demo-"));
+  const workspace = mkdtempSync(join(tmpdir(), "srev-demo-"));
   const repo = join(workspace, "orders");
   mkdirSync(join(repo, "src"), { recursive: true });
   function write(path, text) {
@@ -72,11 +72,11 @@ async function main() {
     ...process.env,
     GRAPH_PROVIDER: "scip",
     SCIP_REPO_ROOT: repo,
-    CRW_DATA_DIR: join(workspace, "data"),
-    CRW_INDEXER_HOME: join(project, "packages/server"),
-    CRW_SERVER_URL: `http://127.0.0.1:${port}`,
+    SREV_DATA_DIR: join(workspace, "data"),
+    SREV_INDEXER_HOME: join(project, "packages/server"),
+    SREV_SERVER_URL: `http://127.0.0.1:${port}`,
   };
-  function crw(...args) {
+  function srev(...args) {
     return JSON.parse(
       execFileSync(process.execPath, [cli, ...args], {
         cwd: repo,
@@ -88,10 +88,10 @@ async function main() {
   }
   let running = false;
   try {
-    crw("serve", "--repo", repo, "--port", String(port));
+    srev("serve", "--repo", repo, "--port", String(port));
     running = true;
-    const session = crw("session", "create", "--branch", "HEAD", "--base", "HEAD");
-    const context = crw("context", "--session", session.sessionId, "--brief");
+    const session = srev("session", "create", "--branch", "HEAD", "--base", "HEAD");
+    const context = srev("context", "--session", session.sessionId, "--brief");
     const planPath = join(workspace, "plan.json");
     writeFileSync(
       planPath,
@@ -106,7 +106,7 @@ async function main() {
         })),
       }),
     );
-    crw("plan", "--session", session.sessionId, "--units", planPath);
+    srev("plan", "--session", session.sessionId, "--units", planPath);
     const quotedCli = "'" + cli.replaceAll("'", "'\\''") + "'";
     console.log(
       `Example review: ${session.uiUrl}\n\nTry j to start, r to mark reviewed, and c to leave a comment.\nDoes the new quantity need validation? Use Review notes for broader concerns.\n\nTemporary example: ${workspace}\nStop its hub: node ${quotedCli} shutdown --port ${port}`,
@@ -114,7 +114,7 @@ async function main() {
   } catch (error) {
     if (running) {
       try {
-        crw("shutdown");
+        srev("shutdown");
       } catch {
         /* preserve original error */
       }
