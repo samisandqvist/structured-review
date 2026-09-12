@@ -72,7 +72,7 @@ or proof of correctness. See the [README's limits](../README.md#what-the-review-
 | `GRAPH_PROVIDER` | `scip` | Graph source: `scip` (multi-language SCIP indexers, default), `crg` (external code-review-graph server), or `stub` (fixed fake graph for testing). |
 | `CRW_DB_PATH` | `review.db` | Path to the local SQLite database file (built-in `node:sqlite`, no native deps). |
 | `PORT` | `3456` | Port the server listens on. |
-| `CRW_HOST` | `127.0.0.1` | Bind address. The API is unauthenticated; a warning is printed if you bind to anything other than `127.0.0.1`/`localhost`. |
+| `CRW_HOST` | `127.0.0.1` | Bind address. Keep it loopback-only: the API has no authentication and rejects request hosts other than `localhost`, `127.0.0.1`, or `[::1]`. |
 | `CRW_WEB_DIST` | auto | Path to the built web SPA. Auto-resolved for both the monorepo and plugin-bundle layouts. |
 | `CRW_SERVER_URL` | `http://localhost:3456` | Hub URL the `crw` CLI talks to (or pass `--port`). |
 | `CRW_DATA_DIR` | unset | Plugin mode: root for per-repo DBs and logs (keyed by repo name + path hash). Unset = state lands in the repo (`review.db`, `.crw/`). |
@@ -86,6 +86,13 @@ A few more exist for advanced setups: `SCIP_REPO_ROOT` and `CRG_REPO_ROOT`
 override the git root the respective provider reads from (default: the
 ambient repo root), and `CRG_COMMAND` sets the command used to launch the
 `crg` provider's server (default `code-review-graph serve`).
+
+The browser must use the same origin (scheme, host, and port) as its requests.
+The Vite development proxy preserves that origin. Foreign Origins, including
+`null`, and `Sec-Fetch-Site: cross-site` requests receive HTTP 403, including on
+health and shutdown routes. CLI clients need no Origin header. JSON write routes
+require `Content-Type: application/json` (optional charset allowed) or return
+HTTP 415; bodyless shutdown and DELETE requests do not need a content type.
 
 ## Comment export
 

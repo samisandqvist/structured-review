@@ -1,5 +1,7 @@
 # Phase 1: Multi-Index Orchestration + scip-python — Implementation Plan
 
+> Project, branch, and application identifiers in this historical note have been anonymized.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** The SCIP graph provider discovers one language root per TS/Python project in the repo, runs the matching SCIP indexer per root, merges the decoded indexes into the single call graph the rest of the product already consumes, caches per (indexer, root, subtree-fingerprint), and fails loudly when an indexer breaks.
@@ -219,14 +221,14 @@ describe("discoverLanguageRoots", () => {
       "web/app.ts": "export {};",
       "mcp/svc/pyproject.toml": "",
       "mcp/svc/app.py": "x = 1\n",
-      "introspector/pom.xml": "<project/>",
-      "introspector/src/Main.java": "class Main {}",
+      "example-service/pom.xml": "<project/>",
+      "example-service/src/Main.java": "class Main {}",
     });
     try {
       const jobs = discoverLanguageRoots(dir);
       expect(jobs).toEqual([
         { language: "ts", root: "", hasSources: true },
-        { language: "java", root: "introspector", hasSources: true },
+        { language: "java", root: "example-service", hasSources: true },
         { language: "py", root: "mcp/svc", hasSources: true },
       ]);
     } finally {
@@ -993,23 +995,23 @@ git commit -m "feat(server): surface indexer failures as index-phase session err
 
 ---
 
-### Task 7: Checkpoint — dogfood on the aivo `introspector-obo` diff
+### Task 7: Checkpoint — dogfood on the sample-project `sample-feature` diff
 
-Manual verification (the roadmap's Phase 1 exit criterion): on the aivo repo, the Python MCP half of the OBO diff (config → backend_client → server) must produce affected flows and relations, while the Java half stays residual-only.
+Manual verification (the roadmap's Phase 1 exit criterion): on the sample-project repo, the Python MCP half of the sample-feature diff (config → backend_client → server) must produce affected flows and relations, while the Java half stays residual-only.
 
 **Files:** none (verification only; findings go in the session/notes, not the repo).
 
-- [ ] **Step 1: Build and start the hub against aivo**
+- [ ] **Step 1: Build and start the hub against sample-project**
 
 ```bash
 pnpm build
-cd ~/Projects/<aivo-checkout>   # the checkout with the introspector-obo branch checked out
-CRW_DB_PATH=/tmp/crw-dogfood.db PORT=3456 node ~/Projects/pareto/rewiew-walkthrough-opencode/packages/server/dist/index.js
+cd ~/Projects/<sample-project-checkout>   # the checkout with the sample-feature branch checked out
+CRW_DB_PATH=/tmp/crw-dogfood.db PORT=3456 node /path/to/structured-review/packages/server/dist/index.js
 ```
 
 Expected startup log: one `scip: ts root ...` line per TS root and one `scip: py root ...` line per Python root after the first session request (indexing is lazy).
 
-- [ ] **Step 2: Create a session for the OBO diff**
+- [ ] **Step 2: Create a session for the sample-feature diff**
 
 ```bash
 curl -s -X POST http://localhost:3456/api/sessions \
@@ -1025,7 +1027,7 @@ Open `http://localhost:3456` in the already-running Playwright browser. Expected
 
 - [ ] **Step 4: Verify the cache split**
 
-Touch one Python file in aivo (add a blank line), create a second session: only the py root re-indexes (one `scip: py root` log line, no `scip: ts root` line). Revert the touch.
+Touch one Python file in sample-project (add a blank line), create a second session: only the py root re-indexes (one `scip: py root` log line, no `scip: ts root` line). Revert the touch.
 
 - [ ] **Step 5: Record the result**
 
@@ -1033,7 +1035,7 @@ Append a short "Phase 1 checkpoint" note (date, what worked, anything off) to `d
 
 ```bash
 git add docs/superpowers/plans/2026-07-15-polyglot-provider-roadmap.md
-git commit -m "docs: phase 1 checkpoint — python flows on the aivo obo dogfood"
+git commit -m "docs: phase 1 checkpoint — python flows on the sample-project sample-feature dogfood"
 ```
 
 ---
@@ -1045,6 +1047,6 @@ git commit -m "docs: phase 1 checkpoint — python flows on the aivo obo dogfood
 - "Merge indexes ... re-rooted to repo-relative" → Task 3 (pure) + Task 4 (wired). `buildGraphFromIndex` verified index-shape-agnostic: it only reads `documents[].relativePath/occurrences` (scip.ts:300-351). ✓
 - "Cache per (indexer, root, content-fingerprint)" → Task 1 (fingerprint, answers open question 1 via tree-sha + `git diff HEAD -- <root>` + untracked) + Task 4 (job cache). ✓
 - "Fail loudly ... extend the GitError-style phase errors with an `index` phase" → Task 3 (error type) + Task 4 (throw sites: non-zero exit, empty index with sources) + Task 6 (route surface). ✓
-- "Checkpoint: aivo introspector-obo dogfood" → Task 7. ✓
+- "Checkpoint: sample-project sample-feature dogfood" → Task 7. ✓
 - Open question 2 (overlapping roots) — resolved minimally: same-language nesting deduped in Task 2; cross-language overlap is allowed by design.
 - Open question 3 (session diagnostics) — deliberately minimal in this phase: per-job log lines + index-phase errors. The response-shape diagnostics stay with the deferred P2 item / plugin work.

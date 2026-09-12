@@ -1,21 +1,23 @@
 # Polyglot Graph Provider — Roadmap (rough plan)
 
+> Project, branch, and application identifiers in this historical note have been anonymized.
+
 **Status:** roadmap, pre-implementation. Each phase gets its own detailed
 SDD plan (writing-plans → subagent-driven-development) when we start it.
 Ordering agreed 2026-07-15: orchestration + Python first, heuristics second,
 Java last behind a spike gate.
 
-**Goal:** flow-ordered review for Java and Python changes (aivo:
-`introspector/` is Maven/Java, `mcp/*` is Python, plus existing TS), by
+**Goal:** flow-ordered review for Java and Python changes (sample-project:
+`example-service/` is Maven/Java, `mcp/*` is Python, plus existing TS), by
 running one SCIP indexer per language root and merging the indexes into the
 one call graph the rest of the product already consumes.
 
 **Why this is tractable:** verified empirically 2026-07-15 — `scip-python`
-indexed `aivo/mcp/introspector-jdbc` in ~1 s and our own decoder
+indexed `sample-project/mcp/example-connector` in ~1 s and our own decoder
 (`scip.proto` + protobufjs) confirmed function/method definitions carry
 `enclosingRange` (our function detector) with `().`-suffixed symbols, i.e.
 `buildGraphFromIndex` consumes it essentially unchanged. SCIP symbols are
-namespaced by scheme+package (`scip-python python introspector-jdbc …`), so
+namespaced by scheme+package (`scip-python python example-connector …`), so
 merging indexes is document concatenation with no collision risk.
 
 ---
@@ -50,20 +52,20 @@ The architectural piece; Python rides along as the cheapest second indexer.
   creation (extend the GitError-style phase errors with an `index` phase),
   not silently produce an orphan-only plan. Silent degradation is exactly
   what the P0 wave stamped out for git.
-- **Checkpoint:** re-run the aivo `introspector-obo` dogfood — the Python
+- **Checkpoint:** re-run the sample-project `sample-feature` dogfood — the Python
   MCP half of that diff (config → backend_client → server) should produce
   affected flows and relations while Java remains residual-only.
 
-**Phase 1 checkpoint (2026-07-16): PASSED.** Dogfood on aivo
-`introspector-obo` vs main: discovery found 15 language roots (5 ts, 10 py),
+**Phase 1 checkpoint (2026-07-16): PASSED.** Dogfood on sample-project
+`sample-feature` vs main: discovery found 15 language roots (5 ts, 10 py),
 all indexed and merged (~20 s cold). The Python MCP half produced 5 affected
-flows — `main → config.from_env → create_server → _build_obo_token_provider
+flows — `main → config.from_env → create_server → _build_token_provider
 → exchange` plus the four MCP tools (`executeSql` etc.) each flowing through
 `backend_client` into shared `_get_headers` — and the plan UI rendered flow
 tracks, entry evidence, and node-scoped Python diffs (screenshot:
 `phase1-python-flows.png`). All 19 Java files landed residual-only, grouped
 into orphan units. Cache split verified: touching one Python file re-indexed
-only `mcp/introspector-jdbc` (2.4 s warm session vs 20 s cold), the other 14
+only `mcp/example-connector` (2.4 s warm session vs 20 s cold), the other 14
 roots served from the per-root cache. Full plan coverage 47/47, zero
 unassigned.
 
@@ -107,7 +109,7 @@ Decision gate before committing to Phase 4. Produce a short findings note
 
 - Install scip-java (coursier `cs install scip-java`, or released
   launcher); JDK 21 + Maven 3.6.3 already on this machine.
-- Index `aivo/introspector` (standard Maven project). Measure wall-clock —
+- Index `sample-project/example-service` (standard Maven project). Measure wall-clock —
   indexing wraps the compile, so expect minutes, not seconds.
 - Run the same decoder probe: do method definitions carry
   `enclosingRange`? Do symbols follow the `Class#method().` shape? Are
@@ -121,9 +123,9 @@ Decision gate before committing to Phase 4. Produce a short findings note
 
 **Phase 3 gate (2026-07-16): PASSED** — see
 `docs/scip-java-spike-findings.md`. enclosingRange present on all 806 method
-defs, call refs method-granular (controller → service chains on the OBO diff
+defs, call refs method-granular (controller → service chains on the sample-feature diff
 confirmed), broken build = exit 1 + no index file. 13 s warm index on
-introspector (compile-dominated). Two small decoder deltas for Phase 4: Java
+example-service (compile-dominated). Two small decoder deltas for Phase 4: Java
 node filter (fields also carry enclosingRange — require `).` suffix) and a
 labelOf generalization (`(+N).` overloads, backticked `<init>`). Original
 ~2–4 day Phase 4 estimate stands.
@@ -139,14 +141,14 @@ labelOf generalization (`(+N).` overloads, backticked `<init>`). Original
 - Cache is load-bearing here (compile-time indexing): per-root fingerprint
   from Phase 1 must make the no-change path free.
 - Test-file heuristics from Phase 2 already cover Java.
-- **Checkpoint:** the aivo OBO branch dogfood again — this time the 19
-  Java files should form flows (controller → service → introspector →
+- **Checkpoint:** the sample-project sample-feature branch dogfood again — this time the 19
+  Java files should form flows (controller → service → example-service →
   policy/helper), which is the review this whole roadmap exists for.
 
-**Phase 4 checkpoint (2026-07-16): PASSED.** Dogfood on aivo
-`introspector-obo` vs main: 235 flows (51 Java, 37 Python), including
-`introspect → resolveJdbcUrl → resolveDbAccessToken → performDatabase-
-Introspection` — the OBO chain itself. 17/19 changed Java files carry method
+**Phase 4 checkpoint (2026-07-16): PASSED.** Dogfood on sample-project
+`sample-feature` vs main: 235 flows (51 Java, 37 Python), including
+`introspect → resolveJdbcUrl → resolveToken → performDatabase-
+Introspection` — the sample-feature chain itself. 17/19 changed Java files carry method
 nodes (2 field-only DTOs correctly residual); constructor labels render as
 class names; node-scoped Java diffs work (screenshot:
 `p4-java-flow-tracks.png`, `p4-java-node-diff.png`). 27 s cold across all
@@ -227,7 +229,7 @@ to "run `crw …`" invocations.
 
 ## Unassigned-changes revisit — attach tests and uncalled types to their context (design + implement, after the CLI, before/alongside plugin packaging)
 
-Motivation (2026-07-16 Phase 4 dogfood): the OBO session planned 26/100
+Motivation (2026-07-16 Phase 4 dogfood): the sample-feature session planned 26/100
 changes into flow units; the other 74 landed in "Unassigned changes" — and
 most of them are not orphans in any meaningful sense. They fall into three
 groups with obvious homes:
@@ -250,7 +252,7 @@ groups with obvious homes:
    a "required-by" relation derived from them would attach a DTO to the
    controller/service that consumes it.
 3. **Module-scope residuals** of files whose methods ARE in flows
-   (`IntrospectionService.java (module scope)`): could attach to the same
+   (`ExampleService.java (module scope)`): could attach to the same
    unit as the file's flow nodes (same-file affinity — no new index data
    needed).
 

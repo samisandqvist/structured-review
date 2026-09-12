@@ -1,5 +1,7 @@
 # Polyglot Phase 4 — scip-java Integration Implementation Plan
 
+> Project, branch, and application identifiers in this historical note have been anonymized.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Java changes produce call-graph flows: run scip-java per Maven/Gradle root on the Phase 1 multi-index orchestration, with the two decoder deltas the Phase 3 spike identified, and per-language degradation (visible warning, never silent) when the Java toolchain is missing.
@@ -39,10 +41,10 @@ Append to `packages/server/test/scip-multi.test.ts`:
 
 ```ts
 describe("java symbol shapes (spike deltas)", () => {
-  const J = "semanticdb maven maven/fi.pareto/demo 1.0.0 ";
+  const J = "semanticdb maven maven/org.example/demo 1.0.0 ";
   const J_RUN = `${J}demo/App#run().`;
   const J_OVERLOAD = `${J}demo/App#run(+1).`;
-  const J_CTOR = "semanticdb maven maven/fi.pareto/demo 1.0.0 demo/App#`<init>`().";
+  const J_CTOR = "semanticdb maven maven/org.example/demo 1.0.0 demo/App#`<init>`().";
   const J_FIELD = `${J}demo/App#svc.`;
   const J_GREET = `${J}demo/Svc#greet().`;
 
@@ -357,17 +359,17 @@ In `packages/server/test/roots.test.ts`, add inside `describe("languagePathspecs
 
 ```ts
   it("covers java sources, build files, and build-config extras", () => {
-    expect(languagePathspecs("java", "introspector")).toEqual([
-      ":(glob)introspector/**/*.java",
-      ":(glob)introspector/**/pom.xml",
-      ":(glob)introspector/**/build.gradle",
-      ":(glob)introspector/**/build.gradle.kts",
-      ":(glob)introspector/**/settings.gradle",
-      ":(glob)introspector/**/settings.gradle.kts",
-      ":(glob)introspector/**/gradle.properties",
-      ":(glob)introspector/**/gradle.lockfile",
-      ":(glob)introspector/**/maven-wrapper.properties",
-      ":(glob)introspector/**/settings.xml",
+    expect(languagePathspecs("java", "example-service")).toEqual([
+      ":(glob)example-service/**/*.java",
+      ":(glob)example-service/**/pom.xml",
+      ":(glob)example-service/**/build.gradle",
+      ":(glob)example-service/**/build.gradle.kts",
+      ":(glob)example-service/**/settings.gradle",
+      ":(glob)example-service/**/settings.gradle.kts",
+      ":(glob)example-service/**/gradle.properties",
+      ":(glob)example-service/**/gradle.lockfile",
+      ":(glob)example-service/**/maven-wrapper.properties",
+      ":(glob)example-service/**/settings.xml",
     ]);
   });
 ```
@@ -427,7 +429,7 @@ Append to `packages/server/test/scip-java.test.ts` (extend the top import with `
 describe("java degradation (planJobs)", () => {
   const JOBS: IndexerJob[] = [
     { language: "ts", root: "", hasSources: true },
-    { language: "java", root: "introspector", hasSources: true },
+    { language: "java", root: "example-service", hasSources: true },
     { language: "py", root: "mcp/svc", hasSources: true },
   ];
   class Probe extends ScipGraphProvider {
@@ -443,7 +445,7 @@ describe("java degradation (planJobs)", () => {
     expect(jobs.map((j) => j.language)).toEqual(["ts", "py"]);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toMatch(/Java indexing skipped/);
-    expect(warnings[0]).toMatch(/'introspector'/);
+    expect(warnings[0]).toMatch(/'example-service'/);
     expect(warnings[0]).toMatch(/cs launch com\.sourcegraph:scip-java/);
     expect(warnings[0]).toMatch(/SCIP_JAVA_CMD/);
   });
@@ -593,7 +595,7 @@ Append to `packages/server/test/routes.test.ts`, in the `describe("POST /api/ses
 
 ```ts
   it("persists and returns index warnings from the graph provider", async () => {
-    const warning = "Java indexing skipped for 1 root(s) ('introspector'): scip-java toolchain not found.";
+    const warning = "Java indexing skipped for 1 root(s) ('example-service'): scip-java toolchain not found.";
     const stub = new StubGraphProvider() as StubGraphProvider & { getIndexWarnings(): Promise<string[]> };
     stub.getIndexWarnings = async () => [warning];
     const warnApp = createApp({ db, graphProvider: stub, repoRoot: fixtureRoot });
@@ -748,11 +750,11 @@ git commit -m "feat: java degradation warnings — session index diagnostics (sc
 
 ### Task 4: Dogfood checkpoint (controller-run, not a subagent task)
 
-Run the aivo `introspector-obo` dogfood exactly as Phase 1 did (roadmap checkpoint):
+Run the sample-project `sample-feature` dogfood exactly as Phase 1 did (roadmap checkpoint):
 
 1. Coursier must be durably available: `~/.local/bin/cs` (already installed during the Phase 3 spike session setup — verify with `cs version`; if missing, download the launcher gz from coursier releases into `~/.local/bin`).
-2. Start the server against the aivo repo (`CRG_REPO_ROOT=/home/duuni/Projects/pareto/aivo` — or the introspector root as the session repo, matching how the Phase 1 dogfood ran), create a session for `introspector-obo` vs `main`.
-3. **Expected:** the 19 changed Java files form flows (controller → service → introspector → policy/helper chains — the spike's preview found 20 controller→service/helper edges); Python MCP flows still present (Phase 1 regression check); cold-index wall-clock recorded; warm re-run served from cache.
+2. Start the server against the sample-project repo (`CRG_REPO_ROOT=/path/to/sample-project` — or the example-service root as the session repo, matching how the Phase 1 dogfood ran), create a session for `sample-feature` vs `main`.
+3. **Expected:** the 19 changed Java files form flows (controller → service → example-service → policy/helper chains — the spike's preview found 20 controller→service/helper edges); Python MCP flows still present (Phase 1 regression check); cold-index wall-clock recorded; warm re-run served from cache.
 4. Degradation check: restart the server with `PATH` stripped of `cs` (and no `SCIP_JAVA_CMD`) — session creation succeeds, Java files land residual-only, PlanView shows the amber warning banner with the install hint.
 5. Screenshot the Java flow tracks + the warning banner; append checkpoint results to the roadmap doc (same style as the Phase 1 checkpoint note).
 

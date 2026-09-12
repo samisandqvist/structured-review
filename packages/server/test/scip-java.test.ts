@@ -102,7 +102,7 @@ describe("scip-java integration", () => {
 describe("java degradation (planJobs)", () => {
   const JOBS: IndexerJob[] = [
     { language: "ts", root: "", hasSources: true },
-    { language: "java", root: "introspector", hasSources: true },
+    { language: "java", root: "example-service", hasSources: true },
     { language: "py", root: "mcp/svc", hasSources: true },
   ];
   class Probe extends ScipGraphProvider {
@@ -124,7 +124,7 @@ describe("java degradation (planJobs)", () => {
     expect(jobs.map((j) => j.language)).toEqual(["ts", "py"]);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toMatch(/Java indexing skipped/);
-    expect(warnings[0]).toMatch(/'introspector'/);
+    expect(warnings[0]).toMatch(/'example-service'/);
     expect(warnings[0]).toMatch(/cs launch com\.sourcegraph:scip-java/);
     expect(warnings[0]).toMatch(/SCIP_JAVA_CMD/);
   });
@@ -150,7 +150,7 @@ describe("java degradation (planJobs)", () => {
   it("attaches degradation warnings to the real build (indexAndBuild wiring)", async () => {
     class JavaOnly extends ScipGraphProvider {
       protected override discoverJobs(): IndexerJob[] {
-        return [{ language: "java", root: "introspector", hasSources: true }];
+        return [{ language: "java", root: "example-service", hasSources: true }];
       }
       protected override resolveJavaCommand(): ScipJavaCommand | null {
         return null;

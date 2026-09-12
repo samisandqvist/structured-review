@@ -1,9 +1,11 @@
 # scip-java spike — findings (Phase 3 gate)
 
+> Project, branch, and application identifiers in this historical note have been anonymized.
+
 Decision-gate probe for Phase 4 of the polyglot roadmap
 (`docs/superpowers/plans/2026-07-15-polyglot-provider-roadmap.md`), run
-2026-07-16 against `aivo/introspector` (Spring Boot, Maven, 155 Java files)
-on the `introspector-obo` branch — the same diff the Phase 4 checkpoint will
+2026-07-16 against `sample-project/example-service` (Spring Boot, Maven, 155 Java files)
+on the `sample-feature` branch — the same diff the Phase 4 checkpoint will
 dogfood.
 
 **Gate verdict: PASS — proceed with Phase 4 at the original ~2–4 day
@@ -18,7 +20,7 @@ both listed below.
 # scip-java is NOT in coursier's default app channel (`cs install scip-java`
 # fails); launch it by Maven coordinates instead:
 cs launch com.sourcegraph:scip-java_2.13:0.12.3 \
-  -M com.sourcegraph.scip_java.ScipJava -- index --output introspector.scip
+  -M com.sourcegraph.scip_java.ScipJava -- index --output example-service.scip
 # then decode with the server's own scip.proto + protobufjs pipeline and
 # replicate buildGraphFromIndex's node/edge derivation.
 ```
@@ -69,19 +71,19 @@ generalize the suffix strip from `/\(\)\.$/` to `/\([^)]*\)\.$/` and map a
 `` `<init>` `` tail to the enclosing class name** (a constructor labeled
 `EntityNotFoundException` is also better UX than `<init>`).
 
-## Phase 4 checkpoint preview (OBO branch)
+## Phase 4 checkpoint preview (sample-feature branch)
 
 Replicating the graph derivation with the `).` node filter against the
-`introspector-obo` diff (19 changed Java files vs main):
+`sample-feature` diff (19 changed Java files vs main):
 
 - 17/19 changed files contain method nodes (151 nodes total; the other two
   are annotation/field-only DTO changes → residual, correctly).
 - Changed controllers form 20 controller → service/helper call edges,
-  including `IntrospectionController#introspect()` →
-  `DbAccessTokenHelper#resolveDbAccessToken()` and →
-  `IntrospectionService#introspect()` — exactly the OBO review chains this
+  including `ExampleController#introspect()` →
+  `TokenHelper#resolveToken()` and →
+  `ExampleService#introspect()` — exactly the sample-feature review chains this
   roadmap exists to surface.
-- Test files (`RequireUserTokenControllerTest.java`, `src/test/java/**`)
+- Test files (`ExampleControllerTest.java`, `src/test/java/**`)
   match the Phase 2 `isTestFile` patterns → TESTED_BY edges, not flow steps.
 
 ## Toolchain / packaging notes (feeds the plugin release)

@@ -1,5 +1,7 @@
 # Line-Specific Commenting Implementation Plan
 
+> Project, branch, and application identifiers in this historical note have been anonymized.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Comments can be anchored to a range of changed diff lines inside a node — selected in the diff pane, validated server-side against the node's current diff, stored, and carried through export in a GitHub-mappable shape — while node-level comments keep working unchanged.
@@ -957,7 +959,7 @@ git commit -m "feat(web): line-selection chip, anchored comment submit and displ
 pnpm build
 ```
 
-Kill and restart the running hub (same command/env as the Phase 1 dogfood: cwd = the aivo repo, `PORT=3456`; the DB migrates 3→4 on open). Create a fresh session + plan via the orchestrate CLI if the old session's data is awkward.
+Kill and restart the running hub (same command/env as the Phase 1 dogfood: cwd = the sample-project repo, `PORT=3456`; the DB migrates 3→4 on open). Create a fresh session + plan via the orchestrate CLI if the old session's data is awkward.
 
 - [ ] **Step 2: Drive the flow in the browser (Playwright)**
 

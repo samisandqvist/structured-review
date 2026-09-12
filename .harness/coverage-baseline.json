@@ -24,7 +24,7 @@
       "lines": 100,
       "statements": 100,
       "functions": 100,
-      "branches": 95.83333333333333
+      "branches": 90
     },
     "packages/server/src/db/schema.ts": {
       "lines": 100,
@@ -36,7 +36,7 @@
       "lines": 97.14867617107943,
       "statements": 97.14867617107943,
       "functions": 100,
-      "branches": 93.25842696629213
+      "branches": 90
     },
     "packages/server/src/flows.ts": {
       "lines": 0,

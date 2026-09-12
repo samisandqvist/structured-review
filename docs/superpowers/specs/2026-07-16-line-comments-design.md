@@ -1,6 +1,8 @@
 # Line-Specific Commenting — Design
 
-**Status:** implemented + verified live 2026-07-16 (aivo OBO dogfood:
+> Project, branch, and application identifiers in this historical note have been anonymized.
+
+**Status:** implemented + verified live 2026-07-16 (sample-project sample-feature dogfood:
 range select via click/shift-click, chip, anchored comment with range-scoped
 snippet `+44…+47`, chip re-highlight, node-level null anchor, export carries
 anchor; screenshot `line-comments-anchored.png`). Approved 2026-07-16

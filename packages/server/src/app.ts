@@ -11,10 +11,12 @@ import { createCommentsRoute } from "./routes/comments.js";
 import { createEventsRoute } from "./routes/events.js";
 import { createFlowsRoute } from "./routes/flows.js";
 import { createChangesRoute } from "./routes/changes.js";
+import { localRequestsOnly } from "./request-security.js";
 
 export function createApp(ctx: AppContext) {
   const resolved: AppContext = { ...ctx, repoRoot: ctx.repoRoot ?? defaultRepoRoot() };
   const app = new Hono();
+  app.use("*", localRequestsOnly);
   // repoRoot + pid let a CLI tell "the right hub for this repo" apart from a
   // stranger squatting on the port (crw serve reuse-or-error decision).
   app.get("/health", (c) =>

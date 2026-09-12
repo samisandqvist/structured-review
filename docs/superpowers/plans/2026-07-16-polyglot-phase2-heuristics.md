@@ -1,5 +1,7 @@
 # Polyglot Phase 2 — Per-Language Heuristics Implementation Plan
 
+> Project, branch, and application identifiers in this historical note have been anonymized.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Remove the TS-chauvinist assumptions left after Phase 1: per-language test-file detection (Java + Python), Python entry-point evidence (decorators + `__main__` guard), language-scoped index-cache fingerprints, and lock-in tests for the symbol-parsing paths the roadmap audit cleared.
@@ -59,7 +61,7 @@ describe("isTestFile", () => {
   });
 
   it("matches Java test conventions", () => {
-    expect(isTestFile("introspector/src/test/java/com/x/FooTest.java")).toBe(true);
+    expect(isTestFile("example-service/src/test/java/com/x/FooTest.java")).toBe(true);
     expect(isTestFile("src/test/java/Foo.java")).toBe(true);
     expect(isTestFile("src/main/java/com/x/FooTest.java")).toBe(true); // *Test.java anywhere
     expect(isTestFile("src/main/java/com/x/FooIT.java")).toBe(true);

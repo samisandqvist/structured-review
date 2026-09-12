@@ -216,10 +216,10 @@ describe("python symbol shapes (audit lock-in)", () => {
 });
 
 describe("java symbol shapes (spike deltas)", () => {
-  const J = "semanticdb maven maven/fi.pareto/demo 1.0.0 ";
+  const J = "semanticdb maven maven/org.example/demo 1.0.0 ";
   const J_RUN = `${J}demo/App#run().`;
   const J_OVERLOAD = `${J}demo/App#run(+1).`;
-  const J_CTOR = "semanticdb maven maven/fi.pareto/demo 1.0.0 demo/App#`<init>`().";
+  const J_CTOR = "semanticdb maven maven/org.example/demo 1.0.0 demo/App#`<init>`().";
   const J_FIELD = `${J}demo/App#svc.`;
   const J_GREET = `${J}demo/Svc#greet().`;
 

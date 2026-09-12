@@ -157,7 +157,7 @@ describe("POST /api/sessions", () => {
   });
 
   it("persists and returns index warnings from the graph provider", async () => {
-    const warning = "Java indexing skipped for 1 root(s) ('introspector'): scip-java toolchain not found.";
+    const warning = "Java indexing skipped for 1 root(s) ('example-service'): scip-java toolchain not found.";
     const stub = new StubGraphProvider() as StubGraphProvider & { getIndexWarnings(): Promise<string[]> };
     stub.getIndexWarnings = async () => [warning];
     const warnApp = createApp({ db, graphProvider: stub, repoRoot: fixtureRoot });

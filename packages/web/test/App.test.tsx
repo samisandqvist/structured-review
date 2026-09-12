@@ -47,7 +47,7 @@ describe("App with ?session in the URL", () => {
 
 describe("App without ?session", () => {
   it("shows the picker when several sessions exist", () => {
-    state.sessions = [session("ses_a", "delegation-grants"), session("ses_b", "introspector-fusion")];
+    state.sessions = [session("ses_a", "delegation-grants"), session("ses_b", "example-service-fusion")];
     render(<App />);
     expect(screen.getByTestId("session-picker")).toBeInTheDocument();
     expect(screen.getByText("delegation-grants")).toBeInTheDocument();

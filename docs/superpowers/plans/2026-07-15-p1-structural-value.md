@@ -1186,7 +1186,7 @@ Expected: all green; build copies `scip.proto` and produces `packages/web/dist`.
 - [ ] **Step 2: Launch the built app against this repo** (the feature branch itself is the review target — dogfood):
 
 ```bash
-CRW_DB_PATH=/tmp/claude-1001/-home-duuni-Projects-pareto-rewiew-walkthrough-opencode/cda8ab32-0290-487e-9af8-13d9c9dcbc05/scratchpad/crw-verify.db pnpm start &
+CRW_DB_PATH=/tmp/crw-verify.db pnpm start &
 sleep 3
 curl -s -X POST localhost:3456/api/sessions -H 'Content-Type: application/json' -d '{"branch":"HEAD","baseRef":"main"}'
 ```

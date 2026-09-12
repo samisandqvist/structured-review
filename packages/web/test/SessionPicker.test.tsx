@@ -19,7 +19,7 @@ const sessions: ReviewSession[] = [
   },
   {
     id: "ses_b",
-    branch: "introspector-fusion",
+    branch: "example-service-fusion",
     baseRef: "develop",
     status: "planning",
     createdAt: Date.UTC(2026, 7, 20, 8, 30),
@@ -34,7 +34,7 @@ describe("SessionPicker", () => {
   it("lists each session with branch, base ref, status, and created date", () => {
     render(<SessionPicker sessions={sessions} />);
     expect(screen.getByText("delegation-grants")).toBeInTheDocument();
-    expect(screen.getByText("introspector-fusion")).toBeInTheDocument();
+    expect(screen.getByText("example-service-fusion")).toBeInTheDocument();
     expect(screen.getByText(/main/)).toBeInTheDocument();
     expect(screen.getByText(/develop/)).toBeInTheDocument();
     expect(screen.getByText("walking")).toBeInTheDocument();
@@ -44,7 +44,7 @@ describe("SessionPicker", () => {
 
   it("navigates to the picked session", () => {
     render(<SessionPicker sessions={sessions} />);
-    fireEvent.click(screen.getByText("introspector-fusion"));
+    fireEvent.click(screen.getByText("example-service-fusion"));
     expect(navigateToSession).toHaveBeenCalledWith("ses_b");
   });
 });

@@ -24,7 +24,7 @@ describe("isTestFile", () => {
   });
 
   it("matches Java test conventions", () => {
-    expect(isTestFile("introspector/src/test/java/com/x/FooTest.java")).toBe(true);
+    expect(isTestFile("example-service/src/test/java/com/x/FooTest.java")).toBe(true);
     expect(isTestFile("src/test/java/Foo.java")).toBe(true);
     expect(isTestFile("src/main/java/com/x/FooTest.java")).toBe(true); // *Test.java anywhere
     expect(isTestFile("src/main/java/com/x/FooIT.java")).toBe(true);

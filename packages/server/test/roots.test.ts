@@ -21,14 +21,14 @@ describe("discoverLanguageRoots", () => {
       "web/app.ts": "export {};",
       "mcp/svc/pyproject.toml": "",
       "mcp/svc/app.py": "x = 1\n",
-      "introspector/pom.xml": "<project/>",
-      "introspector/src/Main.java": "class Main {}",
+      "example-service/pom.xml": "<project/>",
+      "example-service/src/Main.java": "class Main {}",
     });
     try {
       const jobs = discoverLanguageRoots(dir);
       expect(jobs).toEqual([
         { language: "ts", root: "", hasSources: true },
-        { language: "java", root: "introspector", hasSources: true },
+        { language: "java", root: "example-service", hasSources: true },
         { language: "py", root: "mcp/svc", hasSources: true },
       ]);
     } finally {
@@ -127,17 +127,17 @@ describe("languagePathspecs", () => {
   });
 
   it("covers java sources, build files, and build-config extras", () => {
-    expect(languagePathspecs("java", "introspector")).toEqual([
-      ":(glob)introspector/**/*.java",
-      ":(glob)introspector/**/pom.xml",
-      ":(glob)introspector/**/build.gradle",
-      ":(glob)introspector/**/build.gradle.kts",
-      ":(glob)introspector/**/settings.gradle",
-      ":(glob)introspector/**/settings.gradle.kts",
-      ":(glob)introspector/**/gradle.properties",
-      ":(glob)introspector/**/gradle.lockfile",
-      ":(glob)introspector/**/maven-wrapper.properties",
-      ":(glob)introspector/**/settings.xml",
+    expect(languagePathspecs("java", "example-service")).toEqual([
+      ":(glob)example-service/**/*.java",
+      ":(glob)example-service/**/pom.xml",
+      ":(glob)example-service/**/build.gradle",
+      ":(glob)example-service/**/build.gradle.kts",
+      ":(glob)example-service/**/settings.gradle",
+      ":(glob)example-service/**/settings.gradle.kts",
+      ":(glob)example-service/**/gradle.properties",
+      ":(glob)example-service/**/gradle.lockfile",
+      ":(glob)example-service/**/maven-wrapper.properties",
+      ":(glob)example-service/**/settings.xml",
     ]);
   });
 });
