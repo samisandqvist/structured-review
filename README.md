@@ -235,8 +235,4 @@ toolchain; installation errors can be retried after fixing npm or network access
 - [CLI, environment variables, plan and export reference](docs/cli-and-configuration.md)
 - [Agent skill and plan authoring](packages/skill/skill.md)
 - [Contributor architecture and commands](AGENTS.md)
-- [Design notes and experiments](docs/)
-
-MIT licensed. If you try it, I'd particularly like to hear what the walkthrough
-helped you understand, where you had to leave it to find context, and whether
-you'd use it for another review.
+- [Design notes](docs/)
