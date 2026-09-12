@@ -44,7 +44,10 @@ interface Hunk {
 }
 
 export class GitError extends Error {
-  constructor(readonly phase: "resolve-ref" | "list-files" | "read-diff", message: string) {
+  constructor(
+    readonly phase: "resolve-ref" | "list-files" | "read-diff",
+    message: string,
+  ) {
     super(message);
     this.name = "GitError";
   }
@@ -60,7 +63,12 @@ const QUIET: { stdio: ["ignore", "pipe", "pipe"] } = { stdio: ["ignore", "pipe",
  * if there is no diff (or git errored) — meaning "unknown, don't reclassify".
  * Uses --unified=0 so ranges are the changed lines themselves, no context.
  */
-export function fileChangedRanges(baseRef: string, file: string, root: string = repoRoot(), options: { strict?: boolean } = {}): LineRange[] | null {
+export function fileChangedRanges(
+  baseRef: string,
+  file: string,
+  root: string = repoRoot(),
+  options: { strict?: boolean } = {},
+): LineRange[] | null {
   let raw: string;
   try {
     raw = execFileSync("git", ["diff", "--text", "--unified=0", baseRef, "--", file], {
@@ -70,7 +78,8 @@ export function fileChangedRanges(baseRef: string, file: string, root: string = 
       ...QUIET,
     });
   } catch (error) {
-    if (options.strict) throw new GitError("read-diff", `Cannot collect changed lines for ${file}: ${(error as Error).message}`);
+    if (options.strict)
+      throw new GitError("read-diff", `Cannot collect changed lines for ${file}: ${(error as Error).message}`);
     return null;
   }
   if (!raw.trim()) return null;
@@ -105,11 +114,20 @@ export function repoFingerprint(root: string = repoRoot()): string | null {
     const h = createHash("sha256");
     h.update(execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8", ...QUIET }));
     h.update(execFileSync("git", ["diff", "HEAD"], { cwd: root, maxBuffer: 256 * 1024 * 1024, ...QUIET }));
-    const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard", "-z"], { cwd: root, encoding: "utf8", ...QUIET })
-      .split("\0").filter(Boolean);
+    const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard", "-z"], {
+      cwd: root,
+      encoding: "utf8",
+      ...QUIET,
+    })
+      .split("\0")
+      .filter(Boolean);
     for (const f of untracked) {
       h.update(f);
-      try { h.update(readFileSync(join(root, f))); } catch { h.update("<unreadable>"); }
+      try {
+        h.update(readFileSync(join(root, f)));
+      } catch {
+        h.update("<unreadable>");
+      }
     }
     return h.digest("hex");
   } catch {
@@ -141,12 +159,23 @@ export function subtreeFingerprint(subdir: string, root: string = repoRoot(), pa
       // Subtree absent at HEAD (brand-new root): untracked contents below cover it.
       h.update("<no-tree>");
     }
-    h.update(execFileSync("git", ["diff", "HEAD", "--", ...specs], { cwd: root, maxBuffer: 256 * 1024 * 1024, ...QUIET }));
-    const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard", "-z", "--", ...specs], { cwd: root, encoding: "utf8", ...QUIET })
-      .split("\0").filter(Boolean);
+    h.update(
+      execFileSync("git", ["diff", "HEAD", "--", ...specs], { cwd: root, maxBuffer: 256 * 1024 * 1024, ...QUIET }),
+    );
+    const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard", "-z", "--", ...specs], {
+      cwd: root,
+      encoding: "utf8",
+      ...QUIET,
+    })
+      .split("\0")
+      .filter(Boolean);
     for (const f of untracked) {
       h.update(f);
-      try { h.update(readFileSync(join(root, f))); } catch { h.update("<unreadable>"); }
+      try {
+        h.update(readFileSync(join(root, f)));
+      } catch {
+        h.update("<unreadable>");
+      }
     }
     return h.digest("hex");
   } catch {
@@ -162,8 +191,13 @@ export function subtreeFingerprint(subdir: string, root: string = repoRoot(), pa
  */
 export function commitSubjects(baseRef: string, root: string = repoRoot(), limit = 50): string[] {
   const log = (range: string) =>
-    execFileSync("git", ["log", "--format=%s", `--max-count=${limit}`, range], { cwd: root, encoding: "utf8", ...QUIET })
-      .split("\n").filter(Boolean);
+    execFileSync("git", ["log", "--format=%s", `--max-count=${limit}`, range], {
+      cwd: root,
+      encoding: "utf8",
+      ...QUIET,
+    })
+      .split("\n")
+      .filter(Boolean);
   try {
     return log(`${baseRef}..HEAD`);
   } catch {
@@ -212,7 +246,11 @@ export const EMPTY_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 export function resolveRef(ref: string, root: string = repoRoot()): string | null {
   for (const peel of ["commit", "tree"] as const) {
     try {
-      return execFileSync("git", ["rev-parse", "--verify", `${ref}^{${peel}}`], { cwd: root, encoding: "utf8", ...QUIET }).trim();
+      return execFileSync("git", ["rev-parse", "--verify", `${ref}^{${peel}}`], {
+        cwd: root,
+        encoding: "utf8",
+        ...QUIET,
+      }).trim();
     } catch {
       /* try next peel */
     }
@@ -249,7 +287,10 @@ export function subtractRanges(ranges: LineRange[], spans: LineRange[]): LineRan
     for (const s of spans) {
       const next: LineRange[] = [];
       for (const p of pieces) {
-        if (s.end < p.start || s.start > p.end) { next.push(p); continue; }
+        if (s.end < p.start || s.start > p.end) {
+          next.push(p);
+          continue;
+        }
         if (s.start > p.start) next.push({ start: p.start, end: s.start - 1 });
         if (s.end < p.end) next.push({ start: s.end + 1, end: p.end });
       }
@@ -284,7 +325,7 @@ export function getNodeDiff(
   startLine: number,
   endLine: number,
   changeStatus: "changed" | "unchanged",
-  root: string = repoRoot()
+  root: string = repoRoot(),
 ): NodeDiff {
   const totalLines = fileTotalLines(file, root);
   if (changeStatus === "unchanged") {
@@ -328,13 +369,10 @@ export function fileTotalLines(file: string, root: string = repoRoot()): number 
  * ordered by row position. Null = anchor does not resolve (context line,
  * absent line, wrong side, or inverted range).
  */
-export function anchorRowRange(
-  lines: DiffLine[],
-  anchor: CommentAnchor
-): { startIdx: number; endIdx: number } | null {
+export function anchorRowRange(lines: DiffLine[], anchor: CommentAnchor): { startIdx: number; endIdx: number } | null {
   const find = (line: number, side: AnchorSide) =>
     lines.findIndex((l) =>
-      side === "new" ? l.type === "added" && l.newLine === line : l.type === "removed" && l.oldLine === line
+      side === "new" ? l.type === "added" && l.newLine === line : l.type === "removed" && l.oldLine === line,
     );
   const startIdx = find(anchor.startLine, anchor.startSide);
   const endIdx = find(anchor.endLine, anchor.endSide);
@@ -395,7 +433,7 @@ export function getNodeDiffForRanges(
   baseRef: string,
   file: string,
   ranges: LineRange[],
-  root: string = repoRoot()
+  root: string = repoRoot(),
 ): NodeDiff | null {
   let raw: string;
   try {
@@ -426,7 +464,7 @@ export function expandedContextSlice(
   file: string,
   startLine: number,
   endLine: number,
-  root: string = repoRoot()
+  root: string = repoRoot(),
 ): DiffLine[] {
   let fileLines: string[];
   try {
@@ -482,8 +520,14 @@ export function expandedContextSlice(
 
 function withTexts(lines: DiffLine[]): NodeDiffContent {
   return {
-    oldText: lines.filter((l) => l.type !== "added").map((l) => l.text).join("\n"),
-    newText: lines.filter((l) => l.type !== "removed").map((l) => l.text).join("\n"),
+    oldText: lines
+      .filter((l) => l.type !== "added")
+      .map((l) => l.text)
+      .join("\n"),
+    newText: lines
+      .filter((l) => l.type !== "removed")
+      .map((l) => l.text)
+      .join("\n"),
     lines,
   };
 }
@@ -514,7 +558,11 @@ export function fileUnifiedDiff(baseRef: string, file: string, root: string = re
 }
 
 /** Count +/- lines of a unified diff that fall within the new-file span [startLine, endLine]. */
-export function nodeChangeStats(rawDiff: string, startLine: number, endLine: number): { added: number; removed: number } {
+export function nodeChangeStats(
+  rawDiff: string,
+  startLine: number,
+  endLine: number,
+): { added: number; removed: number } {
   let added = 0;
   let removed = 0;
   for (const h of parseHunks(rawDiff)) {
@@ -559,9 +607,10 @@ export function nodeSignature(file: string, startLine: number, root: string = re
 export function formatHunkSnippet(lines: DiffLine[], maxLines = 40, maxChars = 2000): string {
   if (lines.length === 0) return "";
   const firstChanged = lines.findIndex((l) => l.type !== "context");
-  const lastChanged = firstChanged === -1
-    ? lines.length - 1
-    : lines.length - 1 - [...lines].reverse().findIndex((l) => l.type !== "context");
+  const lastChanged =
+    firstChanged === -1
+      ? lines.length - 1
+      : lines.length - 1 - [...lines].reverse().findIndex((l) => l.type !== "context");
   const from = Math.max(0, (firstChanged === -1 ? 0 : firstChanged) - 2);
   const to = Math.min(lines.length - 1, lastChanged + 2);
   const window = lines.slice(from, Math.min(to + 1, from + maxLines));
@@ -588,7 +637,12 @@ function parseHunks(diff: string): Hunk[] {
   for (const line of diff.split("\n")) {
     const header = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
     if (header) {
-      current = { oldStart: Number(header[1]), newStart: Number(header[2]), newCount: Number(header[3] ?? "1"), lines: [] };
+      current = {
+        oldStart: Number(header[1]),
+        newStart: Number(header[2]),
+        newCount: Number(header[3] ?? "1"),
+        lines: [],
+      };
       hunks.push(current);
       continue;
     }

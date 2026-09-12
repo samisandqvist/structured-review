@@ -62,7 +62,7 @@ export function migrate(db: DB): void {
   if (current > SCHEMA_VERSION) {
     throw new Error(
       `review database schema v${current} is newer than this application (v${SCHEMA_VERSION}); ` +
-        `upgrade the app or delete/archive the database file`
+        `upgrade the app or delete/archive the database file`,
     );
   }
   for (let v = current + 1; v <= SCHEMA_VERSION; v++) {

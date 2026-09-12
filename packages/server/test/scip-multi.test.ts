@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { buildGraphFromIndex, rerootDocuments, assertIndexNotEmpty, IndexError, type ScipDocument } from "../src/graph/scip.js";
+import {
+  buildGraphFromIndex,
+  rerootDocuments,
+  assertIndexNotEmpty,
+  IndexError,
+  type ScipDocument,
+} from "../src/graph/scip.js";
 import type { IndexerJob } from "../src/graph/roots.js";
 
 const TS_MAIN = "scip-typescript npm pkg 1.0 src/`a.ts`/f().";
@@ -54,10 +60,7 @@ describe("rerootDocuments", () => {
 
 describe("merged multi-root graph", () => {
   it("builds one graph with repo-relative paths and per-root call edges", () => {
-    const documents = [
-      ...rerootDocuments(tsDocs, "", "/repo"),
-      ...rerootDocuments(pyDocs, "mcp/svc", "/repo/mcp/svc"),
-    ];
+    const documents = [...rerootDocuments(tsDocs, "", "/repo"), ...rerootDocuments(pyDocs, "mcp/svc", "/repo/mcp/svc")];
     const g = buildGraphFromIndex({ documents }, "/repo");
     expect(g.nodes.get(TS_MAIN)?.file).toBe("src/a.ts");
     expect(g.nodes.get(PY_MAIN)?.file).toBe("mcp/svc/app.py");
@@ -75,14 +78,19 @@ describe("file-level requires map", () => {
         relativePath: "src/dto.ts",
         occurrences: [
           { symbol: DTO_TYPE, symbolRoles: 1, range: [0, 13, 21] }, // type definition
-          { symbol: DTO_TYPE, symbolRoles: 0, range: [5, 2, 10] },  // same-file use: ignored
+          { symbol: DTO_TYPE, symbolRoles: 0, range: [5, 2, 10] }, // same-file use: ignored
         ],
       },
       {
         relativePath: "src/ctrl.ts",
         occurrences: [
           { symbol: DTO_TYPE, symbolRoles: 2, range: [0, 9, 17] }, // ROLE_IMPORT
-          { symbol: "scip-typescript npm pkg 1.0 src/`ctrl.ts`/handle().", symbolRoles: 1, range: [2, 9, 15], enclosingRange: [2, 0, 6, 1] },
+          {
+            symbol: "scip-typescript npm pkg 1.0 src/`ctrl.ts`/handle().",
+            symbolRoles: 1,
+            range: [2, 9, 15],
+            enclosingRange: [2, 0, 6, 1],
+          },
         ],
       },
       {
@@ -114,7 +122,7 @@ describe("file-level requires map", () => {
         relativePath: "src/consumer.ts",
         occurrences: [
           { symbol: TYPE, symbolRoles: 2, range: [0, 9, 13] }, // import type { User }
-          { symbol: FN, symbolRoles: 0, range: [3, 4, 12] },   // makeUser() call
+          { symbol: FN, symbolRoles: 0, range: [3, 4, 12] }, // makeUser() call
         ],
       },
     ];
@@ -133,7 +141,7 @@ describe("file-level requires map", () => {
         relativePath: "test/a.test.ts",
         occurrences: [
           { symbol: FN, symbolRoles: 2, range: [0, 9, 10] }, // import { f }
-          { symbol: FN, symbolRoles: 0, range: [3, 4, 5] },  // call inside an it() callback
+          { symbol: FN, symbolRoles: 0, range: [3, 4, 5] }, // call inside an it() callback
         ],
       },
     ];
@@ -224,7 +232,7 @@ describe("java symbol shapes (spike deltas)", () => {
         { symbol: J_RUN, symbolRoles: 1, range: [5, 16, 19], enclosingRange: [5, 2, 7, 3] },
         { symbol: J_OVERLOAD, symbolRoles: 1, range: [8, 16, 19], enclosingRange: [8, 2, 10, 3] },
         { symbol: J_FIELD, symbolRoles: 1, range: [1, 20, 23], enclosingRange: [1, 2, 1, 30] },
-        { symbol: J_FIELD, symbolRoles: 0, range: [6, 4, 7] },  // run() reads the field
+        { symbol: J_FIELD, symbolRoles: 0, range: [6, 4, 7] }, // run() reads the field
         { symbol: J_GREET, symbolRoles: 0, range: [6, 8, 13] }, // run() calls Svc#greet()
       ],
     },
@@ -262,10 +270,12 @@ describe("java symbol shapes (spike deltas)", () => {
     // method-descriptor filter. This is the shape that would be wrongly
     // dropped if the filter lost its file scoping.
     const TS_TERM = "scip-typescript npm pkg 1.0 src/`a.ts`/handlers.";
-    const tsDoc: ScipDocument[] = [{
-      relativePath: "src/a.ts",
-      occurrences: [{ symbol: TS_TERM, symbolRoles: 1, range: [0, 6, 14], enclosingRange: [0, 0, 4, 1] }],
-    }];
+    const tsDoc: ScipDocument[] = [
+      {
+        relativePath: "src/a.ts",
+        occurrences: [{ symbol: TS_TERM, symbolRoles: 1, range: [0, 6, 14], enclosingRange: [0, 0, 4, 1] }],
+      },
+    ];
     const g = buildGraphFromIndex({ documents: tsDoc }, "/repo");
     expect(g.nodes.has(TS_TERM)).toBe(true);
     expect(g.nodes.get(TS_TERM)?.label).toBe("handlers");

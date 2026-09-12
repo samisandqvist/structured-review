@@ -22,8 +22,9 @@ export function loadConfiguredEntries(root: string): ConfiguredEntry[] {
     if (!Array.isArray(raw.entryPoints)) return [];
     return raw.entryPoints.filter(
       (e): e is ConfiguredEntry =>
-        !!e && typeof (e as ConfiguredEntry).label === "string" &&
-        ((e as ConfiguredEntry).file === undefined || typeof (e as ConfiguredEntry).file === "string")
+        !!e &&
+        typeof (e as ConfiguredEntry).label === "string" &&
+        ((e as ConfiguredEntry).file === undefined || typeof (e as ConfiguredEntry).file === "string"),
     );
   } catch {
     return [];
@@ -31,12 +32,7 @@ export function loadConfiguredEntries(root: string): ConfiguredEntry[] {
 }
 
 /** Whether the definition line begins with the `export` keyword. */
-export function isExportedAt(
-  root: string,
-  file: string,
-  startLine: number,
-  cache?: Map<string, string[]>
-): boolean {
+export function isExportedAt(root: string, file: string, startLine: number, cache?: Map<string, string[]>): boolean {
   try {
     let lines = cache?.get(file);
     if (!lines) {
@@ -68,7 +64,7 @@ export function pythonEntryReasons(
   root: string,
   file: string,
   node: { label: string; startLine: number },
-  cache?: Map<string, string[]>
+  cache?: Map<string, string[]>,
 ): EntryReason[] {
   let lines = cache?.get(file);
   if (!lines) {
@@ -107,6 +103,7 @@ export function pythonEntryReasons(
     const callRe = new RegExp(`\\b${node.label}\\s*\\(`);
     for (let i = guard + 1; i < lines.length; i++) {
       const l = lines[i];
+      if (l === undefined) break;
       if (l.trim() !== "" && !/^\s/.test(l)) break; // left the indented block
       if (callRe.test(l)) {
         reasons.add("cli");

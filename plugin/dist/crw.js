@@ -75,6 +75,7 @@ function suggestMerges(flows) {
     for (let j = i + 1; j < flows.length; j++) {
       const A = flows[i];
       const B = flows[j];
+      if (!A || !B) continue;
       const bSet = new Set(B.changedStableIds);
       const shared = A.changedStableIds.filter((id) => bSet.has(id)).length;
       const smaller = Math.min(A.changedStableIds.length, B.changedStableIds.length);
@@ -101,10 +102,7 @@ function resolvePlanRefs(units, flows, mergeSuggestions) {
   const byId = new Map(flows.map((f) => [f.id, f.entryStableId]));
   return units.map((u) => {
     if (u.kind !== "flow" || u.flowIds === void 0 && u.mergeGroup === void 0) return u;
-    const entries = [
-      ...u.flowEntryStableIds ?? [],
-      ...u.flowEntryStableId ? [u.flowEntryStableId] : []
-    ];
+    const entries = [...u.flowEntryStableIds ?? [], ...u.flowEntryStableId ? [u.flowEntryStableId] : []];
     for (const id of u.flowIds ?? []) {
       const entry = byId.get(id);
       if (entry === void 0) {
@@ -268,7 +266,10 @@ function decideServe(health, wantRoot) {
   if (health === null) return { action: "spawn" };
   if (health.ok && health.repoRoot === wantRoot) return { action: "reuse" };
   const serving = health.repoRoot ? `a hub serving ${health.repoRoot}` : "something that answers /health without a repoRoot";
-  return { action: "conflict", reason: `port is occupied by ${serving} \u2014 pick another --port or stop it (pid ${health.pid ?? "unknown"})` };
+  return {
+    action: "conflict",
+    reason: `port is occupied by ${serving} \u2014 pick another --port or stop it (pid ${health.pid ?? "unknown"})`
+  };
 }
 function serverEntryPath() {
   const here = dirname(fileURLToPath(import.meta.url));
@@ -325,7 +326,14 @@ async function ensureServer(opts) {
       if (h.repoRoot !== repoRoot) {
         throw new Error(`hub came up serving ${h.repoRoot ?? "unknown"}, expected ${repoRoot} \u2014 see ${logFile}`);
       }
-      return { baseUrl, repoRoot, pid: h.pid ?? child.pid ?? -1, provider: h.provider ?? "unknown", reused: false, logFile };
+      return {
+        baseUrl,
+        repoRoot,
+        pid: h.pid ?? child.pid ?? -1,
+        provider: h.provider ?? "unknown",
+        reused: false,
+        logFile
+      };
     }
     await new Promise((r) => setTimeout(r, 300));
   }
@@ -355,7 +363,8 @@ async function stopHubIfServing(baseUrl, repoRoot) {
   try {
     await shutdownHub(baseUrl);
   } catch {
-    if (!health.pid) throw new Error(`hub at ${baseUrl} has no shutdown endpoint and /health reported no pid \u2014 stop it manually`);
+    if (!health.pid)
+      throw new Error(`hub at ${baseUrl} has no shutdown endpoint and /health reported no pid \u2014 stop it manually`);
     process.kill(health.pid, "SIGTERM");
   }
   const deadline = Date.now() + 5e3;
@@ -413,6 +422,7 @@ function parseCliArgs(argv) {
   const flags = {};
   for (let i = 0; i < argv.length; i++) {
     const tok = argv[i];
+    if (tok === void 0) continue;
     if (tok.startsWith("--")) {
       const name = tok.slice(2);
       if (BOOL_FLAGS.has(name)) flags[name] = true;
@@ -496,7 +506,9 @@ async function cmdSessionList(base) {
   const { sessions } = await listSessions(base);
   return {
     json: { sessions },
-    pretty: sessions.length === 0 ? "no sessions" : sessions.map((s) => `${s.id} (${s.status}) \u2014 ${s.branch} vs ${s.baseRef}, created ${new Date(s.createdAt).toISOString()}`).join("\n")
+    pretty: sessions.length === 0 ? "no sessions" : sessions.map(
+      (s) => `${s.id} (${s.status}) \u2014 ${s.branch} vs ${s.baseRef}, created ${new Date(s.createdAt).toISOString()}`
+    ).join("\n")
   };
 }
 async function cmdSessionDelete(base, flags) {
@@ -560,7 +572,16 @@ async function cmdContext(base, flags) {
     return { json: { sessionId, ...subjects, ...brief }, pretty: prettyBrief(brief, commitSubjects) };
   }
   const compact = compactContext(flows, orphans);
-  return { json: { sessionId, ...subjects, flows: compact.flows, mergeSuggestions: suggestMerges(compact.flows), orphanGroups: compact.orphanGroups, changes } };
+  return {
+    json: {
+      sessionId,
+      ...subjects,
+      flows: compact.flows,
+      mergeSuggestions: suggestMerges(compact.flows),
+      orphanGroups: compact.orphanGroups,
+      changes
+    }
+  };
 }
 function planOutput(result) {
   return {
@@ -606,7 +627,9 @@ ${USAGE}`);
       `coverage: ${out.coverage.covered}/${out.coverage.changedTotal} assigned, ${out.coverage.unassigned} unassigned`,
       ...out.overview ? [`overview: ${out.overview}`] : [],
       ...unassigned.map((n) => `  unassigned: ${n.label} \u2014 ${n.file} (${n.stableId})`),
-      ...out.units.map((u) => `  ${u.label}${u.auto ? " (auto)" : ""} \u2014 ${u.kind}, ${u.members} member(s)${u.attached ? `, ${u.attached} attached` : ""}`)
+      ...out.units.map(
+        (u) => `  ${u.label}${u.auto ? " (auto)" : ""} \u2014 ${u.kind}, ${u.members} member(s)${u.attached ? `, ${u.attached} attached` : ""}`
+      )
     ].join("\n")
   };
 }
@@ -653,8 +676,11 @@ async function cmdWait(base, flags) {
     const [status, exported] = await Promise.all([fetchStatus(base, sessionId), exportComments(base, sessionId)]);
     if (waitConditionMet(until, status, exported.comments.length)) {
       const json = { until, met: true, commentCount: exported.comments.length, status };
-      return { json, pretty: `condition '${until}' met (${exported.comments.length} comment(s))
-${prettyStatus(status)}` };
+      return {
+        json,
+        pretty: `condition '${until}' met (${exported.comments.length} comment(s))
+${prettyStatus(status)}`
+      };
     }
     if (Date.now() >= deadline) {
       process.exitCode = 2;
@@ -666,7 +692,9 @@ ${prettyStatus(status)}` };
   }
 }
 function checkNodeVersion() {
-  const [major, minor] = process.versions.node.split(".").map(Number);
+  const [majorText, minorText] = process.versions.node.split(".");
+  const major = Number(majorText);
+  const minor = Number(minorText);
   if (major > 22 || major === 22 && minor >= 13) return;
   throw new Error(`crw requires Node >= 22.13 (found ${process.versions.node})`);
 }
@@ -726,7 +754,10 @@ function isConnRefused(e) {
 }
 if (import.meta.url === `file://${process.argv[1]}`) {
   runCli(process.argv.slice(2)).catch((e) => {
-    const err = isConnRefused(e) ? { error: `review hub not running at ${baseUrlFor(parseCliArgs(process.argv.slice(2)).flags)}`, hint: "run: crw serve" } : { error: e instanceof Error ? e.message : String(e) };
+    const err = isConnRefused(e) ? {
+      error: `review hub not running at ${baseUrlFor(parseCliArgs(process.argv.slice(2)).flags)}`,
+      hint: "run: crw serve"
+    } : { error: e instanceof Error ? e.message : String(e) };
     console.error(JSON.stringify(err));
     process.exitCode = process.exitCode || 1;
   });

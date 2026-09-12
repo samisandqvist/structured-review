@@ -1,11 +1,7 @@
 export type SessionStatus = "planning" | "walking" | "complete";
 export type UnitKind = "flow" | "orphans";
 export type ChangeStatus = "changed" | "unchanged";
-export type ReviewStatus =
-  | "unreviewed"
-  | "reviewed-clean"
-  | "reviewed-commented"
-  | "reviewed-elsewhere";
+export type ReviewStatus = "unreviewed" | "reviewed-clean" | "reviewed-commented" | "reviewed-elsewhere";
 export type EdgeType = "call" | "test";
 /** Why a residual pseudo-node exists outside the call graph:
  *  module-scope = top-of-module changes (imports/types/constants) in a file

@@ -40,13 +40,15 @@ describe("planOutput", () => {
     const out = planOutput({
       ...base,
       coverage: { changedTotal: 3, covered: 2, unassigned: 1 },
-      units: [{
-        ...base.units[0],
-        attached: [
-          { stableId: "t1", parentStableId: "e1", reason: "tested-by" as const, counted: true },
-          { stableId: "t2", parentStableId: "e1", reason: "same-file" as const, counted: false },
-        ],
-      }],
+      units: [
+        {
+          ...base.units[0],
+          attached: [
+            { stableId: "t1", parentStableId: "e1", reason: "tested-by" as const, counted: true },
+            { stableId: "t2", parentStableId: "e1", reason: "same-file" as const, counted: false },
+          ],
+        },
+      ],
       unassigned: [{ stableId: "x", label: "x", file: "x.ts" }],
     });
     expect(out.unassigned).toHaveLength(1);
@@ -56,12 +58,25 @@ describe("planOutput", () => {
 
 describe("prettyBrief", () => {
   it("renders flows, merges, orphan groups and changes as a scannable table", () => {
-    const text = prettyBrief({
-      flows: [{ id: 127, name: "handleOrder", entry: "handleOrder — src/orders.ts", changedCount: 2 }],
-      mergeSuggestions: [{ group: 0, flowIds: [127, 142], names: ["handleOrder", "processOrder"] }],
-      orphanGroups: [{ dir: "docs", files: ["docs/x.md"] }],
-      changes: [{ file: "src/orders.ts", lines: "10-42", label: "handleOrder", kind: "function", status: "modified", added: 12, removed: 3 }],
-    }, ["feat: orders"]);
+    const text = prettyBrief(
+      {
+        flows: [{ id: 127, name: "handleOrder", entry: "handleOrder — src/orders.ts", changedCount: 2 }],
+        mergeSuggestions: [{ group: 0, flowIds: [127, 142], names: ["handleOrder", "processOrder"] }],
+        orphanGroups: [{ dir: "docs", files: ["docs/x.md"] }],
+        changes: [
+          {
+            file: "src/orders.ts",
+            lines: "10-42",
+            label: "handleOrder",
+            kind: "function",
+            status: "modified",
+            added: 12,
+            removed: 3,
+          },
+        ],
+      },
+      ["feat: orders"],
+    );
     expect(text).toContain("commits:\n  feat: orders");
     expect(text).toContain("[127] handleOrder (2 changed) — handleOrder — src/orders.ts");
     expect(text).toContain("[group 0] flows 127+142 — handleOrder, processOrder");
@@ -78,7 +93,9 @@ describe("prettyBrief", () => {
 });
 
 describe("statePaths", () => {
-  afterEach(() => { delete process.env.CRW_DATA_DIR; });
+  afterEach(() => {
+    delete process.env.CRW_DATA_DIR;
+  });
 
   it("keeps state in the repo without CRW_DATA_DIR", () => {
     expect(statePaths("/home/x/repo")).toEqual({ logDir: "/home/x/repo/.crw" });

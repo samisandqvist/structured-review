@@ -6,26 +6,36 @@ import { loadConfiguredEntries, isExportedAt, entryEvidence, pythonEntryReasons 
 
 describe("entryEvidence", () => {
   it("scores configured entries 1.0 regardless of other flags", () => {
-    expect(entryEvidence({ isRoot: false, isExported: false, isConfigured: true }))
-      .toEqual({ reasons: ["configured"], confidence: 1.0 });
-    expect(entryEvidence({ isRoot: true, isExported: true, isConfigured: true }))
-      .toEqual({ reasons: ["graph-root", "exported", "configured"], confidence: 1.0 });
+    expect(entryEvidence({ isRoot: false, isExported: false, isConfigured: true })).toEqual({
+      reasons: ["configured"],
+      confidence: 1.0,
+    });
+    expect(entryEvidence({ isRoot: true, isExported: true, isConfigured: true })).toEqual({
+      reasons: ["graph-root", "exported", "configured"],
+      confidence: 1.0,
+    });
   });
   it("scores exported graph roots 0.7", () => {
-    expect(entryEvidence({ isRoot: true, isExported: true, isConfigured: false }))
-      .toEqual({ reasons: ["graph-root", "exported"], confidence: 0.7 });
+    expect(entryEvidence({ isRoot: true, isExported: true, isConfigured: false })).toEqual({
+      reasons: ["graph-root", "exported"],
+      confidence: 0.7,
+    });
   });
   it("scores bare graph roots 0.4", () => {
-    expect(entryEvidence({ isRoot: true, isExported: false, isConfigured: false }))
-      .toEqual({ reasons: ["graph-root"], confidence: 0.4 });
+    expect(entryEvidence({ isRoot: true, isExported: false, isConfigured: false })).toEqual({
+      reasons: ["graph-root"],
+      confidence: 0.4,
+    });
   });
 });
 
 describe("loadConfiguredEntries", () => {
   it("reads .crw-entry-points.json", () => {
     const dir = mkdtempSync(join(tmpdir(), "crw-entries-"));
-    writeFileSync(join(dir, ".crw-entry-points.json"),
-      JSON.stringify({ entryPoints: [{ label: "main", file: "src/cli.ts" }] }));
+    writeFileSync(
+      join(dir, ".crw-entry-points.json"),
+      JSON.stringify({ entryPoints: [{ label: "main", file: "src/cli.ts" }] }),
+    );
     expect(loadConfiguredEntries(dir)).toEqual([{ label: "main", file: "src/cli.ts" }]);
   });
   it("returns [] when the file is missing or invalid", () => {
@@ -76,7 +86,7 @@ describe("pythonEntryReasons", () => {
   });
 
   it("detects mcp tool/resource/prompt decorators", () => {
-    const dir = write('@mcp.tool()\ndef execute_sql(q: str):\n    return run(q)\n');
+    const dir = write("@mcp.tool()\ndef execute_sql(q: str):\n    return run(q)\n");
     expect(pythonEntryReasons(dir, "app.py", { label: "execute_sql", startLine: 2 })).toEqual(["tool"]);
   });
 
@@ -109,11 +119,15 @@ describe("pythonEntryReasons", () => {
 
 describe("entryEvidence with detected reasons", () => {
   it("scores detected entries 0.8 and appends detected reasons before configured", () => {
-    expect(entryEvidence({ isRoot: true, isExported: false, isConfigured: false, detected: ["tool"] }))
-      .toEqual({ reasons: ["graph-root", "tool"], confidence: 0.8 });
+    expect(entryEvidence({ isRoot: true, isExported: false, isConfigured: false, detected: ["tool"] })).toEqual({
+      reasons: ["graph-root", "tool"],
+      confidence: 0.8,
+    });
   });
   it("configured still wins over detected", () => {
-    expect(entryEvidence({ isRoot: true, isExported: false, isConfigured: true, detected: ["cli"] }))
-      .toEqual({ reasons: ["graph-root", "cli", "configured"], confidence: 1.0 });
+    expect(entryEvidence({ isRoot: true, isExported: false, isConfigured: true, detected: ["cli"] })).toEqual({
+      reasons: ["graph-root", "cli", "configured"],
+      confidence: 1.0,
+    });
   });
 });

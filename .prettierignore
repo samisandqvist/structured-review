@@ -1,0 +1,11 @@
+node_modules
+.tools
+.superpowers
+.venv-crg
+.code-review-graph
+coverage
+reports
+**/dist
+plugin
+plugins
+pnpm-lock.yaml

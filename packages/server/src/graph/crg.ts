@@ -81,7 +81,7 @@ export class CrgGraphProvider implements GraphProvider {
 
   constructor(
     private command: string[] = ["code-review-graph", "serve"],
-    opts: CrgOptions = {}
+    opts: CrgOptions = {},
   ) {
     this.repoRoot = opts.repoRoot ?? process.env.CRG_REPO_ROOT ?? detectRepoRoot();
     this.impactDepth = opts.impactDepth ?? Number(process.env.CRG_IMPACT_DEPTH ?? 2);
@@ -90,9 +90,11 @@ export class CrgGraphProvider implements GraphProvider {
 
   private async getClient(): Promise<Client> {
     if (this.client) return this.client;
+    const [command, ...args] = this.command;
+    if (!command) throw new Error("CRG command must contain an executable");
     this.transport = new StdioClientTransport({
-      command: this.command[0],
-      args: this.command.slice(1),
+      command,
+      args,
     });
     this.client = new Client({ name: "crw-server", version: "1.0.0" }, { capabilities: {} });
     try {
@@ -152,8 +154,7 @@ export class CrgGraphProvider implements GraphProvider {
     const seen = new Set<string>();
     const edges: GraphEdge[] = [];
     for (const e of impact.edges ?? []) {
-      const edgeType: EdgeType | null =
-        e.kind === "CALLS" ? "call" : e.kind === "TESTED_BY" ? "test" : null;
+      const edgeType: EdgeType | null = e.kind === "CALLS" ? "call" : e.kind === "TESTED_BY" ? "test" : null;
       if (!edgeType) continue;
       if (e.source === e.target) continue; // CRG name-resolution can emit self-loops
       if (!byId.has(e.source) || !byId.has(e.target)) continue;

@@ -7,7 +7,14 @@ import { fileURLToPath } from "node:url";
 import protobuf from "protobufjs";
 import type { GraphProvider, GraphNode, GraphEdge, ChangeSubgraph, Flow, FileRequires } from "./provider.js";
 import type { ChangeStatus, EdgeType } from "../types.js";
-import { fileChangedRanges, rangesOverlap, repoFingerprint, repoRoot, subtreeFingerprint, type LineRange } from "../diff.js";
+import {
+  fileChangedRanges,
+  rangesOverlap,
+  repoFingerprint,
+  repoRoot,
+  subtreeFingerprint,
+  type LineRange,
+} from "../diff.js";
 import { discoverLanguageRoots, languagePathspecs, rootHasSources, type IndexerJob } from "./roots.js";
 import { isTestFile } from "../util.js";
 import { buildFlowTree, makeFlow, reachesChanged } from "./flow-tree.js";
@@ -61,7 +68,7 @@ export class ScipGraphProvider implements GraphProvider {
   private repoRoot: string;
   private contextDepth: number;
   private proto?: protobuf.Root;
-  private cache?: { key: string; graph: Promise<BuiltGraph> };
+  private cache: { key: string; graph: Promise<BuiltGraph> } | undefined;
   private jobCache = new Map<string, { key: string; docs: Promise<ScipDocument[]> }>();
 
   constructor(opts: ScipOptions = {}) {
@@ -176,7 +183,9 @@ export class ScipGraphProvider implements GraphProvider {
     const relevant = changedStableIds ? reachesChanged(changedStableIds, g.callAdj) : undefined;
     const resolve = (sym: string) => {
       const n = g.nodes.get(sym);
-      return n ? { label: n.label, file: n.file, startLine: n.startLine, endLine: n.endLine, isTest: n.isTest } : undefined;
+      return n
+        ? { label: n.label, file: n.file, startLine: n.startLine, endLine: n.endLine, isTest: n.isTest }
+        : undefined;
     };
     // Graph roots: non-test nodes that head a call tree (have callees, no
     // NON-TEST callers) — test callers are TESTED_BY, not mid-flow evidence.
@@ -186,9 +195,9 @@ export class ScipGraphProvider implements GraphProvider {
           ([sym, n]) =>
             !n.isTest &&
             (g.callAdj.get(sym)?.length ?? 0) > 0 &&
-            (g.callRev.get(sym) ?? []).filter((c) => !g.nodes.get(c)?.isTest).length === 0
+            (g.callRev.get(sym) ?? []).filter((c) => !g.nodes.get(c)?.isTest).length === 0,
         )
-        .map(([sym]) => sym)
+        .map(([sym]) => sym),
     );
     // Configured entries head flows even with callers (DI/route registration
     // hides real entry points from the call graph), but still need callees.
@@ -196,10 +205,12 @@ export class ScipGraphProvider implements GraphProvider {
     const configuredSyms = new Set(
       [...g.nodes.entries()]
         .filter(([, n]) =>
-          configured.some((c) => c.label === n.label && (!c.file || n.file === c.file || n.file.endsWith("/" + c.file)))
+          configured.some(
+            (c) => c.label === n.label && (!c.file || n.file === c.file || n.file.endsWith("/" + c.file)),
+          ),
         )
         .filter(([sym]) => (g.callAdj.get(sym)?.length ?? 0) > 0)
-        .map(([sym]) => sym)
+        .map(([sym]) => sym),
     );
     const entrySyms = [...new Set([...rootSyms, ...configuredSyms])];
     const fileCache = new Map<string, string[]>();
@@ -212,7 +223,9 @@ export class ScipGraphProvider implements GraphProvider {
           // `export` keyword is a TS/JS concept; never probe it on Python files.
           isExported: isPy ? false : isExportedAt(this.repoRoot, n.file, n.startLine, fileCache),
           isConfigured: configuredSyms.has(sym),
-          detected: isPy ? pythonEntryReasons(this.repoRoot, n.file, { label: n.label, startLine: n.startLine }, fileCache) : [],
+          detected: isPy
+            ? pythonEntryReasons(this.repoRoot, n.file, { label: n.label, startLine: n.startLine }, fileCache)
+            : [],
         });
         return makeFlow(i + 1, n.label, buildFlowTree(sym, g.callAdj, resolve, relevant), evidence);
       })
@@ -247,7 +260,10 @@ export class ScipGraphProvider implements GraphProvider {
   /** Enabled indexer jobs: discovered roots filtered by SCIP_LANGS (default ts,py,java). */
   protected discoverJobs(): IndexerJob[] {
     const enabled = new Set(
-      (process.env.SCIP_LANGS ?? "ts,py,java").split(",").map((s) => s.trim()).filter(Boolean)
+      (process.env.SCIP_LANGS ?? "ts,py,java")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
     );
     const discovered = discoverLanguageRoots(this.repoRoot);
     const jobs = discovered.filter((j) => enabled.has(j.language));
@@ -311,7 +327,10 @@ export class ScipGraphProvider implements GraphProvider {
 
   /** Language-scoped subtree cache key; any git failure yields a unique key (cache miss, never stale). */
   protected jobStateKey(job: IndexerJob): string {
-    return subtreeFingerprint(job.root, this.repoRoot, languagePathspecs(job.language, job.root)) ?? `no-git:${Math.random()}`;
+    return (
+      subtreeFingerprint(job.root, this.repoRoot, languagePathspecs(job.language, job.root)) ??
+      `no-git:${Math.random()}`
+    );
   }
 
   /** Index a root at most once per subtree state; concurrent callers share the run. */
@@ -364,7 +383,7 @@ export class ScipGraphProvider implements GraphProvider {
           const cmd = this.resolveJavaCommand();
           if (!cmd) {
             throw new IndexError(
-              `scip-java toolchain not found for root '${job.root || "."}': install coursier ('cs') plus a JDK and Maven, or set SCIP_JAVA_CMD`
+              `scip-java toolchain not found for root '${job.root || "."}': install coursier ('cs') plus a JDK and Maven, or set SCIP_JAVA_CMD`,
             );
           }
           execFileSync(cmd.argv0, [...cmd.args, "index", "--output", indexPath], {
@@ -383,10 +402,15 @@ export class ScipGraphProvider implements GraphProvider {
       }
       this.proto ??= await protobuf.load(SCIP_PROTO);
       const Index = this.proto.lookupType("scip.Index");
-      const idx = Index.toObject(Index.decode(readFileSync(indexPath)), { longs: Number, defaults: false }) as ScipIndex;
+      const idx = Index.toObject(Index.decode(readFileSync(indexPath)), {
+        longs: Number,
+        defaults: false,
+      }) as ScipIndex;
       const docs = rerootDocuments(idx.documents ?? [], job.root, absRoot);
       assertIndexNotEmpty(docs, job);
-      console.log(`scip: ${job.language} root '${job.root || "."}' — ${docs.length} documents in ${Date.now() - started}ms`);
+      console.log(
+        `scip: ${job.language} root '${job.root || "."}' — ${docs.length} documents in ${Date.now() - started}ms`,
+      );
       return docs;
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -403,12 +427,16 @@ function resolveIndexerBin(pkgName: string, binName: string): string {
   const pkgPath = require.resolve(`${pkgName}/package.json`, home ? { paths: [home] } : undefined);
   const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { bin: string | Record<string, string> };
   const rel = typeof pkg.bin === "string" ? pkg.bin : pkg.bin[binName];
+  if (!rel) throw new Error(`package '${pkgName}' does not expose the '${binName}' executable`);
   return join(dirname(pkgPath), rel);
 }
 
 const SCIP_JAVA_DEFAULT_VERSION = "0.12.3";
 
-export interface ScipJavaCommand { argv0: string; args: string[] }
+export interface ScipJavaCommand {
+  argv0: string;
+  args: string[];
+}
 
 /**
  * Locate a way to run scip-java (a JVM tool we cannot bundle): SCIP_JAVA_CMD
@@ -422,6 +450,7 @@ export function resolveScipJavaCommand(env: NodeJS.ProcessEnv = process.env): Sc
   const override = env.SCIP_JAVA_CMD?.trim();
   if (override) {
     const [argv0, ...args] = override.split(/\s+/);
+    if (!argv0) return null;
     return { argv0, args };
   }
   if (findOnPath("scip-java", env)) return { argv0: "scip-java", args: [] };
@@ -481,7 +510,7 @@ export class IndexError extends Error {
 export function assertIndexNotEmpty(docs: ScipDocument[], job: IndexerJob): void {
   if (docs.length === 0 && job.hasSources) {
     throw new IndexError(
-      `${job.language} indexer produced an empty index for root '${job.root || "."}', which contains ${job.language} sources`
+      `${job.language} indexer produced an empty index for root '${job.root || "."}', which contains ${job.language} sources`,
     );
   }
 }
@@ -509,14 +538,17 @@ function labelOf(symbol: string): string | null {
   const s = symbol.replace(/\([^)]*\)\.$/, "").replace(/[.#/]+$/, "");
   // Java constructors (`Cls#`<init>``): label with the class name.
   const ctor = s.match(/([A-Za-z0-9_$]+)#`<init>`$/);
-  if (ctor) return ctor[1];
+  if (ctor) return ctor[1] ?? null;
   const m = s.match(/([A-Za-z0-9_$]+)`?$/);
-  return m ? m[1] : null;
+  return m?.[1] ?? null;
 }
 // SCIP range [l,c,ec] (single line) or [sl,sc,el,ec]; 0-based. -> 1-based [start,end]
 function span1(arr?: number[]): [number, number] | null {
-  if (!arr || !arr.length) return null;
-  return arr.length === 4 ? [arr[0] + 1, arr[2] + 1] : [arr[0] + 1, arr[0] + 1];
+  if (!arr) return null;
+  const start = arr[0];
+  if (start === undefined) return null;
+  const end = arr.length === 4 ? arr[2] : start;
+  return [start + 1, (end ?? start) + 1];
 }
 
 export function buildGraphFromIndex(idx: ScipIndex, root: string): BuiltGraph {
@@ -595,7 +627,7 @@ export function buildGraphFromIndex(idx: ScipIndex, root: string): BuiltGraph {
       const roles = o.symbolRoles ?? 0;
       if (roles & ROLE_DEFINITION || roles & ROLE_IMPORT) continue;
       if (!o.symbol || !nodes.has(o.symbol)) continue;
-      const line = o.range ? o.range[0] + 1 : null;
+      const line = o.range?.[0] === undefined ? null : o.range[0] + 1;
       if (line == null) continue;
       const caller = localDefs.find((c) => line >= c.sl && line <= c.el && c.symbol !== o.symbol);
       if (!caller) continue;

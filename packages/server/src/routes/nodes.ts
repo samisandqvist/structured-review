@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { AppContext } from "../app.js";
+import type { AppContext } from "../context.js";
 import { getNodesBySession, getNode, getNodeNeighbors, updateNodeReviewStatus } from "../repo/nodes.js";
 import { getSession } from "../repo/sessions.js";
 import { nodeHasComments } from "../repo/comments.js";
@@ -18,7 +18,11 @@ export function createNodesRoute(ctx: AppContext) {
       .all(sessionId) as { source_node_id: string; target_node_id: string; edge_type: string }[];
     return c.json({
       nodes,
-      edges: edges.map((e) => ({ sourceNodeId: e.source_node_id, targetNodeId: e.target_node_id, edgeType: e.edge_type })),
+      edges: edges.map((e) => ({
+        sourceNodeId: e.source_node_id,
+        targetNodeId: e.target_node_id,
+        edgeType: e.edge_type,
+      })),
     });
   });
 
@@ -29,10 +33,10 @@ export function createNodesRoute(ctx: AppContext) {
     const { callers, callees } = getNodeNeighbors(ctx.db, node.id);
     const session = getSession(ctx.db, sessionId);
     const diff = session
-      ? (node.residualRanges && node.residualRanges.length > 0
-          ? getNodeDiffForRanges(session.baseRef, node.file, node.residualRanges, ctx.repoRoot) ??
-            getNodeDiff(session.baseRef, node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot)
-          : getNodeDiff(session.baseRef, node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot))
+      ? node.residualRanges && node.residualRanges.length > 0
+        ? (getNodeDiffForRanges(session.baseRef, node.file, node.residualRanges, ctx.repoRoot) ??
+          getNodeDiff(session.baseRef, node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot))
+        : getNodeDiff(session.baseRef, node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot)
       : { oldText: "", newText: "", lines: [], totalLines: 0 };
     return c.json({ node, callers, callees, diff });
   });
@@ -60,7 +64,11 @@ export function createNodesRoute(ctx: AppContext) {
     const body = parsed.data;
     try {
       const nodes = bulkUpdateNodeReviewStatus(
-        ctx.db, c.req.param("id"), [...new Set(body.nodeIds)], body.reviewStatus, body.reviewedInUnit
+        ctx.db,
+        c.req.param("id"),
+        [...new Set(body.nodeIds)],
+        body.reviewStatus,
+        body.reviewedInUnit,
       );
       return c.json({ nodes });
     } catch (e) {
@@ -78,9 +86,10 @@ export function createNodesRoute(ctx: AppContext) {
     const nodeId = c.req.param("nodeId");
     const existing = getNode(ctx.db, nodeId);
     if (!existing || existing.sessionId !== c.req.param("id")) return c.json({ error: "not found" }, 404);
-    const status = body.reviewStatus === "reviewed-clean" && nodeHasComments(ctx.db, nodeId)
-      ? "reviewed-commented"
-      : body.reviewStatus;
+    const status =
+      body.reviewStatus === "reviewed-clean" && nodeHasComments(ctx.db, nodeId)
+        ? "reviewed-commented"
+        : body.reviewStatus;
     updateNodeReviewStatus(ctx.db, nodeId, status, body.reviewedInUnit);
     const node = getNode(ctx.db, nodeId);
     if (!node) return c.json({ error: "not found" }, 404);

@@ -75,11 +75,13 @@ export function discoverLanguageRoots(repoRoot: string): IndexerJob[] {
   const candidates: { language: IndexerLanguage; root: string }[] = [];
   walk(repoRoot, "", candidates);
   const kept = candidates.filter(
-    (c) => !candidates.some((o) => o.language === c.language && o.root !== c.root && isInside(c.root, o.root))
+    (c) => !candidates.some((o) => o.language === c.language && o.root !== c.root && isInside(c.root, o.root)),
   );
   return kept
     .map((c) => ({ ...c, hasSources: rootHasSources(c.root ? join(repoRoot, c.root) : repoRoot, c.language) }))
-    .sort((a, b) => (a.root < b.root ? -1 : a.root > b.root ? 1 : a.language < b.language ? -1 : a.language > b.language ? 1 : 0));
+    .sort((a, b) =>
+      a.root < b.root ? -1 : a.root > b.root ? 1 : a.language < b.language ? -1 : a.language > b.language ? 1 : 0,
+    );
 }
 
 /** True when `child` is strictly inside `parent` ("" = repo root contains everything else). */

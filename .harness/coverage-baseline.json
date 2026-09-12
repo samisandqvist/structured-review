@@ -1,0 +1,434 @@
+{
+  "revision": "06c96a840ab86e6cbb19077a96c2fbd7c0986672",
+  "description": "Measured migration baseline; original maintained files only. Strict command ignores these floors and exceptions.",
+  "files": {
+    "packages/server/src/app.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 85.71428571428571
+    },
+    "packages/server/src/attach.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 86.36363636363636
+    },
+    "packages/server/src/coverage.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 100
+    },
+    "packages/server/src/db/connection.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 95.83333333333333
+    },
+    "packages/server/src/db/schema.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 100
+    },
+    "packages/server/src/diff.ts": {
+      "lines": 97.14867617107943,
+      "statements": 97.14867617107943,
+      "functions": 100,
+      "branches": 93.25842696629213
+    },
+    "packages/server/src/flows.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "packages/server/src/globs.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 100
+    },
+    "packages/server/src/graph/crg.ts": {
+      "lines": 78.61635220125787,
+      "statements": 78.61635220125787,
+      "functions": 76.92307692307692,
+      "branches": 63.793103448275865
+    },
+    "packages/server/src/graph/entry-points.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 90.38461538461539
+    },
+    "packages/server/src/graph/flow-tree.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 86.48648648648648
+    },
+    "packages/server/src/graph/provider.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 100
+    },
+    "packages/server/src/graph/roots.ts": {
+      "lines": 95.1219512195122,
+      "statements": 95.1219512195122,
+      "functions": 100,
+      "branches": 91.66666666666667
+    },
+    "packages/server/src/graph/scip.ts": {
+      "lines": 92.69911504424779,
+      "statements": 92.69911504424779,
+      "functions": 96.55172413793103,
+      "branches": 83.6734693877551
+    },
+    "packages/server/src/graph/stub.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 100
+    },
+    "packages/server/src/index.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "packages/server/src/repo/bulk.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 100
+    },
+    "packages/server/src/repo/comments.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 100
+    },
+    "packages/server/src/repo/nodes.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 100
+    },
+    "packages/server/src/repo/sessions.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 100
+    },
+    "packages/server/src/repo/units.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 90
+    },
+    "packages/server/src/residuals.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 100
+    },
+    "packages/server/src/routes/changes.ts": {
+      "lines": 97.77777777777777,
+      "statements": 97.77777777777777,
+      "functions": 100,
+      "branches": 82.3529411764706
+    },
+    "packages/server/src/routes/comments.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 91.17647058823529
+    },
+    "packages/server/src/routes/events.ts": {
+      "lines": 30.303030303030305,
+      "statements": 30.303030303030305,
+      "functions": 50,
+      "branches": 100
+    },
+    "packages/server/src/routes/flows.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 95.83333333333333
+    },
+    "packages/server/src/routes/nodes.ts": {
+      "lines": 95.55555555555556,
+      "statements": 95.55555555555556,
+      "functions": 100,
+      "branches": 81.08108108108108
+    },
+    "packages/server/src/routes/sessions.ts": {
+      "lines": 99.25373134328358,
+      "statements": 99.25373134328358,
+      "functions": 100,
+      "branches": 93.18181818181819
+    },
+    "packages/server/src/static.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 91.66666666666667
+    },
+    "packages/server/src/types.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 100
+    },
+    "packages/server/src/util.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 100
+    },
+    "packages/server/src/validate.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 100
+    },
+    "packages/skill/src/api.ts": {
+      "lines": 86.11111111111111,
+      "statements": 86.11111111111111,
+      "functions": 60.869565217391305,
+      "branches": 92.20779220779221
+    },
+    "packages/skill/src/cli.ts": {
+      "lines": 15.168539325842696,
+      "statements": 15.168539325842696,
+      "functions": 13.636363636363637,
+      "branches": 78.57142857142857
+    },
+    "packages/skill/src/gc.ts": {
+      "lines": 58.46153846153846,
+      "statements": 58.46153846153846,
+      "functions": 40,
+      "branches": 100
+    },
+    "packages/skill/src/index.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "packages/skill/src/serve.ts": {
+      "lines": 29.591836734693878,
+      "statements": 29.591836734693878,
+      "functions": 42.857142857142854,
+      "branches": 92.85714285714286
+    },
+    "packages/skill/src/status.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 96.7741935483871
+    },
+    "packages/web/src/App.tsx": {
+      "lines": 98.3695652173913,
+      "statements": 98.3695652173913,
+      "functions": 100,
+      "branches": 88.88888888888889
+    },
+    "packages/web/src/api/client.ts": {
+      "lines": 50,
+      "statements": 50,
+      "functions": 17.647058823529413,
+      "branches": 75
+    },
+    "packages/web/src/api/hooks.ts": {
+      "lines": 60,
+      "statements": 60,
+      "functions": 64,
+      "branches": 100
+    },
+    "packages/web/src/components/CommentBox.tsx": {
+      "lines": 98.3739837398374,
+      "statements": 98.3739837398374,
+      "functions": 100,
+      "branches": 76.92307692307692
+    },
+    "packages/web/src/components/CommentCard.tsx": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 95
+    },
+    "packages/web/src/components/DiffView.tsx": {
+      "lines": 99.6951219512195,
+      "statements": 99.6951219512195,
+      "functions": 89.28571428571429,
+      "branches": 92.46575342465754
+    },
+    "packages/web/src/components/NodeBadge.tsx": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 100
+    },
+    "packages/web/src/components/PlanView.tsx": {
+      "lines": 95.66115702479338,
+      "statements": 95.66115702479338,
+      "functions": 81.48148148148148,
+      "branches": 84.15841584158416
+    },
+    "packages/web/src/components/RelationsPanel.tsx": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 100
+    },
+    "packages/web/src/components/SessionNotes.tsx": {
+      "lines": 91.42857142857143,
+      "statements": 91.42857142857143,
+      "functions": 83.33333333333333,
+      "branches": 93.75
+    },
+    "packages/web/src/components/SessionPicker.tsx": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 100
+    },
+    "packages/web/src/components/SplitLayout.tsx": {
+      "lines": 92.0754716981132,
+      "statements": 92.0754716981132,
+      "functions": 55.55555555555556,
+      "branches": 81.13207547169812
+    },
+    "packages/web/src/main.tsx": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "packages/web/src/navigation.ts": {
+      "lines": 66.66666666666667,
+      "statements": 66.66666666666667,
+      "functions": 50,
+      "branches": 100
+    },
+    "packages/web/src/orphan-layout.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 100
+    },
+    "packages/web/src/residual-kind.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 100
+    },
+    "packages/web/src/session-resolution.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 100
+    },
+    "packages/web/src/store/ui.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 75,
+      "branches": 100
+    },
+    "packages/web/src/walk-order.ts": {
+      "lines": 100,
+      "statements": 100,
+      "functions": 100,
+      "branches": 88.0952380952381
+    },
+    "scripts/build-plugin.mjs": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "scripts/demo.mjs": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "scripts/plugin-launcher.mjs": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    }
+  },
+  "bootstrapChanges": {
+    "base": "06c96a840ab86e6cbb19077a96c2fbd7c0986672",
+    "files": {
+      "packages/server/src/flows.ts": "f56d364d74f48ec06efc16ae98f9d81b89885c3a943435a86b58bfcd5f1f40b0",
+      "packages/server/src/graph/scip.ts": "cabc706cc822ec681b80fc580a697a84a11284e6c430a8b74fcb5f84c257064a",
+      "packages/server/src/index.ts": "ff46c7a36b890e05cfbcfe0725ad7415bd1e6ca81223dd6213322190a46a641a",
+      "packages/server/src/routes/changes.ts": "cfd89486aae9765695e3d8e2d1d5661081fc87a30651c8f40a2f2e801ba1c2e2",
+      "packages/server/src/routes/events.ts": "c21942de304f3bc39706122e27abe6979053b676e93bb95ed31b2f59be264896",
+      "packages/server/src/routes/nodes.ts": "659c087c3fd1b98fb2e9f682b0f72380ba604808ee62e6d3aa6e776a63f0f09b",
+      "packages/skill/src/cli.ts": "276a33fa3324f2cc7733058c69a4afda8d57eb894b5943fa97804188101663c3",
+      "packages/skill/src/gc.ts": "560971021df63afd555a091b9889e730147f0238299c4e0742ed6b34c25b88fd",
+      "packages/skill/src/serve.ts": "9c097c577c192b2ab5b3d112434a2bbdd88d4f0df54482febf0f8795dd369fb2",
+      "packages/web/src/api/client.ts": "1fc4ebf59b4b0c30738ab99ad6a1cb56b1776e04c58c785f257dc45df6e4cf0d",
+      "packages/web/src/api/hooks.ts": "1c8a8da5f528cd10eebe31c77f6a4e8f4eea2972d8eaf1aca4967159e1e7923d",
+      "packages/web/src/components/CommentBox.tsx": "bd21971ce74cc89093634ab41313adf2e6f3a17fc3db7ddcbe14bd1e23b18131",
+      "packages/web/src/components/SessionNotes.tsx": "70b2eb643e695d1f0cb8e392f405b7e2cf67fed191044a52f1cabe9de885e2a9",
+      "scripts/build-plugin.mjs": "4bbe0a19c4fc698edb430ff5f90b7074c7961d4179071afcf8c5b06b790036a4",
+      "scripts/demo.mjs": "bf9ac6d8941a96e8df9982360c41db8db8a8e7025cd2e61dc0b04082c14d4b3a",
+      "scripts/plugin-launcher.mjs": "e5926a1f6f60bce1dd53f78c42f5eed9bfbce579bef24e6669ba47d859fd2cf7"
+    }
+  },
+  "branchDebt": {
+    "packages/server/src/graph/scip.ts": {
+      "sourceHash": "cabc706cc822ec681b80fc580a697a84a11284e6c430a8b74fcb5f84c257064a",
+      "uncovered": [
+        "branch|110:14-110:23|0",
+        "branch|131:44-131:53|0",
+        "branch|136:36-138:15|0",
+        "branch|142:27-142:36|0",
+        "branch|187:103-188:20|0",
+        "branch|212:48-212:63|0",
+        "branch|294:44-294:55|0",
+        "branch|331:91-332:31|0",
+        "branch|372:71-372:83|0",
+        "branch|384:20-388:11|0",
+        "branch|394:8-396:9|0",
+        "branch|397:6-402:7|0",
+        "branch|403:51-409:56|0",
+        "branch|417:49-417:87|0",
+        "branch|427:61-427:88|0",
+        "branch|430:12-430:96|0",
+        "branch|453:16-453:28|0",
+        "branch|513:71-513:82|0",
+        "branch|524:39-524:53|0",
+        "branch|527:14-527:33|0",
+        "branch|541:25-541:35|0",
+        "branch|543:14-543:24|0",
+        "branch|549:27-549:39|0",
+        "branch|551:22-551:38|0",
+        "branch|555:37-555:48|0",
+        "branch|556:52-556:84|0",
+        "branch|560:23-560:41|0",
+        "branch|561:22-561:41|0",
+        "branch|572:18-572:27|0",
+        "branch|585:23-585:41|0",
+        "branch|586:22-586:41|0",
+        "branch|594:23-594:41|0",
+        "branch|595:22-595:41|0",
+        "branch|597:21-597:30|0",
+        "branch|615:23-615:41|0",
+        "branch|619:22-619:41|0",
+        "branch|626:22-626:41|0",
+        "branch|630:36-630:55|0",
+        "branch|631:24-631:33|0",
+        "branch|97:77-97:85|0"
+      ]
+    }
+  }
+}

@@ -7,7 +7,9 @@ import { SessionNotes } from "./SessionNotes.js";
 import type { AttachedMember, Flow, FlowStep, GraphEdgeDTO, Node, Unit } from "../api/client.js";
 
 export function PlanView({
-  sessionId, currentNodeId, onSelectNode,
+  sessionId,
+  currentNodeId,
+  onSelectNode,
 }: {
   sessionId: string;
   currentNodeId: string | null;
@@ -47,7 +49,7 @@ export function PlanView({
   return (
     <div style={wrap}>
       <div style={head}>
-        <span style={{ fontFamily: "var(--display)", fontWeight: 700, fontSize: 17 }}>Plan</span>
+        <h2 style={{ fontFamily: "var(--display)", fontWeight: 700, fontSize: 17, margin: 0 }}>Plan</h2>
         <span style={{ color: "var(--dim)", fontSize: 15 }}>{units.length} units</span>
       </div>
       {(sessionData?.session?.indexWarnings?.length ?? 0) > 0 && (
@@ -65,9 +67,9 @@ export function PlanView({
             key={u.id}
             sessionId={sessionId}
             unit={u}
-            flows={u.kind === "flow"
-              ? u.memberStableIds.map((id) => flowByEntry.get(id)).filter((f): f is Flow => !!f)
-              : []}
+            flows={
+              u.kind === "flow" ? u.memberStableIds.map((id) => flowByEntry.get(id)).filter((f): f is Flow => !!f) : []
+            }
             nodeByStable={nodeByStable}
             nodeById={nodeById}
             edges={edges}
@@ -105,7 +107,7 @@ function OverviewBlock({ text }: { text: string }) {
 function unitTestStats(
   unitNodeIds: Set<string>,
   edges: GraphEdgeDTO[],
-  nodeById: Map<string, Node>
+  nodeById: Map<string, Node>,
 ): { total: number; changed: number; firstTestNodeId: string | null } {
   const testIds: string[] = [];
   for (const e of edges) {
@@ -118,7 +120,14 @@ function unitTestStats(
 }
 
 function UnitBlock({
-  sessionId, unit, flows, nodeByStable, nodeById, edges, currentNodeId, onSelectNode,
+  sessionId,
+  unit,
+  flows,
+  nodeByStable,
+  nodeById,
+  edges,
+  currentNodeId,
+  onSelectNode,
 }: {
   sessionId: string;
   unit: Unit;
@@ -156,10 +165,11 @@ function UnitBlock({
 
   const useFlowProgress = unit.kind === "flow" && flows.length > 0;
   const total = (useFlowProgress ? changedByStable.size : memberNodes.length) + attachedNodes.length;
-  const reviewed = (useFlowProgress
-    ? [...changedByStable.values()].filter((s) => s.reviewStatus && s.reviewStatus !== "unreviewed").length
-    : memberNodes.filter((n) => n.reviewStatus !== "unreviewed").length)
-    + attachedNodes.filter((n) => n.reviewStatus !== "unreviewed").length;
+  const reviewed =
+    (useFlowProgress
+      ? [...changedByStable.values()].filter((s) => s.reviewStatus && s.reviewStatus !== "unreviewed").length
+      : memberNodes.filter((n) => n.reviewStatus !== "unreviewed").length) +
+    attachedNodes.filter((n) => n.reviewStatus !== "unreviewed").length;
 
   // Collapse: manual toggle wins; a fully reviewed unit auto-collapses until
   // deliberately re-expanded.
@@ -177,11 +187,12 @@ function UnitBlock({
   const bulkStatus = useBulkUpdateNodeStatus(sessionId);
   // Unreviewed changed nodeIds of this unit: flow-units from their tracks'
   // steps, orphan-units (or unresolved flows) from memberNodes.
-  const remaining: string[] = (useFlowProgress
-    ? [...changedByStable.values()]
-        .filter((s) => s.nodeId && (!s.reviewStatus || s.reviewStatus === "unreviewed"))
-        .map((s) => s.nodeId as string)
-    : memberNodes.filter((n) => n.reviewStatus === "unreviewed").map((n) => n.id)
+  const remaining: string[] = (
+    useFlowProgress
+      ? [...changedByStable.values()]
+          .filter((s) => s.nodeId && (!s.reviewStatus || s.reviewStatus === "unreviewed"))
+          .map((s) => s.nodeId as string)
+      : memberNodes.filter((n) => n.reviewStatus === "unreviewed").map((n) => n.id)
   ).concat(attachedNodes.filter((n) => n.reviewStatus === "unreviewed").map((n) => n.id));
   const markRemaining = () => {
     if (!window.confirm(`Mark ${remaining.length} node${remaining.length === 1 ? "" : "s"} reviewed?`)) return;
@@ -191,8 +202,11 @@ function UnitBlock({
   // Production nodes of this unit, for test linkage.
   const unitNodeIds = new Set<string>(
     useFlowProgress
-      ? flows.flatMap((f) => f.steps).map((s) => s.nodeId).filter((id): id is string => !!id)
-      : memberNodes.map((n) => n.id)
+      ? flows
+          .flatMap((f) => f.steps)
+          .map((s) => s.nodeId)
+          .filter((id): id is string => !!id)
+      : memberNodes.map((n) => n.id),
   );
   const testStats = unitTestStats(unitNodeIds, edges, nodeById);
 
@@ -237,16 +251,16 @@ function UnitBlock({
             onBlur={() => setEditing(false)}
           />
         ) : (
-          <h3 className="unit__name" onDoubleClick={() => !unit.auto && setEditing(true)}>{unit.label}</h3>
+          <h3 className="unit__name" onDoubleClick={() => !unit.auto && setEditing(true)}>
+            {unit.label}
+          </h3>
         )}
         {unit.auto && <span className="unit__badge">unassigned</span>}
         {unit.kind === "flow" && flows.length > 0 && (
           <span
             className="unit__badge"
             data-testid={`entry-conf-${unit.id}`}
-            title={`entry evidence: ${flows
-              .map((f) => `${f.name}: ${(f.entryReasons ?? []).join("+")}`)
-              .join("; ")}`}
+            title={`entry evidence: ${flows.map((f) => `${f.name}: ${(f.entryReasons ?? []).join("+")}`).join("; ")}`}
           >
             ⚑ {Math.round(Math.max(...flows.map((f) => f.entryConfidence ?? 0.4)) * 100)}%
           </span>
@@ -272,7 +286,9 @@ function UnitBlock({
           </button>
         )}
         {total > 0 && (
-          <span className="unit__progress">{reviewed}/{total}</span>
+          <span className="unit__progress">
+            {reviewed}/{total}
+          </span>
         )}
       </div>
       {!collapsed && unit.rationale && <p className="unit__rationale">{unit.rationale}</p>}
@@ -308,7 +324,11 @@ function UnitBlock({
  *  function node. Layout comes from buildOrphanLayout; the walk order flattens
  *  the same structure (walk-order.ts). */
 function OrphanTree({
-  unit, attachedByParent, nodeByStable, currentNodeId, onSelectNode,
+  unit,
+  attachedByParent,
+  nodeByStable,
+  currentNodeId,
+  onSelectNode,
 }: {
   unit: Unit;
   attachedByParent: Map<string, AttachedMember[]>;
@@ -318,9 +338,16 @@ function OrphanTree({
 }) {
   const stepOf = (n: Node): FlowStep => ({
     stableId: n.stableId,
-    label: n.label, file: n.file, startLine: n.startLine, endLine: n.endLine,
-    isTest: n.isTest, depth: 0, nodeId: n.id, changeStatus: n.changeStatus, reviewStatus: n.reviewStatus,
-    residualKind: n.residualKind,
+    label: n.label,
+    file: n.file,
+    startLine: n.startLine,
+    endLine: n.endLine,
+    isTest: n.isTest,
+    depth: 0,
+    nodeId: n.id,
+    changeStatus: n.changeStatus,
+    reviewStatus: n.reviewStatus,
+    ...(n.residualKind === undefined ? {} : { residualKind: n.residualKind }),
   });
   const renderNode = (n: Node, depth: number) => (
     <div key={n.id}>
@@ -346,7 +373,9 @@ function OrphanTree({
       {buildOrphanLayout(unit.memberStableIds, nodeByStable).map((g) => (
         <div key={g.dir ?? "(flat)"}>
           {g.dir !== null && (
-            <div className="unit__dir" data-testid="orphan-dir">{g.dir}/</div>
+            <div className="unit__dir" data-testid="orphan-dir">
+              {g.dir}/
+            </div>
           )}
           {g.entries.map((e) => (
             <div key={e.node.id}>
@@ -360,28 +389,36 @@ function OrphanTree({
   );
 }
 
-type TrackRow =
-  | { kind: "step"; step: FlowStep; index: number }
-  | { kind: "run"; steps: FlowStep[]; index: number };
+type TrackRow = { kind: "step"; step: FlowStep; index: number } | { kind: "run"; steps: FlowStep[]; index: number };
 
 /** Group consecutive off-path context steps into one collapsible run. */
 function trackRows(steps: FlowStep[]): TrackRow[] {
   const rows: TrackRow[] = [];
   for (let i = 0; i < steps.length; i++) {
     const s = steps[i];
+    if (!s) continue;
     if (!s.offPath) {
       rows.push({ kind: "step", step: s, index: i });
       continue;
     }
     const run: FlowStep[] = [s];
-    while (i + 1 < steps.length && steps[i + 1].offPath) run.push(steps[++i]);
+    while (i + 1 < steps.length) {
+      const next = steps[i + 1];
+      if (!next?.offPath) break;
+      run.push(next);
+      i++;
+    }
     rows.push({ kind: "run", steps: run, index: i - run.length + 1 });
   }
   return rows;
 }
 
 function FlowTrack({
-  flow, attachedByParent, nodeByStable, currentNodeId, onSelectNode,
+  flow,
+  attachedByParent,
+  nodeByStable,
+  currentNodeId,
+  onSelectNode,
 }: {
   flow: Flow;
   attachedByParent?: Map<string, AttachedMember[]>;
@@ -424,12 +461,11 @@ function FlowTrack({
       {trackRows(flow.steps).map((row) => {
         if (row.kind === "step") return renderStep(row.step, `s-${row.index}`);
         if (expanded.has(row.index)) return row.steps.map((s, j) => renderStep(s, `s-${row.index}-${j}`));
+        const [first] = row.steps;
+        if (!first) return null;
         return (
-          <div key={`run-${row.index}`} className="flow__row" style={{ paddingLeft: row.steps[0].depth * 22 }}>
-            <button
-              className="flow__collapsed"
-              onClick={() => setExpanded((e) => new Set(e).add(row.index))}
-            >
+          <div key={`run-${row.index}`} className="flow__row" style={{ paddingLeft: first.depth * 22 }}>
+            <button className="flow__collapsed" onClick={() => setExpanded((e) => new Set(e).add(row.index))}>
               ⋯ {row.steps.length} unchanged call{row.steps.length === 1 ? "" : "s"}
             </button>
           </div>
@@ -442,7 +478,10 @@ function FlowTrack({
 /** A server-attached member (test / DTO / residual) under its parent node.
  *  counted=false renders dimmed as a cross-unit reference (jump link only). */
 function AttachedChip({
-  member, node, current, onSelect,
+  member,
+  node,
+  current,
+  onSelect,
 }: {
   member: AttachedMember;
   node: Node | undefined;
@@ -460,7 +499,9 @@ function AttachedChip({
     member.counted ? "" : "step--ref",
     residual ? "step--residual" : "",
     current ? "step--current" : "",
-  ].filter(Boolean).join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
   const base = member.counted
     ? `${node.file}:${node.startLine} — attached: ${member.reason}`
     : `${node.file}:${node.startLine} — ${member.reason} reference; reviewed in its home unit`;
@@ -481,7 +522,9 @@ function AttachedChip({
 }
 
 function StepChip({
-  step, current, onSelect,
+  step,
+  current,
+  onSelect,
 }: {
   step: FlowStep;
   current: boolean;
@@ -496,7 +539,9 @@ function StepChip({
     step.reviewStatus && step.reviewStatus !== "unreviewed" ? "step--reviewed" : "",
     residual ? "step--residual" : "",
     current ? "step--current" : "",
-  ].filter(Boolean).join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
   return (
     <button
       className={cls}
@@ -522,15 +567,26 @@ function CommentMark() {
 }
 
 const wrap: React.CSSProperties = {
-  flex: 1, height: "100%", display: "flex", flexDirection: "column",
-  background: "var(--panel)", minHeight: 0,
+  flex: 1,
+  height: "100%",
+  display: "flex",
+  flexDirection: "column",
+  background: "var(--panel)",
+  minHeight: 0,
 };
 const head: React.CSSProperties = {
-  display: "flex", alignItems: "baseline", justifyContent: "space-between",
-  padding: "14px 16px 10px", borderBottom: "1px solid var(--line)",
+  display: "flex",
+  alignItems: "baseline",
+  justifyContent: "space-between",
+  padding: "14px 16px 10px",
+  borderBottom: "1px solid var(--line)",
 };
 const empty: React.CSSProperties = {
-  flex: 1, height: "100%", display: "grid", placeItems: "center", background: "var(--panel)",
+  flex: 1,
+  height: "100%",
+  display: "grid",
+  placeItems: "center",
+  background: "var(--panel)",
 };
 const warnBanner: React.CSSProperties = {
   margin: "8px 16px 0",

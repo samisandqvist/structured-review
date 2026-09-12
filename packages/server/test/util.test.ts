@@ -19,7 +19,7 @@ describe("isTestFile", () => {
     expect(isTestFile("mcp/svc/tests/helpers.py")).toBe(true);
     expect(isTestFile("test_top.py")).toBe(true);
     expect(isTestFile("mcp/svc/app.py")).toBe(false);
-    expect(isTestFile("mcp/svc/attest.py")).toBe(false);   // no "_test." boundary
+    expect(isTestFile("mcp/svc/attest.py")).toBe(false); // no "_test." boundary
     expect(isTestFile("mcp/svc/contest_x.py")).toBe(false); // "test_" not at segment start
   });
 

@@ -4,34 +4,51 @@ import { randomId } from "../util.js";
 import { getNodeNeighbors } from "./nodes.js";
 
 interface CommentRow {
-  id: string; session_id: string; node_id: string | null; hunk_snippet: string;
-  text: string; structural_context: string; created_at: number; anchor: string | null;
+  id: string;
+  session_id: string;
+  node_id: string | null;
+  hunk_snippet: string;
+  text: string;
+  structural_context: string;
+  created_at: number;
+  anchor: string | null;
 }
 
 function rowToComment(row: CommentRow): Comment {
   return {
-    id: row.id, sessionId: row.session_id, nodeId: row.node_id,
-    hunkSnippet: row.hunk_snippet, text: row.text,
-    structuralContext: row.structural_context, createdAt: row.created_at,
+    id: row.id,
+    sessionId: row.session_id,
+    nodeId: row.node_id,
+    hunkSnippet: row.hunk_snippet,
+    text: row.text,
+    structuralContext: row.structural_context,
+    createdAt: row.created_at,
     anchor: row.anchor ? (JSON.parse(row.anchor) as CommentAnchor) : null,
   };
 }
 
 export function createComment(
-  db: DB, sessionId: string, nodeId: string | null, hunkSnippet: string,
-  text: string, structuralContext: string, anchor: CommentAnchor | null = null
+  db: DB,
+  sessionId: string,
+  nodeId: string | null,
+  hunkSnippet: string,
+  text: string,
+  structuralContext: string,
+  anchor: CommentAnchor | null = null,
 ): Comment {
   const id = randomId("cmt");
   const createdAt = Date.now();
   db.prepare(
-    "INSERT INTO comments (id, session_id, node_id, hunk_snippet, text, structural_context, created_at, anchor) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    "INSERT INTO comments (id, session_id, node_id, hunk_snippet, text, structural_context, created_at, anchor) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
   ).run(id, sessionId, nodeId, hunkSnippet, text, structuralContext, createdAt, anchor ? JSON.stringify(anchor) : null);
   return { id, sessionId, nodeId, hunkSnippet, text, structuralContext, createdAt, anchor };
 }
 
 export function getCommentsBySession(db: DB, sessionId: string): Comment[] {
   // rowid tie-break: same-millisecond comments still come back in insertion order.
-  return (db.prepare("SELECT * FROM comments WHERE session_id = ? ORDER BY created_at, rowid").all(sessionId) as CommentRow[]).map(rowToComment);
+  return (
+    db.prepare("SELECT * FROM comments WHERE session_id = ? ORDER BY created_at, rowid").all(sessionId) as CommentRow[]
+  ).map(rowToComment);
 }
 
 export function getComment(db: DB, id: string): Comment | undefined {
@@ -71,13 +88,24 @@ export function structuralContextFor(db: DB, nodeId: string): string {
 export function exportComments(db: DB, sessionId: string): ExportedComment[] {
   // LEFT JOIN: a NULL node_id is a session-wide comment and must survive the
   // export — it maps to a PR review body rather than an inline comment.
-  const rows = db.prepare(
-    `SELECT c.id, c.node_id, n.stable_id, n.label, n.file, n.start_line, n.end_line, c.hunk_snippet, c.text, c.structural_context, c.created_at, c.anchor
-     FROM comments c LEFT JOIN nodes n ON c.node_id = n.id WHERE c.session_id = ? ORDER BY c.created_at, c.rowid`
-  ).all(sessionId) as {
-    id: string; node_id: string | null; stable_id: string | null; label: string | null; file: string | null;
-    start_line: number | null; end_line: number | null;
-    hunk_snippet: string; text: string; structural_context: string; created_at: number; anchor: string | null;
+  const rows = db
+    .prepare(
+      `SELECT c.id, c.node_id, n.stable_id, n.label, n.file, n.start_line, n.end_line, c.hunk_snippet, c.text, c.structural_context, c.created_at, c.anchor
+     FROM comments c LEFT JOIN nodes n ON c.node_id = n.id WHERE c.session_id = ? ORDER BY c.created_at, c.rowid`,
+    )
+    .all(sessionId) as {
+    id: string;
+    node_id: string | null;
+    stable_id: string | null;
+    label: string | null;
+    file: string | null;
+    start_line: number | null;
+    end_line: number | null;
+    hunk_snippet: string;
+    text: string;
+    structural_context: string;
+    created_at: number;
+    anchor: string | null;
   }[];
   return rows.map((row): ExportedComment => {
     if (row.node_id === null) {
@@ -85,9 +113,15 @@ export function exportComments(db: DB, sessionId: string): ExportedComment[] {
     }
     return {
       scope: "node",
-      id: row.id, nodeId: row.node_id, stableId: row.stable_id!, label: row.label!, file: row.file!,
-      startLine: row.start_line!, endLine: row.end_line!,
-      hunkSnippet: row.hunk_snippet, text: row.text,
+      id: row.id,
+      nodeId: row.node_id,
+      stableId: row.stable_id!,
+      label: row.label!,
+      file: row.file!,
+      startLine: row.start_line!,
+      endLine: row.end_line!,
+      hunkSnippet: row.hunk_snippet,
+      text: row.text,
       structuralContext: structuralContextFor(db, row.node_id),
       createdAt: row.created_at,
       anchor: row.anchor ? (JSON.parse(row.anchor) as CommentAnchor) : null,

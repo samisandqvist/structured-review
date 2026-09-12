@@ -1,0 +1,28 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": [
+        "scripts/**/*.mjs",
+        "tests/**/*.test.mjs",
+        "playwright.config.ts",
+        "tests/e2e/**/*.ts",
+        "*.config.{mjs,ts,cjs}"
+      ],
+      "project": ["scripts/**/*.mjs", "tests/**/*.{ts,mjs}", "*.{mjs,ts,cjs}"]
+    },
+    "packages/server": {
+      "entry": ["src/index.ts", "test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"],
+      "ignoreDependencies": ["@sourcegraph/scip-python", "@sourcegraph/scip-typescript"]
+    },
+    "packages/skill": {
+      "entry": ["src/cli.ts", "test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"]
+    },
+    "packages/web": {
+      "entry": ["src/main.tsx", "test/**/*.test.{ts,tsx}", "src/test/setup.ts"],
+      "project": ["src/**/*.{ts,tsx}", "test/**/*.{ts,tsx}"]
+    }
+  }
+}

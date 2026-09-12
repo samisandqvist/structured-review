@@ -8,13 +8,13 @@ export type SessionResolution =
 
 /** Decide what the main page shows: an explicit ?session param always wins;
  *  otherwise a lone session loads directly and several open the picker. */
-export function resolveSession(
-  paramId: string | null,
-  sessions: ReviewSession[] | undefined
-): SessionResolution {
+export function resolveSession(paramId: string | null, sessions: ReviewSession[] | undefined): SessionResolution {
   if (paramId) return { kind: "session", sessionId: paramId };
   if (!sessions) return { kind: "loading" };
   if (sessions.length === 0) return { kind: "empty" };
-  if (sessions.length === 1) return { kind: "session", sessionId: sessions[0].id };
+  if (sessions.length === 1) {
+    const [session] = sessions;
+    if (session) return { kind: "session", sessionId: session.id };
+  }
   return { kind: "picker", sessions };
 }

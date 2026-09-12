@@ -29,11 +29,11 @@ export function selectionLabel(anchor: CommentAnchor): string {
 /** Client twin of the server's anchorRowRange — same resolution semantics. */
 export function resolveAnchorRows(
   lines: DiffLine[],
-  anchor: CommentAnchor
+  anchor: CommentAnchor,
 ): { startIdx: number; endIdx: number } | null {
   const find = (line: number, side: AnchorSide) =>
     lines.findIndex((l) =>
-      side === "new" ? l.type === "added" && l.newLine === line : l.type === "removed" && l.oldLine === line
+      side === "new" ? l.type === "added" && l.newLine === line : l.type === "removed" && l.oldLine === line,
     );
   const startIdx = find(anchor.startLine, anchor.startSide);
   const endIdx = find(anchor.endLine, anchor.endSide);
@@ -54,9 +54,15 @@ const TEXT_COLOR: Record<DiffLine["type"], string> = {
 const MARKER: Record<DiffLine["type"], string> = { context: " ", added: "+", removed: "-" };
 
 const gutterStyle: CSSProperties = {
-  width: 1, minWidth: 44, padding: "0 8px", textAlign: "right",
-  color: "#5c6678", background: "#0f141e", userSelect: "none",
-  fontSize: 15, verticalAlign: "top",
+  width: 1,
+  minWidth: 44,
+  padding: "0 8px",
+  textAlign: "right",
+  color: "#5c6678",
+  background: "#0f141e",
+  userSelect: "none",
+  fontSize: 15,
+  verticalAlign: "top",
 };
 
 export interface GapInfo {
@@ -72,7 +78,9 @@ function effectiveNewPositions(lines: DiffLine[]): number[] {
   const eff = new Array<number>(lines.length);
   let next = Number.MAX_SAFE_INTEGER;
   for (let i = lines.length - 1; i >= 0; i--) {
-    if (lines[i].newLine !== null) next = lines[i].newLine!;
+    const line = lines[i];
+    if (!line) continue;
+    if (line.newLine !== null) next = line.newLine;
     eff[i] = next;
   }
   return eff;
@@ -89,7 +97,7 @@ export function withSeparators(lines: DiffLine[]): DiffRow[] {
     const oldGap = l.oldLine !== null && lastOld !== null && l.oldLine > lastOld + 1;
     const newGap = l.newLine !== null && lastNew !== null && l.newLine > lastNew + 1;
     if (out.length > 0 && (oldGap || newGap)) {
-      out.push({ gap: { hiddenStart: (lastNew ?? 0) + 1, hiddenEnd: eff[idx] - 1 } });
+      out.push({ gap: { hiddenStart: (lastNew ?? 0) + 1, hiddenEnd: (eff[idx] ?? Number.MAX_SAFE_INTEGER) - 1 } });
     }
     out.push({ line: l, idx });
     if (l.oldLine !== null) lastOld = l.oldLine;
@@ -108,7 +116,10 @@ export function mergeExpanded(lines: DiffLine[], blocks: { start: number; lines:
     const eff = effectiveNewPositions(merged);
     let at = merged.length;
     for (let i = 0; i < merged.length; i++) {
-      if (eff[i] > block.start) { at = i; break; }
+      if ((eff[i] ?? Number.MAX_SAFE_INTEGER) > block.start) {
+        at = i;
+        break;
+      }
     }
     merged.splice(at, 0, ...block.lines);
   }
@@ -122,12 +133,20 @@ const EXPAND_ALL_MAX = 500;
 function GapRow({ gap, onExpand }: { gap: GapInfo; onExpand: (start: number, end: number) => void }) {
   const size = gap.hiddenEnd - gap.hiddenStart + 1;
   const btn: CSSProperties = {
-    background: "none", border: "none", color: "var(--trace)", cursor: "pointer",
-    fontSize: 13, padding: "0 8px", fontFamily: "var(--mono)",
+    background: "none",
+    border: "none",
+    color: "var(--trace)",
+    cursor: "pointer",
+    fontSize: 13,
+    padding: "0 8px",
+    fontFamily: "var(--mono)",
   };
   return (
     <tr data-testid="diff-gap">
-      <td colSpan={4} style={{ padding: "2px 10px", color: "#5c6678", background: "#161c28", fontSize: 14, textAlign: "center" }}>
+      <td
+        colSpan={4}
+        style={{ padding: "2px 10px", color: "#5c6678", background: "#161c28", fontSize: 14, textAlign: "center" }}
+      >
         {size <= 0 ? (
           "⋯"
         ) : size <= EXPAND_CHUNK ? (
@@ -136,8 +155,12 @@ function GapRow({ gap, onExpand }: { gap: GapInfo; onExpand: (start: number, end
           </button>
         ) : (
           <>
-            <button style={btn} data-testid="expand-down" title="Reveal lines below the code above"
-              onClick={() => onExpand(gap.hiddenStart, gap.hiddenStart + EXPAND_CHUNK - 1)}>
+            <button
+              style={btn}
+              data-testid="expand-down"
+              title="Reveal lines below the code above"
+              onClick={() => onExpand(gap.hiddenStart, gap.hiddenStart + EXPAND_CHUNK - 1)}
+            >
               ↓ {EXPAND_CHUNK}
             </button>
             <span style={{ opacity: 0.6 }}>{size} hidden</span>
@@ -146,8 +169,12 @@ function GapRow({ gap, onExpand }: { gap: GapInfo; onExpand: (start: number, end
                 all
               </button>
             )}
-            <button style={btn} data-testid="expand-up" title="Reveal lines above the code below"
-              onClick={() => onExpand(gap.hiddenEnd - EXPAND_CHUNK + 1, gap.hiddenEnd)}>
+            <button
+              style={btn}
+              data-testid="expand-up"
+              title="Reveal lines above the code below"
+              onClick={() => onExpand(gap.hiddenEnd - EXPAND_CHUNK + 1, gap.hiddenEnd)}
+            >
               ↑ {EXPAND_CHUNK}
             </button>
           </>
@@ -157,7 +184,11 @@ function GapRow({ gap, onExpand }: { gap: GapInfo; onExpand: (start: number, end
   );
 }
 
-function DiffLines({ lines, onExpand, edges }: {
+function DiffLines({
+  lines,
+  onExpand,
+  edges,
+}: {
   lines: DiffLine[];
   onExpand?: (start: number, end: number) => void;
   edges?: { top: GapInfo | null; bottom: GapInfo | null };
@@ -167,7 +198,10 @@ function DiffLines({ lines, onExpand, edges }: {
   // Live drag state: `from` on mousedown, `moved` once another row is entered.
   const dragRef = useRef<{ from: number; moved: boolean } | null>(null);
 
-  const anchorable = (idx: number) => !lines[idx].expanded && !!endpointOf(lines[idx]);
+  const anchorable = (idx: number) => {
+    const line = lines[idx];
+    return !!line && !line.expanded && !!endpointOf(line);
+  };
 
   /** Set the range between the anchored start and `idx` (either direction). */
   const selectFromAnchor = (from: number, idx: number) => {
@@ -224,13 +258,14 @@ function DiffLines({ lines, onExpand, edges }: {
     };
   }, []);
 
-  const isSelected = (idx: number) =>
-    !!lineSelection && idx >= lineSelection.startIdx && idx <= lineSelection.endIdx;
+  const isSelected = (idx: number) => !!lineSelection && idx >= lineSelection.startIdx && idx <= lineSelection.endIdx;
 
   const expand = onExpand ?? (() => undefined);
   return (
     <div style={{ border: "1px solid #283143", borderRadius: 8, overflow: "hidden", background: "#11151f" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "var(--mono)", fontSize: 17, lineHeight: 1.5 }}>
+      <table
+        style={{ width: "100%", borderCollapse: "collapse", fontFamily: "var(--mono)", fontSize: 17, lineHeight: 1.5 }}
+      >
         <tbody>
           {edges?.top && <GapRow gap={edges.top} onExpand={expand} />}
           {withSeparators(lines).map((entry, i) =>
@@ -254,10 +289,21 @@ function DiffLines({ lines, onExpand, edges }: {
               >
                 <td style={gutterStyle}>{entry.line.oldLine ?? ""}</td>
                 <td style={gutterStyle}>{entry.line.newLine ?? ""}</td>
-                <td style={{ width: 1, padding: "0 4px", color: TEXT_COLOR[entry.line.type], userSelect: "none" }}>{MARKER[entry.line.type]}</td>
-                <td style={{ padding: "0 10px", whiteSpace: "pre-wrap", wordBreak: "break-all", color: TEXT_COLOR[entry.line.type] }}>{entry.line.text}</td>
+                <td style={{ width: 1, padding: "0 4px", color: TEXT_COLOR[entry.line.type], userSelect: "none" }}>
+                  {MARKER[entry.line.type]}
+                </td>
+                <td
+                  style={{
+                    padding: "0 10px",
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-all",
+                    color: TEXT_COLOR[entry.line.type],
+                  }}
+                >
+                  {entry.line.text}
+                </td>
               </tr>
-            )
+            ),
           )}
           {edges?.bottom && <GapRow gap={edges.bottom} onExpand={expand} />}
         </tbody>
@@ -275,7 +321,9 @@ export function DiffView({ node, diff }: { node: Node; diff?: NodeDiff }) {
   // GitHub-style context expansion: revealed blocks live client-side, keyed by
   // their new-file start, and reset when the node changes.
   const [blocks, setBlocks] = useState<{ start: number; lines: DiffLine[] }[]>([]);
-  useEffect(() => { setBlocks([]); }, [node.id]);
+  useEffect(() => {
+    setBlocks([]);
+  }, [node.id]);
   const lines = useMemo(() => mergeExpanded(baseLines, blocks), [baseLines, blocks]);
 
   // Edge expanders: above the first shown line and below the last, both exact —
@@ -291,9 +339,7 @@ export function DiffView({ node, diff }: { node: Node; diff?: NodeDiff }) {
   };
   const edges = {
     top: firstNew !== null && firstNew > 1 ? { hiddenStart: 1, hiddenEnd: firstNew - 1 } : null,
-    bottom: lines.length > 0 && lastNew < totalLines
-      ? { hiddenStart: lastNew + 1, hiddenEnd: totalLines }
-      : null,
+    bottom: lines.length > 0 && lastNew < totalLines ? { hiddenStart: lastNew + 1, hiddenEnd: totalLines } : null,
   };
 
   useEffect(() => {
@@ -303,7 +349,6 @@ export function DiffView({ node, diff }: { node: Node; diff?: NodeDiff }) {
       setLineSelection({ ...rows, anchor: pending, label: selectionLabel(pending) });
     }
     clearAnchorHighlight(); // resolved or not: the request is consumed (stale anchors no-op)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pending, lines]);
 
   return (
@@ -317,9 +362,7 @@ export function DiffView({ node, diff }: { node: Node; diff?: NodeDiff }) {
           flexWrap: "wrap",
         }}
       >
-        <h2 style={{ fontSize: 19, fontFamily: "var(--mono)", fontWeight: 700 }}>
-          {node.label}
-        </h2>
+        <h2 style={{ fontSize: 19, fontFamily: "var(--mono)", fontWeight: 700 }}>{node.label}</h2>
         <NodeBadge status={node.reviewStatus} />
         {node.residualKind && (
           <span
@@ -359,9 +402,7 @@ export function DiffView({ node, diff }: { node: Node; diff?: NodeDiff }) {
         {lines.length > 0 ? (
           <DiffLines lines={lines} onExpand={handleExpand} edges={edges} />
         ) : (
-          <div style={{ padding: 16, color: "var(--faint)", fontSize: 15 }}>
-            No source available for this node.
-          </div>
+          <div style={{ padding: 16, color: "var(--faint)", fontSize: 15 }}>No source available for this node.</div>
         )}
       </div>
     </div>

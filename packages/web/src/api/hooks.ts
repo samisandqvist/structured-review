@@ -12,7 +12,8 @@ export function useNodes(sessionId: string) {
 }
 export function useNode(sessionId: string, nodeId: string | null) {
   return useQuery({
-    queryKey: ["node", sessionId, nodeId], queryFn: () => api.getNode(sessionId, nodeId!),
+    queryKey: ["node", sessionId, nodeId],
+    queryFn: () => api.getNode(sessionId, nodeId!),
     enabled: !!nodeId,
   });
 }
@@ -25,7 +26,11 @@ export function useFlows(sessionId: string) {
 export function useUpdateNodeStatus(sessionId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ nodeId, reviewStatus, reviewedInUnit }: {
+    mutationFn: ({
+      nodeId,
+      reviewStatus,
+      reviewedInUnit,
+    }: {
       nodeId: string;
       reviewStatus: "unreviewed" | "reviewed-clean" | "reviewed-commented" | "reviewed-elsewhere";
       reviewedInUnit?: number;

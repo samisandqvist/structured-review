@@ -12,22 +12,39 @@ beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "crw-plugin-test-"));
   for (const name of ["package/scripts", "package/dist", "bin"]) mkdirSync(join(dir, name), { recursive: true });
   launcher = join(dir, "package/scripts/crw.mjs");
-  writeFileSync(launcher, readFileSync(fileURLToPath(new URL("../../../scripts/plugin-launcher.mjs", import.meta.url))));
+  writeFileSync(
+    launcher,
+    readFileSync(fileURLToPath(new URL("../../../scripts/plugin-launcher.mjs", import.meta.url))),
+  );
   writeFileSync(join(dir, "package/package.json"), '{"dependencies":{"test":"1"}}');
-  writeFileSync(join(dir, "package/dist/crw.js"), 'console.log(JSON.stringify({ args: process.argv.slice(2), data: process.env.CRW_DATA_DIR, indexers: process.env.CRW_INDEXER_HOME }));');
+  writeFileSync(
+    join(dir, "package/dist/crw.js"),
+    "console.log(JSON.stringify({ args: process.argv.slice(2), data: process.env.CRW_DATA_DIR, indexers: process.env.CRW_INDEXER_HOME }));",
+  );
   // An actual child executable simulates npm, including interrupted installs.
-  writeFileSync(join(dir, "bin/npm"), `#!${process.execPath}
+  writeFileSync(
+    join(dir, "bin/npm"),
+    `#!${process.execPath}
 const fs = require('node:fs');
 fs.appendFileSync('install-count', '1');
 console.log('npm progress');
 if (process.env.CRW_TEST_FAIL === '1') process.exit(1);
 fs.mkdirSync('node_modules/.bin', { recursive: true });
 for (const bin of ['scip-typescript', 'scip-python']) fs.writeFileSync('node_modules/.bin/' + bin, 'ready');
-`, { mode: 0o755 });
-  env = { ...process.env, PATH: `${join(dir, "bin")}:${process.env.PATH}`, CRW_DATA_DIR: join(dir, "writable data"), CRW_INDEXER_HOME: "", GRAPH_PROVIDER: "scip" };
+`,
+    { mode: 0o755 },
+  );
+  env = {
+    ...process.env,
+    PATH: `${join(dir, "bin")}:${process.env.PATH}`,
+    CRW_DATA_DIR: join(dir, "writable data"),
+    CRW_INDEXER_HOME: "",
+    GRAPH_PROVIDER: "scip",
+  };
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
-const run = (...args: string[]) => execFileSync(process.execPath, [launcher, ...args], { env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+const run = (...args: string[]) =>
+  execFileSync(process.execPath, [launcher, ...args], { env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 
 describe("portable plugin launcher", () => {
   it("bootstraps without a hook, preserves JSON stdout and reuses the installation", () => {
@@ -41,7 +58,10 @@ describe("portable plugin launcher", () => {
   });
 
   it("reports an install failure and retries successfully on the next invocation", () => {
-    const failed = spawnSync(process.execPath, [launcher, "serve"], { env: { ...env, CRW_TEST_FAIL: "1" }, encoding: "utf8" });
+    const failed = spawnSync(process.execPath, [launcher, "serve"], {
+      env: { ...env, CRW_TEST_FAIL: "1" },
+      encoding: "utf8",
+    });
     expect(failed.status).toBe(1);
     expect(failed.stderr).toContain("retry the same command");
     expect(existsSync(join(env.CRW_DATA_DIR!, ".indexers-ready"))).toBe(false);
@@ -56,7 +76,10 @@ describe("portable plugin launcher", () => {
   });
 
   it("keeps the --setup hook best-effort: a failed install warns but exits 0", () => {
-    const failed = spawnSync(process.execPath, [launcher, "--setup"], { env: { ...env, CRW_TEST_FAIL: "1" }, encoding: "utf8" });
+    const failed = spawnSync(process.execPath, [launcher, "--setup"], {
+      env: { ...env, CRW_TEST_FAIL: "1" },
+      encoding: "utf8",
+    });
     expect(failed.status).toBe(0);
     expect(failed.stderr).toContain("retry");
     expect(existsSync(join(env.CRW_DATA_DIR!, ".indexers-ready"))).toBe(false);
@@ -72,7 +95,12 @@ describe("portable plugin launcher", () => {
   });
 
   it("uses Codex's plugin data directory when no explicit override was supplied", () => {
-    env = { ...env, CRW_DATA_DIR: "", PLUGIN_DATA: join(dir, "codex data"), CLAUDE_PLUGIN_DATA: join(dir, "claude data") };
+    env = {
+      ...env,
+      CRW_DATA_DIR: "",
+      PLUGIN_DATA: join(dir, "codex data"),
+      CLAUDE_PLUGIN_DATA: join(dir, "claude data"),
+    };
     expect(JSON.parse(run("serve")).data).toBe(env.PLUGIN_DATA);
   });
 

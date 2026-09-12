@@ -34,11 +34,9 @@ export function matchGlob(path: string, glob: string): boolean {
  */
 export function resolveOrphanFiles(
   units: PlanUnitInput[],
-  orphanNodes: { stableId: string; file: string }[]
+  orphanNodes: { stableId: string; file: string }[],
 ): { units: PlanUnitInput[]; emptyUnits: string[] } {
-  const claimed = new Set<string>(
-    units.flatMap((u) => (u.kind === "orphans" ? u.orphanStableIds ?? [] : []))
-  );
+  const claimed = new Set<string>(units.flatMap((u) => (u.kind === "orphans" ? (u.orphanStableIds ?? []) : [])));
   const emptyUnits: string[] = [];
   const resolved = units.map((u) => {
     if (u.kind !== "orphans" || !u.orphanFiles?.length) return u;

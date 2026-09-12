@@ -13,7 +13,9 @@ class FakeProvider extends ScipGraphProvider {
   key = "k1";
   pending: Array<(g: BuiltGraph) => void> = [];
   deferred = false;
-  protected override repoStateKey(): string { return this.key; }
+  protected override repoStateKey(): string {
+    return this.key;
+  }
   protected override indexAndBuild(): Promise<BuiltGraph> {
     this.builds++;
     if (!this.deferred) return Promise.resolve(EMPTY);
@@ -21,7 +23,9 @@ class FakeProvider extends ScipGraphProvider {
   }
 }
 
-afterEach(() => { delete process.env.SCIP_NO_CACHE; });
+afterEach(() => {
+  delete process.env.SCIP_NO_CACHE;
+});
 
 describe("ScipGraphProvider cache", () => {
   it("indexes once for repeated calls with the same key", async () => {
@@ -63,7 +67,10 @@ describe("ScipGraphProvider cache", () => {
       failFirst = true;
       protected override indexAndBuild(): Promise<BuiltGraph> {
         this.builds++;
-        if (this.failFirst) { this.failFirst = false; return Promise.reject(new Error("indexer died")); }
+        if (this.failFirst) {
+          this.failFirst = false;
+          return Promise.reject(new Error("indexer died"));
+        }
         return Promise.resolve(EMPTY);
       }
     }
@@ -100,8 +107,12 @@ describe("per-job cache", () => {
     }
     // Whole-repo key = both subtree keys, so any edit invalidates the outer
     // cache (like the real repoFingerprint) while job caches stay per-root.
-    protected override repoStateKey(): string { return JSON.stringify(this.state); }
-    protected override jobStateKey(job: IndexerJob): string { return this.state[job.language]; }
+    protected override repoStateKey(): string {
+      return JSON.stringify(this.state);
+    }
+    protected override jobStateKey(job: IndexerJob): string {
+      return this.state[job.language];
+    }
     protected override runIndexer(job: IndexerJob): Promise<ScipDocument[]> {
       this.ran.push(`${job.language}:${job.root}`);
       if (this.failPy && job.language === "py") return Promise.reject(new Error("py indexer died"));
@@ -145,9 +156,13 @@ describe("per-job cache", () => {
 describe("discoverJobs filtering", () => {
   class JobsProbe extends ScipGraphProvider {
     jobs: IndexerJob[] = [];
-    publicJobs(): IndexerJob[] { return this.discoverJobs(); }
+    publicJobs(): IndexerJob[] {
+      return this.discoverJobs();
+    }
   }
-  afterEach(() => { delete process.env.SCIP_LANGS; });
+  afterEach(() => {
+    delete process.env.SCIP_LANGS;
+  });
 
   it("SCIP_LANGS filters enabled languages", () => {
     process.env.SCIP_LANGS = "py";
@@ -198,12 +213,24 @@ describe("getFlows entry selection", () => {
       ["leaf", raw("leaf", "src/leaf.ts")],
       ["test", raw("testEntry", "src/entry.test.ts", true)],
     ]),
-    callAdj: new Map([["test", ["entry"]], ["entry", ["mid"]], ["mid", ["leaf"]]]),
-    callRev: new Map([["entry", ["test"]], ["mid", ["entry"]], ["leaf", ["mid"]]]),
+    callAdj: new Map([
+      ["test", ["entry"]],
+      ["entry", ["mid"]],
+      ["mid", ["leaf"]],
+    ]),
+    callRev: new Map([
+      ["entry", ["test"]],
+      ["mid", ["entry"]],
+      ["leaf", ["mid"]],
+    ]),
   };
   class GraphStub extends ScipGraphProvider {
-    protected override repoStateKey(): string { return "k"; }
-    protected override indexAndBuild(): Promise<BuiltGraph> { return Promise.resolve(FLOW_GRAPH); }
+    protected override repoStateKey(): string {
+      return "k";
+    }
+    protected override indexAndBuild(): Promise<BuiltGraph> {
+      return Promise.resolve(FLOW_GRAPH);
+    }
   }
 
   it("a production function whose only caller is a test still heads a flow", async () => {
@@ -219,7 +246,9 @@ describe("getFlows entry selection", () => {
 });
 
 class KeyProbe extends ScipGraphProvider {
-  publicKey(): string { return this.repoStateKey(); }
+  publicKey(): string {
+    return this.repoStateKey();
+  }
 }
 
 describe("repoStateKey", () => {

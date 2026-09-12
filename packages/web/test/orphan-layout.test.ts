@@ -4,10 +4,18 @@ import type { Node } from "../src/api/client.js";
 
 function node(stableId: string, file: string, residualKind: Node["residualKind"] = null): Node {
   return {
-    id: `id-${stableId}`, sessionId: "s1", stableId,
-    label: stableId, file, startLine: 1, endLine: 10,
-    changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null,
-    isTest: false, residualKind,
+    id: `id-${stableId}`,
+    sessionId: "s1",
+    stableId,
+    label: stableId,
+    file,
+    startLine: 1,
+    endLine: 10,
+    changeStatus: "changed",
+    reviewStatus: "unreviewed",
+    reviewedInUnit: null,
+    isTest: false,
+    residualKind,
   };
 }
 
@@ -39,15 +47,10 @@ describe("buildOrphanLayout", () => {
       node("file-residual:src/admin/admin.guard.ts", "src/admin/admin.guard.ts", "module-scope"),
       node("fn:canActivate", "src/admin/admin.guard.ts"),
     ];
-    const layout = buildOrphanLayout(
-      ["file-residual:src/admin/admin.guard.ts", "fn:canActivate"],
-      byStable(nodes)
-    );
+    const layout = buildOrphanLayout(["file-residual:src/admin/admin.guard.ts", "fn:canActivate"], byStable(nodes));
     expect(layout[0].entries).toHaveLength(1);
     expect(layout[0].entries[0].node.stableId).toBe("fn:canActivate");
-    expect(layout[0].entries[0].nested.map((n) => n.stableId)).toEqual([
-      "file-residual:src/admin/admin.guard.ts",
-    ]);
+    expect(layout[0].entries[0].nested.map((n) => n.stableId)).toEqual(["file-residual:src/admin/admin.guard.ts"]);
   });
 
   it("keeps a residual top-level when no function node shares its file", () => {
@@ -72,7 +75,9 @@ describe("orphanWalkIds", () => {
       node("res:cfg", "conf/x.yml", "whole-file"),
     ];
     expect(orphanWalkIds(["file-residual:src/a.ts", "fn:a", "res:cfg"], byStable(nodes))).toEqual([
-      "fn:a", "file-residual:src/a.ts", "res:cfg",
+      "fn:a",
+      "file-residual:src/a.ts",
+      "res:cfg",
     ]);
   });
 

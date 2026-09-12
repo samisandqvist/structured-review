@@ -1,6 +1,12 @@
 // Derivation passes for plan-time attachments (attach.ts).
 import { describe, it, expect } from "vitest";
-import { deriveAttachments, countedAttachmentIds, orphanWalkIds, type AttachNode, type TestEdge } from "../src/attach.js";
+import {
+  deriveAttachments,
+  countedAttachmentIds,
+  orphanWalkIds,
+  type AttachNode,
+  type TestEdge,
+} from "../src/attach.js";
 import type { PlanUnitInput } from "../src/coverage.js";
 import type { Flow, FlowStep } from "../src/graph/provider.js";
 
@@ -26,7 +32,11 @@ function req(edges: [string, string, boolean?][]): Map<string, Map<string, { has
 }
 
 const flowUnit = (entry: string, label = entry): PlanUnitInput => ({ kind: "flow", flowEntryStableId: entry, label });
-const orphanUnit = (ids: string[], label = "orphans"): PlanUnitInput => ({ kind: "orphans", orphanStableIds: ids, label });
+const orphanUnit = (ids: string[], label = "orphans"): PlanUnitInput => ({
+  kind: "orphans",
+  orphanStableIds: ids,
+  label,
+});
 
 describe("deriveAttachments — tested-by", () => {
   it("nests a changed test under the first exercised covered node in walk order", () => {
@@ -131,7 +141,10 @@ describe("deriveAttachments — test imports (pass 4)", () => {
     ]);
     const attached = deriveAttachments(
       [orphanUnit(["schema"], "Database schema"), flowUnit("svc")],
-      flows, nodes, [], requires
+      flows,
+      nodes,
+      [],
+      requires,
     );
     expect(attached[0]).toEqual([]);
     expect(attached[1]).toEqual([{ stableId: "spec", parentStableId: "svc", reason: "tested-by", counted: true }]);
@@ -149,12 +162,14 @@ describe("deriveAttachments — test imports (pass 4)", () => {
         node("t", { isTest: true, file: testFile }),
       ];
       const flows = [flow(1, ["subject"])];
-      const requires = req([[testFile, "src/hub.py"], [testFile, subjectFile]]);
-      const attached = deriveAttachments(
-        [orphanUnit(["hub"]), flowUnit("subject")],
-        flows, nodes, [], requires
-      );
-      expect(attached[1], testFile).toEqual([{ stableId: "t", parentStableId: "subject", reason: "tested-by", counted: true }]);
+      const requires = req([
+        [testFile, "src/hub.py"],
+        [testFile, subjectFile],
+      ]);
+      const attached = deriveAttachments([orphanUnit(["hub"]), flowUnit("subject")], flows, nodes, [], requires);
+      expect(attached[1], testFile).toEqual([
+        { stableId: "t", parentStableId: "subject", reason: "tested-by", counted: true },
+      ]);
     }
   });
 
@@ -165,7 +180,10 @@ describe("deriveAttachments — test imports (pass 4)", () => {
       node("t", { isTest: true, file: "src/misc.spec.ts" }),
     ];
     const flows = [flow(1, ["a", "b"])];
-    const requires = req([["src/misc.spec.ts", "src/a.ts"], ["src/misc.spec.ts", "src/b.ts"]]);
+    const requires = req([
+      ["src/misc.spec.ts", "src/a.ts"],
+      ["src/misc.spec.ts", "src/b.ts"],
+    ]);
     const [attached] = deriveAttachments([flowUnit("a")], flows, nodes, [], requires);
     expect(attached).toEqual([{ stableId: "t", parentStableId: "a", reason: "tested-by", counted: true }]);
   });
@@ -258,7 +276,8 @@ describe("orphanWalkIds", () => {
       node("fn:helper", { file: "helper.ts" }),
     ];
     expect(orphanWalkIds(["file-residual:helper.ts", "fn:helper"], byStable(nodes))).toEqual([
-      "fn:helper", "file-residual:helper.ts",
+      "fn:helper",
+      "file-residual:helper.ts",
     ]);
   });
 
@@ -268,9 +287,7 @@ describe("orphanWalkIds", () => {
       node("fn:svc", { file: "src/db/service.ts" }),
       node("res:b", { file: "drizzle/0002.sql", residualKind: "whole-file" }),
     ];
-    expect(orphanWalkIds(["res:a", "fn:svc", "res:b"], byStable(nodes))).toEqual([
-      "res:a", "res:b", "fn:svc",
-    ]);
+    expect(orphanWalkIds(["res:a", "fn:svc", "res:b"], byStable(nodes))).toEqual(["res:a", "res:b", "fn:svc"]);
   });
 });
 

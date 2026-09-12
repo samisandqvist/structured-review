@@ -16,7 +16,12 @@ export function SessionNotes({ sessionId }: { sessionId: string }) {
     if (!text.trim()) return;
     createComment.mutate(
       { nodeId: null, text: text.trim() },
-      { onSuccess: () => { setText(""); setComposing(false); } }
+      {
+        onSuccess: () => {
+          setText("");
+          setComposing(false);
+        },
+      },
     );
   };
 
@@ -55,7 +60,10 @@ export function SessionNotes({ sessionId }: { sessionId: string }) {
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSubmit();
-              if (e.key === "Escape") { setText(""); setComposing(false); }
+              if (e.key === "Escape") {
+                setText("");
+                setComposing(false);
+              }
             }}
             placeholder="Review-wide note — e.g. missing tests, architectural concern…  (⌘↵ to send)"
             style={{ flex: 1, minHeight: 48, fontSize: 15, padding: "8px 10px" }}

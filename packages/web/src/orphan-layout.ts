@@ -23,20 +23,13 @@ function dirOf(file: string): string {
   return i === -1 ? "" : file.slice(0, i);
 }
 
-export function buildOrphanLayout(
-  memberStableIds: string[],
-  nodeByStable: Map<string, Node>
-): OrphanGroup[] {
-  const members = memberStableIds
-    .map((id) => nodeByStable.get(id))
-    .filter((n): n is Node => !!n);
+export function buildOrphanLayout(memberStableIds: string[], nodeByStable: Map<string, Node>): OrphanGroup[] {
+  const members = memberStableIds.map((id) => nodeByStable.get(id)).filter((n): n is Node => !!n);
 
   const nestedByParent = new Map<string, Node[]>();
   const topLevel: Node[] = [];
   for (const m of members) {
-    const parent = m.residualKind
-      ? members.find((o) => !o.residualKind && o.file === m.file)
-      : undefined;
+    const parent = m.residualKind ? members.find((o) => !o.residualKind && o.file === m.file) : undefined;
     if (parent) {
       const list = nestedByParent.get(parent.stableId) ?? [];
       list.push(m);
@@ -61,9 +54,7 @@ export function buildOrphanLayout(
 
 /** The layout flattened to stableIds — the orphan-unit walk order. */
 export function orphanWalkIds(memberStableIds: string[], nodeByStable: Map<string, Node>): string[] {
-  const known = new Set(
-    memberStableIds.filter((id) => nodeByStable.has(id))
-  );
+  const known = new Set(memberStableIds.filter((id) => nodeByStable.has(id)));
   const out: string[] = [];
   for (const g of buildOrphanLayout(memberStableIds, nodeByStable)) {
     for (const e of g.entries) {

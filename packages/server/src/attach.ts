@@ -35,9 +35,7 @@ export function orphanWalkIds(memberIds: string[], byStable: Map<string, AttachN
   const nestedByParent = new Map<string, string[]>();
   const topLevel: AttachNode[] = [];
   for (const m of members) {
-    const parent = m.residualKind
-      ? members.find((o) => !o.residualKind && o.file === m.file)
-      : undefined;
+    const parent = m.residualKind ? members.find((o) => !o.residualKind && o.file === m.file) : undefined;
     if (parent) {
       const list = nestedByParent.get(parent.stableId) ?? [];
       list.push(m.stableId);
@@ -65,7 +63,7 @@ function walkPositions(
   units: PlanUnitInput[],
   flows: Flow[],
   changed: Set<string>,
-  byStable: Map<string, AttachNode>
+  byStable: Map<string, AttachNode>,
 ): Map<string, WalkPos> {
   const flowByEntry = new Map(flows.map((f) => [f.steps[0]?.stableId ?? "", f]));
   const walk = new Map<string, WalkPos>();
@@ -97,7 +95,7 @@ export function deriveAttachments(
   flows: Flow[],
   nodes: AttachNode[],
   testEdges: TestEdge[],
-  fileRequires: FileRequires
+  fileRequires: FileRequires,
 ): AttachedMember[][] {
   const byStable = new Map(nodes.map((n) => [n.stableId, n]));
   const changed = new Set(nodes.filter((n) => n.changeStatus === "changed").map((n) => n.stableId));
@@ -107,11 +105,19 @@ export function deriveAttachments(
 
   const testsByTest = new Map<string, string[]>();
   for (const e of testEdges) {
-    (testsByTest.get(e.testStableId) ?? testsByTest.set(e.testStableId, []).get(e.testStableId)!).push(e.productionStableId);
+    (testsByTest.get(e.testStableId) ?? testsByTest.set(e.testStableId, []).get(e.testStableId)!).push(
+      e.productionStableId,
+    );
   }
 
   const attached: AttachedMember[][] = units.map(() => []);
-  const attach = (m: AttachedMember) => attached[walk.get(m.parentStableId)!.unitIndex].push(m);
+  const attach = (m: AttachedMember) => {
+    const position = walk.get(m.parentStableId);
+    if (!position) throw new Error(`attachment parent '${m.parentStableId}' is outside the review walk`);
+    const members = attached[position.unitIndex];
+    if (!members) throw new Error(`review walk references missing unit ${position.unitIndex}`);
+    members.push(m);
+  };
 
   const unassigned = [...changed].filter((id) => !covered.has(id)).sort();
   for (const stableId of unassigned) {
@@ -122,7 +128,8 @@ export function deriveAttachments(
     if (node.isTest) {
       const exercised = [...new Set(testsByTest.get(stableId) ?? [])].filter((p) => covered.has(p)).sort(byWalk);
       if (exercised.length > 0) {
-        const parent = exercised[0];
+        const [parent] = exercised;
+        if (!parent) continue;
         attach({ stableId, parentStableId: parent, reason: "tested-by", counted: true });
         const refUnits = new Set<number>();
         for (const other of exercised.slice(1)) {
@@ -139,7 +146,9 @@ export function deriveAttachments(
     // first covered node of their own file.
     const sameFile = [...covered].filter((c) => byStable.get(c)?.file === node.file).sort(byWalk);
     if (sameFile.length > 0) {
-      attach({ stableId, parentStableId: sameFile[0], reason: "same-file", counted: true });
+      const [parentStableId] = sameFile;
+      if (!parentStableId) continue;
+      attach({ stableId, parentStableId, reason: "same-file", counted: true });
       continue;
     }
 
@@ -149,7 +158,9 @@ export function deriveAttachments(
       .filter((c) => fileRequires.get(byStable.get(c)?.file ?? "")?.has(node.file))
       .sort(byWalk);
     if (consumers.length > 0) {
-      attach({ stableId, parentStableId: consumers[0], reason: "required-by", counted: true });
+      const [parentStableId] = consumers;
+      if (!parentStableId) continue;
+      attach({ stableId, parentStableId, reason: "required-by", counted: true });
       continue;
     }
 
@@ -177,7 +188,8 @@ export function deriveAttachments(
         })
         .sort((a, b) => rank(a) - rank(b) || byWalk(a, b));
       if (imported.length > 0) {
-        attach({ stableId, parentStableId: imported[0], reason: "tested-by", counted: true });
+        const [parentStableId] = imported;
+        if (parentStableId) attach({ stableId, parentStableId, reason: "tested-by", counted: true });
       }
     }
   }
@@ -209,5 +221,10 @@ function testNameStems(file: string): Set<string> {
 
 /** Counted attachment stableIds across all units (they count as covered). */
 export function countedAttachmentIds(attached: AttachedMember[][]): Set<string> {
-  return new Set(attached.flat().filter((m) => m.counted).map((m) => m.stableId));
+  return new Set(
+    attached
+      .flat()
+      .filter((m) => m.counted)
+      .map((m) => m.stableId),
+  );
 }

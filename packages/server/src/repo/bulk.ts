@@ -21,7 +21,7 @@ export function bulkUpdateNodeReviewStatus(
   sessionId: string,
   nodeIds: string[],
   status: ReviewStatus,
-  reviewedInUnit?: number
+  reviewedInUnit?: number,
 ): Node[] {
   return db.transaction(() => {
     const missing = nodeIds.filter((id) => {
@@ -30,8 +30,7 @@ export function bulkUpdateNodeReviewStatus(
     });
     if (missing.length > 0) throw new BulkNodeError(missing);
     for (const id of nodeIds) {
-      const effective =
-        status === "reviewed-clean" && nodeHasComments(db, id) ? "reviewed-commented" : status;
+      const effective = status === "reviewed-clean" && nodeHasComments(db, id) ? "reviewed-commented" : status;
       updateNodeReviewStatus(db, id, effective, reviewedInUnit);
     }
     return nodeIds.map((id) => getNode(db, id)!);

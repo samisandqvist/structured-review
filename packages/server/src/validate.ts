@@ -36,22 +36,29 @@ export const planSchema = z
       }
       // Per-unit dedupe first: the legacy singular entry field may repeat the
       // plural one inside a single unit, which flowEntries() already collapses.
-      const ids = u.kind === "flow"
-        ? new Set([...(u.flowEntryStableIds ?? []), ...(u.flowEntryStableId ? [u.flowEntryStableId] : [])])
-        : new Set(u.orphanStableIds ?? []);
+      const ids =
+        u.kind === "flow"
+          ? new Set([...(u.flowEntryStableIds ?? []), ...(u.flowEntryStableId ? [u.flowEntryStableId] : [])])
+          : new Set(u.orphanStableIds ?? []);
       // An orphan unit may be glob-only: globs resolve to members at submit.
-      const globCount = u.kind === "orphans" ? u.orphanFiles?.length ?? 0 : 0;
+      const globCount = u.kind === "orphans" ? (u.orphanFiles?.length ?? 0) : 0;
       if (ids.size === 0 && globCount === 0) {
         ctx.addIssue({
-          code: "custom", path: ["units", i],
-          message: u.kind === "flow"
-            ? "flow unit needs at least one entry stableId"
-            : "orphan unit needs at least one member or file glob",
+          code: "custom",
+          path: ["units", i],
+          message:
+            u.kind === "flow"
+              ? "flow unit needs at least one entry stableId"
+              : "orphan unit needs at least one member or file glob",
         });
       }
       for (const id of ids) {
         if (seen.has(id)) {
-          ctx.addIssue({ code: "custom", path: ["units", i], message: `stableId '${id}' appears in more than one unit` });
+          ctx.addIssue({
+            code: "custom",
+            path: ["units", i],
+            message: `stableId '${id}' appears in more than one unit`,
+          });
         }
         seen.add(id);
       }
@@ -71,10 +78,7 @@ export const nodePatchSchema = z.object({
 });
 
 export const bulkNodeStatusSchema = z.object({
-  nodeIds: z
-    .array(z.string().min(1))
-    .min(1, "nodeIds must be nonempty")
-    .max(500, "too many nodeIds (max 500)"),
+  nodeIds: z.array(z.string().min(1)).min(1, "nodeIds must be nonempty").max(500, "too many nodeIds (max 500)"),
   reviewStatus: z.enum(["unreviewed", "reviewed-clean", "reviewed-commented", "reviewed-elsewhere"]),
   reviewedInUnit: z.number().int().nonnegative().optional(),
 });
@@ -116,10 +120,13 @@ export async function parseBody<S extends z.ZodTypeAny>(c: Context, schema: S): 
   if (!result.success) {
     return {
       ok: false,
-      res: c.json({
-        error: "validation failed",
-        issues: result.error.issues.map((i) => ({ path: i.path.join("."), message: i.message })),
-      }, 400),
+      res: c.json(
+        {
+          error: "validation failed",
+          issues: result.error.issues.map((i) => ({ path: i.path.join("."), message: i.message })),
+        },
+        400,
+      ),
     };
   }
   return { ok: true, data: result.data };

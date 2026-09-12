@@ -1,0 +1,51 @@
+name: Scheduled security
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Monday 03:17 UTC: 06:17 Finnish summer time / 05:17 winter time.
+    - cron: "17 3 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scheduled-security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Install Node.js for security report validation
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+
+      - name: Cache security tool downloads
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            .tools/security/downloads
+            .tools/security/pip-cache
+          key: security-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/security/setup-tools.sh', 'security/semgrep-constraints.txt') }}
+
+      # These scripts need Node and the scanner tools, but no pnpm install,
+      # application build, browser, or indexer toolchains.
+      - name: Install pinned security tools
+        run: bash scripts/security/setup-tools.sh
+
+      - name: Update offline advisory database
+        run: bash scripts/security/update-advisories.sh
+
+      - name: Scan secrets, source, and dependencies
+        run: bash scripts/security/check.sh
+
+      - name: Verify scanner negative probes
+        run: bash scripts/security/probe.sh

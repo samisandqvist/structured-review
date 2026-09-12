@@ -59,11 +59,12 @@ export function readFlows(root: string = repoRoot(), changedStableIds?: Set<stri
     // function called 3× shouldn't appear as 3 identical subtrees. A callee can
     // still appear under several *different* callers.
     const callSets = new Map<string, Set<string>>();
-    for (const e of db
-      .prepare("SELECT source_qualified, target_qualified FROM edges WHERE kind = 'CALLS'")
-      .all() as { source_qualified: string; target_qualified: string }[]) {
+    for (const e of db.prepare("SELECT source_qualified, target_qualified FROM edges WHERE kind = 'CALLS'").all() as {
+      source_qualified: string;
+      target_qualified: string;
+    }[]) {
       (callSets.get(e.source_qualified) ?? callSets.set(e.source_qualified, new Set()).get(e.source_qualified)!).add(
-        e.target_qualified
+        e.target_qualified,
       );
     }
     const callAdj = new Map<string, string[]>();
@@ -74,7 +75,13 @@ export function readFlows(root: string = repoRoot(), changedStableIds?: Set<stri
     const resolve = (qn: string): FlowNodeInfo | undefined => {
       const n = nodeByQn.get(qn);
       return n
-        ? { label: n.name, file: rel(n.file_path), startLine: n.line_start, endLine: n.line_end, isTest: n.is_test === 1 }
+        ? {
+            label: n.name,
+            file: rel(n.file_path),
+            startLine: n.line_start,
+            endLine: n.line_end,
+            isTest: n.is_test === 1,
+          }
         : undefined;
     };
 

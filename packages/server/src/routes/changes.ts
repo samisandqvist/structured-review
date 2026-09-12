@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { AppContext } from "../app.js";
+import type { AppContext } from "../context.js";
 import { getSession } from "../repo/sessions.js";
 import { getNodesBySession } from "../repo/nodes.js";
 import { commitSubjects, fileUnifiedDiff, nodeChangeStats, nodeSignature } from "../diff.js";
@@ -31,11 +31,22 @@ export function createChangesRoute(ctx: AppContext) {
       // namespaces are filtered upstream when building graph nodes).
       const kind = n.stableId.startsWith("file-residual:")
         ? "file"
-        : n.isTest ? "test" : n.stableId.includes("#") ? "method" : "function";
+        : n.isTest
+          ? "test"
+          : n.stableId.includes("#")
+            ? "method"
+            : "function";
       return {
-        stableId: n.stableId, label: n.label, kind,
-        file: n.file, startLine: n.startLine, endLine: n.endLine,
-        status, added, removed, signature: nodeSignature(n.file, n.startLine, ctx.repoRoot),
+        stableId: n.stableId,
+        label: n.label,
+        kind,
+        file: n.file,
+        startLine: n.startLine,
+        endLine: n.endLine,
+        status,
+        added,
+        removed,
+        signature: nodeSignature(n.file, n.startLine, ctx.repoRoot),
       };
     });
     // Subjects of the session's commit range ride along as intent input for

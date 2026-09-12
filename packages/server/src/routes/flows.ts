@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { AppContext } from "../app.js";
+import type { AppContext } from "../context.js";
 import { getNodesBySession } from "../repo/nodes.js";
 
 /**
@@ -25,8 +25,12 @@ export function createFlowsRoute(ctx: AppContext) {
         }
         return {
           stableId: s.stableId,
-          label: s.label, file: s.file, startLine: s.startLine, endLine: s.endLine,
-          isTest: s.isTest, depth: s.depth,
+          label: s.label,
+          file: s.file,
+          startLine: s.startLine,
+          endLine: s.endLine,
+          isTest: s.isTest,
+          depth: s.depth,
           nodeId: node?.id ?? null,
           changeStatus: node?.changeStatus ?? null,
           reviewStatus: node?.reviewStatus ?? null,
@@ -34,8 +38,14 @@ export function createFlowsRoute(ctx: AppContext) {
       });
       const affected = changedStableIds.length > 0;
       return {
-        id: f.id, name: f.name, criticality: f.criticality, depth: f.depth,
-        affected, changedStableIds, entryStableId: f.steps[0]?.stableId ?? "", steps,
+        id: f.id,
+        name: f.name,
+        criticality: f.criticality,
+        depth: f.depth,
+        affected,
+        changedStableIds,
+        entryStableId: f.steps[0]?.stableId ?? "",
+        steps,
         entryReasons: f.entryReasons ?? ["graph-root"],
         entryConfidence: f.entryConfidence ?? 0.4,
       };

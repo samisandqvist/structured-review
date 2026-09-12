@@ -51,7 +51,7 @@ describe("resolveOrphanFiles", () => {
   it("expands globs into orphanStableIds after explicit ids", () => {
     const { units, emptyUnits } = resolveOrphanFiles(
       [{ kind: "orphans", label: "docs", orphanFiles: ["docs/**"] }],
-      orphans
+      orphans,
     );
     expect(units[0].orphanStableIds).toEqual(["d1", "d2"]);
     expect(emptyUnits).toEqual([]);
@@ -60,7 +60,7 @@ describe("resolveOrphanFiles", () => {
   it("keeps explicit ids first and appends glob matches", () => {
     const { units } = resolveOrphanFiles(
       [{ kind: "orphans", label: "mix", orphanStableIds: ["c1"], orphanFiles: ["docs/a.*"] }],
-      orphans
+      orphans,
     );
     expect(units[0].orphanStableIds).toEqual(["c1", "d1"]);
   });
@@ -72,7 +72,7 @@ describe("resolveOrphanFiles", () => {
         { kind: "orphans", label: "docs", orphanFiles: ["docs/**"] },
         { kind: "orphans", label: "rest", orphanFiles: ["**"] },
       ],
-      orphans
+      orphans,
     );
     expect(units[1].orphanStableIds).toEqual(["d1"]);
     expect(units[2].orphanStableIds).toEqual(["c1"]);
@@ -86,10 +86,17 @@ describe("resolveOrphanFiles", () => {
     expect(units[1]).toBe(plain);
   });
 
+  it("leaves an orphan unit with no selector untouched", () => {
+    const empty = { kind: "orphans" as const, label: "empty" };
+    const { units, emptyUnits } = resolveOrphanFiles([empty], orphans);
+    expect(units[0]).toBe(empty);
+    expect(emptyUnits).toEqual([]);
+  });
+
   it("reports units whose globs matched nothing", () => {
     const { emptyUnits } = resolveOrphanFiles(
       [{ kind: "orphans", label: "nope", orphanFiles: ["nothing/**"] }],
-      orphans
+      orphans,
     );
     expect(emptyUnits).toEqual(["nope"]);
   });

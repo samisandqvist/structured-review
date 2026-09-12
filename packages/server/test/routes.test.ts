@@ -35,7 +35,8 @@ afterEach(() => {
 describe("POST /api/sessions", () => {
   it("creates a session and returns it with the change subgraph", async () => {
     const res = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     expect(res.status).toBe(200);
@@ -47,12 +48,14 @@ describe("POST /api/sessions", () => {
 
   it("accepts branch HEAD and the checked-out branch", async () => {
     const resHead = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     expect(resHead.status).toBe(200);
     const resMain = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "main", baseRef: "main" }),
     });
     expect(resMain.status).toBe(200);
@@ -60,7 +63,8 @@ describe("POST /api/sessions", () => {
 
   it("accepts the empty tree as baseRef (whole-repo review)", async () => {
     const res = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "4b825dc642cb6eb9a060e54bf8d69288fbee4904" }),
     });
     expect(res.status).toBe(200);
@@ -68,7 +72,8 @@ describe("POST /api/sessions", () => {
 
   it("rejects a branch that is not checked out", async () => {
     const res = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "some-other-branch", baseRef: "HEAD" }),
     });
     expect(res.status).toBe(400);
@@ -83,7 +88,8 @@ describe("POST /api/sessions", () => {
     const badApp = createApp({ db, graphProvider: new StubGraphProvider(), repoRoot: badRoot });
     try {
       const res = await badApp.request("/api/sessions", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
       });
       expect(res.status).toBe(400);
@@ -97,7 +103,8 @@ describe("POST /api/sessions", () => {
 
   it("fails with 400 for an unresolvable baseRef", async () => {
     const res = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "does-not-exist" }),
     });
     expect(res.status).toBe(400);
@@ -117,7 +124,8 @@ describe("POST /api/sessions", () => {
     }
     const app2 = createApp({ db, graphProvider: new GitBreakingStub(), repoRoot: fixtureRoot });
     const res = await app2.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     expect(res.status).toBe(400);
@@ -136,7 +144,8 @@ describe("POST /api/sessions", () => {
     }
     const app2 = createApp({ db, graphProvider: new IndexBreakingStub(), repoRoot: fixtureRoot });
     const res = await app2.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     expect(res.status).toBe(400);
@@ -153,7 +162,8 @@ describe("POST /api/sessions", () => {
     stub.getIndexWarnings = async () => [warning];
     const warnApp = createApp({ db, graphProvider: stub, repoRoot: fixtureRoot });
     const cr = await warnApp.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     expect(cr.status).toBe(200);
@@ -166,7 +176,8 @@ describe("POST /api/sessions", () => {
 
   it("returns empty index warnings when the provider reports none", async () => {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
@@ -177,7 +188,8 @@ describe("POST /api/sessions", () => {
 describe("GET /api/sessions/:id", () => {
   it("returns session with units", async () => {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
@@ -198,7 +210,8 @@ describe("GET /api/sessions (list)", () => {
     const empty = await (await app.request("/api/sessions")).json();
     expect(empty.sessions).toEqual([]);
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
@@ -210,14 +223,16 @@ describe("GET /api/sessions (list)", () => {
 describe("DELETE /api/sessions/:id", () => {
   it("deletes the session and cascades its nodes and comments", async () => {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     const { nodes } = await (await app.request(`/api/sessions/${session.id}/nodes`)).json();
     expect(nodes.length).toBeGreaterThan(0);
     await app.request(`/api/sessions/${session.id}/comments`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ nodeId: nodes[0].id, text: "gone soon" }),
     });
 
@@ -226,9 +241,13 @@ describe("DELETE /api/sessions/:id", () => {
     expect((await del.json()).deleted).toBe(session.id);
 
     expect((await app.request(`/api/sessions/${session.id}`)).status).toBe(404);
-    const orphanRows = db.prepare("SELECT COUNT(*) AS c FROM nodes WHERE session_id = ?").get(session.id) as { c: number };
+    const orphanRows = db.prepare("SELECT COUNT(*) AS c FROM nodes WHERE session_id = ?").get(session.id) as {
+      c: number;
+    };
     expect(orphanRows.c).toBe(0);
-    const commentRows = db.prepare("SELECT COUNT(*) AS c FROM comments WHERE session_id = ?").get(session.id) as { c: number };
+    const commentRows = db.prepare("SELECT COUNT(*) AS c FROM comments WHERE session_id = ?").get(session.id) as {
+      c: number;
+    };
     expect(commentRows.c).toBe(0);
   });
 
@@ -247,8 +266,12 @@ describe("POST /api/shutdown", () => {
   it("responds ok and invokes the handler when wired", async () => {
     let called = false;
     const stoppable = createApp({
-      db, graphProvider: new StubGraphProvider(), repoRoot: fixtureRoot,
-      onShutdown: () => { called = true; },
+      db,
+      graphProvider: new StubGraphProvider(),
+      repoRoot: fixtureRoot,
+      onShutdown: () => {
+        called = true;
+      },
     });
     const res = await stoppable.request("/api/shutdown", { method: "POST" });
     expect(res.status).toBe(200);
@@ -261,12 +284,14 @@ describe("POST /api/shutdown", () => {
 describe("PUT /api/sessions/:id/plan", () => {
   it("replaces the plan with kind-tagged units", async () => {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     const res = await app.request(`/api/sessions/${session.id}/plan`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         units: [
           { kind: "flow", flowEntryStableId: "fn:handleOrder", label: "Order handling", rationale: "the order path" },
@@ -285,12 +310,14 @@ describe("PUT /api/sessions/:id/plan", () => {
 
   it("stores multi-entry flow-units with deduped members", async () => {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     const res = await app.request(`/api/sessions/${session.id}/plan`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         units: [{ kind: "flow", flowEntryStableIds: ["fn:a", "fn:b", "fn:a"], label: "merged" }],
       }),
@@ -301,14 +328,16 @@ describe("PUT /api/sessions/:id/plan", () => {
 
   it("stores a trimmed overview, returns it, and clears it on resubmit without one", async () => {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     const units = [{ kind: "flow", flowEntryStableId: "fn:handleOrder", label: "Order handling" }];
 
     const res = await app.request(`/api/sessions/${session.id}/plan`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ overview: "  Adds Redis rate limiting; units 1-2 are the config foundation.  ", units }),
     });
     expect(res.status).toBe(200);
@@ -318,7 +347,8 @@ describe("PUT /api/sessions/:id/plan", () => {
     expect(info.session.overview).toBe("Adds Redis rate limiting; units 1-2 are the config foundation.");
 
     const res2 = await app.request(`/api/sessions/${session.id}/plan`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ units }),
     });
     expect((await res2.json()).overview).toBe("");
@@ -330,7 +360,8 @@ describe("PUT /api/sessions/:id/plan", () => {
 describe("GET /api/sessions/:id/nodes", () => {
   it("lists all nodes in a session", async () => {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
@@ -343,14 +374,16 @@ describe("GET /api/sessions/:id/nodes", () => {
 describe("PATCH /api/sessions/:id/nodes/:nodeId", () => {
   it("updates node review status", async () => {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     const nr = await app.request(`/api/sessions/${session.id}/nodes`);
     const { nodes } = await nr.json();
     const res = await app.request(`/api/sessions/${session.id}/nodes/${nodes[0].id}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ reviewStatus: "reviewed-clean", reviewedInUnit: 0 }),
     });
     expect(res.status).toBe(200);
@@ -359,7 +392,8 @@ describe("PATCH /api/sessions/:id/nodes/:nodeId", () => {
 
   it("normalizes reviewed-clean to reviewed-commented when the node has comments", async () => {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
@@ -368,11 +402,13 @@ describe("PATCH /api/sessions/:id/nodes/:nodeId", () => {
     const { nodes } = await nr.json();
     const nid = nodes[0].id;
     await app.request(`/api/sessions/${sid}/comments`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ nodeId: nid, text: "this looks wrong" }),
     });
     const res = await app.request(`/api/sessions/${sid}/nodes/${nid}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ reviewStatus: "reviewed-clean" }),
     });
     const { node } = await res.json();
@@ -383,7 +419,8 @@ describe("PATCH /api/sessions/:id/nodes/:nodeId", () => {
 describe("bulk node status", () => {
   async function makeSessionWithTwoNodes() {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
@@ -433,14 +470,16 @@ describe("bulk node status", () => {
 describe("POST /api/sessions/:id/comments", () => {
   it("creates a comment on a node", async () => {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     const nr = await app.request(`/api/sessions/${session.id}/nodes`);
     const { nodes } = await nr.json();
     const res = await app.request(`/api/sessions/${session.id}/comments`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ nodeId: nodes[0].id, text: "this looks wrong" }),
     });
     expect(res.status).toBe(200);
@@ -455,12 +494,14 @@ describe("POST /api/sessions/:id/comments", () => {
 
   it("rejects a comment for a node from another session", async () => {
     const crA = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session: sessionA } = await crA.json();
     const crB = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session: sessionB } = await crB.json();
@@ -478,14 +519,16 @@ describe("POST /api/sessions/:id/comments", () => {
 describe("GET /api/sessions/:id/comments", () => {
   it("lists comments in a session", async () => {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     const nr = await app.request(`/api/sessions/${session.id}/nodes`);
     const { nodes } = await nr.json();
     await app.request(`/api/sessions/${session.id}/comments`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ nodeId: nodes[0].id, text: "comment 1" }),
     });
     const res = await app.request(`/api/sessions/${session.id}/comments`);
@@ -497,7 +540,8 @@ describe("GET /api/sessions/:id/comments", () => {
 describe("session-wide comments", () => {
   async function makeSession() {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     return (await cr.json()).session;
@@ -506,7 +550,8 @@ describe("session-wide comments", () => {
   it("creates a comment with no nodeId and lists it with nodeId null", async () => {
     const session = await makeSession();
     const res = await app.request(`/api/sessions/${session.id}/comments`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: "missing tests for the retry path" }),
     });
     expect(res.status).toBe(200);
@@ -520,7 +565,8 @@ describe("session-wide comments", () => {
   it("rejects an anchor without a nodeId", async () => {
     const session = await makeSession();
     const res = await app.request(`/api/sessions/${session.id}/comments`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         text: "anchored to nothing",
         anchor: { startLine: 1, startSide: "new", endLine: 1, endSide: "new" },
@@ -533,11 +579,13 @@ describe("session-wide comments", () => {
     const session = await makeSession();
     const { nodes } = await (await app.request(`/api/sessions/${session.id}/nodes`)).json();
     await app.request(`/api/sessions/${session.id}/comments`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ nodeId: nodes[0].id, text: "inline" }),
     });
     await app.request(`/api/sessions/${session.id}/comments`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: "review-wide" }),
     });
     const exported = await (await app.request(`/api/sessions/${session.id}/export`)).json();
@@ -555,14 +603,16 @@ describe("session-wide comments", () => {
 describe("coverage reconciliation", () => {
   it("attaches same-file leftovers to their covered sibling and reports them covered", async () => {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     // Stub flows = []; fn:validateOrder is unassigned but shares src/orders.ts
     // with the covered fn:handleOrder, so it attaches instead of sweeping.
     const res = await app.request(`/api/sessions/${session.id}/plan`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ units: [{ kind: "orphans", orphanStableIds: ["fn:handleOrder"], label: "Orders" }] }),
     });
     const body = await res.json();
@@ -578,12 +628,14 @@ describe("coverage reconciliation", () => {
 
   it("resolves orphanFiles globs into unit members at submit", async () => {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     const res = await app.request(`/api/sessions/${session.id}/plan`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ units: [{ kind: "orphans", label: "everything", orphanFiles: ["src/**"] }] }),
     });
     expect(res.status).toBe(200);
@@ -595,12 +647,14 @@ describe("coverage reconciliation", () => {
 
   it("400s when a glob-only unit matches nothing", async () => {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     const res = await app.request(`/api/sessions/${session.id}/plan`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ units: [{ kind: "orphans", label: "nope", orphanFiles: ["no/such/dir/**"] }] }),
     });
     expect(res.status).toBe(400);
@@ -609,12 +663,14 @@ describe("coverage reconciliation", () => {
 
   it("rejects an orphan unit with neither ids nor globs", async () => {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     const res = await app.request(`/api/sessions/${session.id}/plan`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ units: [{ kind: "orphans", label: "empty" }] }),
     });
     expect(res.status).toBe(400);
@@ -628,22 +684,32 @@ describe("coverage reconciliation", () => {
         const sg = await super.getChangeSubgraph(branch, baseRef);
         return {
           ...sg,
-          nodes: [...sg.nodes, {
-            stableId: "fn:lonely", label: "lonely", file: "src/lonely.ts",
-            startLine: 1, endLine: 5, isEntryPoint: false,
-            changeStatus: "changed" as const, isTest: false,
-          }],
+          nodes: [
+            ...sg.nodes,
+            {
+              stableId: "fn:lonely",
+              label: "lonely",
+              file: "src/lonely.ts",
+              startLine: 1,
+              endLine: 5,
+              isEntryPoint: false,
+              changeStatus: "changed" as const,
+              isTest: false,
+            },
+          ],
         };
       }
     }
     const lonelyApp = createApp({ db, graphProvider: new LonelyStub(), repoRoot: fixtureRoot });
     const cr = await lonelyApp.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     const res = await lonelyApp.request(`/api/sessions/${session.id}/plan`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ units: [{ kind: "orphans", orphanStableIds: ["fn:handleOrder"], label: "Orders" }] }),
     });
     const body = await res.json();
@@ -653,19 +719,19 @@ describe("coverage reconciliation", () => {
     expect(auto.memberStableIds).toEqual(["fn:lonely"]);
     // The response names the leftovers so a planner can assign them without
     // re-fetching the session and digging into the auto unit.
-    expect(body.unassigned).toEqual([
-      { stableId: "fn:lonely", label: "lonely", file: "src/lonely.ts" },
-    ]);
+    expect(body.unassigned).toEqual([{ stableId: "fn:lonely", label: "lonely", file: "src/lonely.ts" }]);
   });
 
   it("reports an empty unassigned list when everything is covered", async () => {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     const res = await app.request(`/api/sessions/${session.id}/plan`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ units: [{ kind: "orphans", orphanStableIds: ["fn:handleOrder"], label: "Orders" }] }),
     });
     expect((await res.json()).unassigned).toEqual([]);
@@ -675,7 +741,8 @@ describe("coverage reconciliation", () => {
 describe("GET /api/sessions/:id/export", () => {
   it("exports comments as an ordered array with derived structural context", async () => {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
@@ -683,7 +750,8 @@ describe("GET /api/sessions/:id/export", () => {
     const { nodes } = await nr.json();
     const handleOrder = nodes.find((n: any) => n.stableId === "fn:handleOrder");
     await app.request(`/api/sessions/${session.id}/comments`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ nodeId: handleOrder.id, text: "fix this" }),
     });
     const res = await app.request(`/api/sessions/${session.id}/export`);
@@ -696,13 +764,14 @@ describe("GET /api/sessions/:id/export", () => {
     expect(body.comments[0].endLine).toBe(30);
     // StubGraphProvider wires fn:handleOrder -> fn:validateOrder, fn:saveOrder.
     expect(body.comments[0].structuralContext).toBe(
-      "calls: validateOrder (src/orders.ts:35), saveOrder (src/db.ts:100)"
+      "calls: validateOrder (src/orders.ts:35), saveOrder (src/db.ts:100)",
     );
   });
 
   it("includes the session's git anchors", async () => {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
@@ -716,18 +785,21 @@ describe("GET /api/sessions/:id/export", () => {
 
   it("preserves multiple comments on the same node in creation order", async () => {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     const nr = await app.request(`/api/sessions/${session.id}/nodes`);
     const { nodes } = await nr.json();
     await app.request(`/api/sessions/${session.id}/comments`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ nodeId: nodes[0].id, text: "first" }),
     });
     await app.request(`/api/sessions/${session.id}/comments`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ nodeId: nodes[0].id, text: "second" }),
     });
     const res = await app.request(`/api/sessions/${session.id}/export`);
@@ -739,20 +811,24 @@ describe("GET /api/sessions/:id/export", () => {
 
   it("export includes the session overview, empty string when unset", async () => {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     expect((await (await app.request(`/api/sessions/${session.id}/export`)).json()).overview).toBe("");
 
     await app.request(`/api/sessions/${session.id}/plan`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         overview: "One-line narrative.",
         units: [{ kind: "flow", flowEntryStableId: "fn:handleOrder", label: "Order handling" }],
       }),
     });
-    expect((await (await app.request(`/api/sessions/${session.id}/export`)).json()).overview).toBe("One-line narrative.");
+    expect((await (await app.request(`/api/sessions/${session.id}/export`)).json()).overview).toBe(
+      "One-line narrative.",
+    );
   });
 });
 
@@ -762,10 +838,11 @@ describe("GET /api/sessions/:id/nodes/:nodeId/context", () => {
     mkdirSync(join(fixtureRoot, "src"), { recursive: true });
     writeFileSync(
       join(fixtureRoot, "src", "orders.ts"),
-      Array.from({ length: 40 }, (_, i) => `line${i + 1}`).join("\n") + "\n"
+      Array.from({ length: 40 }, (_, i) => `line${i + 1}`).join("\n") + "\n",
     );
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
@@ -800,7 +877,8 @@ describe("GET /api/sessions/:id/nodes/:nodeId/context", () => {
 describe("GET /api/sessions/:id/flows", () => {
   it("returns flows and the orphan set (changed nodes in no flow)", async () => {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
@@ -815,14 +893,43 @@ describe("GET /api/sessions/:id/flows", () => {
 
 class FlowStub extends StubGraphProvider {
   override async getFlows(): Promise<Flow[]> {
-    return [{
-      id: 1, name: "handleOrder", criticality: 1, depth: 1,
-      steps: [
-        { stableId: "fn:handleOrder", label: "handleOrder", file: "src/orders.ts", startLine: 10, endLine: 30, isTest: false, depth: 0 },
-        { stableId: "fn:validateOrder", label: "validateOrder", file: "src/orders.ts", startLine: 35, endLine: 50, isTest: false, depth: 1 },
-        { stableId: "fn:saveOrder", label: "saveOrder", file: "src/db.ts", startLine: 100, endLine: 120, isTest: false, depth: 1 },
-      ],
-    }];
+    return [
+      {
+        id: 1,
+        name: "handleOrder",
+        criticality: 1,
+        depth: 1,
+        steps: [
+          {
+            stableId: "fn:handleOrder",
+            label: "handleOrder",
+            file: "src/orders.ts",
+            startLine: 10,
+            endLine: 30,
+            isTest: false,
+            depth: 0,
+          },
+          {
+            stableId: "fn:validateOrder",
+            label: "validateOrder",
+            file: "src/orders.ts",
+            startLine: 35,
+            endLine: 50,
+            isTest: false,
+            depth: 1,
+          },
+          {
+            stableId: "fn:saveOrder",
+            label: "saveOrder",
+            file: "src/db.ts",
+            startLine: 100,
+            endLine: 120,
+            isTest: false,
+            depth: 1,
+          },
+        ],
+      },
+    ];
   }
 }
 
@@ -830,7 +937,8 @@ describe("flows route step identity", () => {
   it("exposes stableId per step and changedStableIds per flow", async () => {
     const app2 = createApp({ db, graphProvider: new FlowStub(), repoRoot: fixtureRoot });
     const cr = await app2.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
@@ -854,7 +962,8 @@ describe("flows route passes the changed set to the provider", () => {
     const provider = new RecordingFlowStub();
     const app2 = createApp({ db, graphProvider: provider, repoRoot: fixtureRoot });
     const cr = await app2.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
@@ -873,7 +982,8 @@ describe("residual pseudo-nodes", () => {
     gitInFixture("commit", "-m", "base");
     writeFileSync(join(fixtureRoot, "config.json"), '{\n  "a": 2\n}\n');
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
@@ -932,7 +1042,8 @@ describe("residual pseudo-nodes", () => {
 
     const anchor = { startLine: added.newLine, startSide: "new", endLine: added.newLine, endSide: "new" };
     const res = await app.request(`/api/sessions/${session.id}/comments`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ nodeId: residual.id, text: "residual anchor", anchor }),
     });
     expect(res.status).toBe(200);
@@ -943,9 +1054,11 @@ describe("residual pseudo-nodes", () => {
 
     // A line outside the residual node's diff entirely must not resolve.
     const badRes = await app.request(`/api/sessions/${session.id}/comments`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        nodeId: residual.id, text: "bad",
+        nodeId: residual.id,
+        text: "bad",
         anchor: { startLine: 99999, startSide: "new", endLine: 99999, endSide: "new" },
       }),
     });
@@ -958,16 +1071,20 @@ describe("residual pseudo-nodes", () => {
 describe("PATCH /api/sessions/:id/units/:unitId", () => {
   async function makePlan() {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     const pr = await app.request(`/api/sessions/${session.id}/plan`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ units: [
-        { kind: "orphans", orphanStableIds: ["fn:handleOrder"], label: "A" },
-        { kind: "orphans", orphanStableIds: ["fn:validateOrder"], label: "B" },
-      ] }),
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        units: [
+          { kind: "orphans", orphanStableIds: ["fn:handleOrder"], label: "A" },
+          { kind: "orphans", orphanStableIds: ["fn:validateOrder"], label: "B" },
+        ],
+      }),
     });
     const { units } = await pr.json();
     return { session, units };
@@ -976,7 +1093,8 @@ describe("PATCH /api/sessions/:id/units/:unitId", () => {
   it("renames a unit", async () => {
     const { session, units } = await makePlan();
     const res = await app.request(`/api/sessions/${session.id}/units/${units[0].id}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ label: "Renamed" }),
     });
     expect(res.status).toBe(200);
@@ -986,7 +1104,8 @@ describe("PATCH /api/sessions/:id/units/:unitId", () => {
   it("moves a unit and reindexes positions densely", async () => {
     const { session, units } = await makePlan();
     const res = await app.request(`/api/sessions/${session.id}/units/${units[1].id}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ position: 0 }),
     });
     const body = await res.json();
@@ -996,24 +1115,28 @@ describe("PATCH /api/sessions/:id/units/:unitId", () => {
 
   it("rejects edits to the auto unit and 404s unknown units", async () => {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
     // empty plan → both stub changed nodes swept into the auto unit
     await app.request(`/api/sessions/${session.id}/plan`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ units: [] }),
     });
     const ur = await app.request(`/api/sessions/${session.id}`);
     const autoUnit = (await ur.json()).units.find((u: any) => u.auto);
     const res = await app.request(`/api/sessions/${session.id}/units/${autoUnit.id}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ label: "nope" }),
     });
     expect(res.status).toBe(400);
     const missing = await app.request(`/api/sessions/${session.id}/units/unit_missing`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ label: "x" }),
     });
     expect(missing.status).toBe(404);
@@ -1028,7 +1151,8 @@ describe("stale session indicator", () => {
     g("commit", "-m", "one");
 
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
@@ -1052,7 +1176,8 @@ describe("stale session indicator", () => {
     g("commit", "-m", "one");
 
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
@@ -1069,7 +1194,8 @@ describe("stale session indicator", () => {
     // Session creation requires a working repo; simulate git disappearing
     // afterward (e.g. a broken checkout) and confirm GET still degrades softly.
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
@@ -1080,7 +1206,8 @@ describe("stale session indicator", () => {
 
   it("omits stale (not false) when HEAD matches but the stored fingerprint could not be verified", async () => {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
@@ -1099,7 +1226,8 @@ describe("runtime validation", () => {
   let unitId: string;
   beforeEach(async () => {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
@@ -1108,7 +1236,8 @@ describe("runtime validation", () => {
     const { nodes } = await nr.json();
     nodeId = nodes[0].id;
     const pr = await app.request(`/api/sessions/${sessionId}/plan`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ units: [{ kind: "orphans", orphanStableIds: ["fn:handleOrder"], label: "A" }] }),
     });
     const { units } = await pr.json();
@@ -1117,7 +1246,9 @@ describe("runtime validation", () => {
 
   it("rejects session creation without branch/baseRef", async () => {
     const res = await app.request("/api/sessions", {
-      method: "POST", body: JSON.stringify({}), headers: { "Content-Type": "application/json" },
+      method: "POST",
+      body: JSON.stringify({}),
+      headers: { "Content-Type": "application/json" },
     });
     expect(res.status).toBe(400);
     const body = await res.json();
@@ -1127,7 +1258,9 @@ describe("runtime validation", () => {
 
   it("rejects invalid JSON bodies", async () => {
     const res = await app.request("/api/sessions", {
-      method: "POST", body: "{not json", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      body: "{not json",
+      headers: { "Content-Type": "application/json" },
     });
     expect(res.status).toBe(400);
     expect((await res.json()).error).toBe("invalid JSON body");
@@ -1160,10 +1293,12 @@ describe("runtime validation", () => {
   it("rejects the same stableId claimed by two units", async () => {
     const res = await app.request(`/api/sessions/${sessionId}/plan`, {
       method: "PUT",
-      body: JSON.stringify({ units: [
-        { kind: "orphans", label: "One", orphanStableIds: ["fn:validateOrder"] },
-        { kind: "orphans", label: "Two", orphanStableIds: ["fn:validateOrder"] },
-      ] }),
+      body: JSON.stringify({
+        units: [
+          { kind: "orphans", label: "One", orphanStableIds: ["fn:validateOrder"] },
+          { kind: "orphans", label: "Two", orphanStableIds: ["fn:validateOrder"] },
+        ],
+      }),
       headers: { "Content-Type": "application/json" },
     });
     expect(res.status).toBe(400);
@@ -1193,12 +1328,16 @@ describe("runtime validation", () => {
   it("accepts a flow unit sending both the legacy singular and plural entry fields", async () => {
     const res = await app.request(`/api/sessions/${sessionId}/plan`, {
       method: "PUT",
-      body: JSON.stringify({ units: [{
-        kind: "flow",
-        label: "Order flow",
-        flowEntryStableId: "fn:validateOrder",
-        flowEntryStableIds: ["fn:validateOrder"],
-      }] }),
+      body: JSON.stringify({
+        units: [
+          {
+            kind: "flow",
+            label: "Order flow",
+            flowEntryStableId: "fn:validateOrder",
+            flowEntryStableIds: ["fn:validateOrder"],
+          },
+        ],
+      }),
       headers: { "Content-Type": "application/json" },
     });
     expect(res.status).toBe(200);
@@ -1223,7 +1362,9 @@ describe("runtime validation", () => {
 
   it("rejects an empty unit patch", async () => {
     const res = await app.request(`/api/sessions/${sessionId}/units/${unitId}`, {
-      method: "PATCH", body: JSON.stringify({}), headers: { "Content-Type": "application/json" },
+      method: "PATCH",
+      body: JSON.stringify({}),
+      headers: { "Content-Type": "application/json" },
     });
     expect(res.status).toBe(400);
     const body = await res.json();
@@ -1263,7 +1404,8 @@ describe("anchored comments", () => {
     g("commit", "-m", "base");
     writeFileSync(join(fixtureRoot, STUB_FILE), MODIFIED_CONTENT); // adds a line inside the node span
     const res = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await res.json();
@@ -1281,7 +1423,8 @@ describe("anchored comments", () => {
     expect(added).toBeDefined();
     const anchor = { startLine: added.newLine, startSide: "new", endLine: added.newLine, endSide: "new" };
     const res = await app.request(`/api/sessions/${session.id}/comments`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ nodeId: node.id, text: "anchored!", anchor }),
     });
     expect(res.status).toBe(200);
@@ -1298,8 +1441,13 @@ describe("anchored comments", () => {
   it("rejects an anchor that does not resolve (context line / absent line)", async () => {
     const { session, node } = await makeSessionWithDiff();
     const res = await app.request(`/api/sessions/${session.id}/comments`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nodeId: node.id, text: "bad", anchor: { startLine: 99999, startSide: "new", endLine: 99999, endSide: "new" } }),
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        nodeId: node.id,
+        text: "bad",
+        anchor: { startLine: 99999, startSide: "new", endLine: 99999, endSide: "new" },
+      }),
     });
     expect(res.status).toBe(400);
     const body = await res.json();
@@ -1309,7 +1457,8 @@ describe("anchored comments", () => {
   it("rejects a half-specified anchor at the schema layer", async () => {
     const { session, node } = await makeSessionWithDiff();
     const res = await app.request(`/api/sessions/${session.id}/comments`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ nodeId: node.id, text: "bad", anchor: { startLine: 1, startSide: "new" } }),
     });
     expect(res.status).toBe(400);
@@ -1318,7 +1467,8 @@ describe("anchored comments", () => {
   it("node-level comments still work with a whole-node snippet", async () => {
     const { session, node } = await makeSessionWithDiff();
     const res = await app.request(`/api/sessions/${session.id}/comments`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ nodeId: node.id, text: "node-level" }),
     });
     expect(res.status).toBe(200);
@@ -1331,12 +1481,16 @@ describe("anchored comments", () => {
     const diffRes = await app.request(`/api/sessions/${session.id}/nodes/${node.id}`);
     const { diff } = await diffRes.json();
     // The insertion is surrounded by unified=3 context rows within the node span.
-    const context = diff.lines.find((l: { type: string; newLine: number | null }) => l.type === "context" && l.newLine != null);
+    const context = diff.lines.find(
+      (l: { type: string; newLine: number | null }) => l.type === "context" && l.newLine != null,
+    );
     expect(context).toBeDefined();
     const res = await app.request(`/api/sessions/${session.id}/comments`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        nodeId: node.id, text: "bad",
+        nodeId: node.id,
+        text: "bad",
         anchor: { startLine: context.newLine, startSide: "new", endLine: context.newLine, endSide: "new" },
       }),
     });
@@ -1362,7 +1516,8 @@ describe("anchored comments", () => {
     const modified = [...part1, "const first = 1;", ...part2, "const second = 2;", ...part3].join("\n") + "\n";
     writeFileSync(join(fixtureRoot, STUB_FILE), modified);
     const res = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await res.json();
@@ -1380,9 +1535,11 @@ describe("anchored comments", () => {
     const [first, second] = added; // in-file order: first.newLine < second.newLine
     expect(first.newLine).toBeLessThan(second.newLine);
     const res = await app.request(`/api/sessions/${session.id}/comments`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        nodeId: node.id, text: "bad",
+        nodeId: node.id,
+        text: "bad",
         // start = the later line, end = the earlier line -> inverted row order
         anchor: { startLine: second.newLine, startSide: "new", endLine: first.newLine, endSide: "new" },
       }),
@@ -1396,7 +1553,8 @@ describe("anchored comments", () => {
 describe("GET /api/sessions/:id/changes", () => {
   it("returns one compact summary per changed node, no diff bodies", async () => {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
@@ -1418,7 +1576,8 @@ describe("GET /api/sessions/:id/changes", () => {
 
   it("includes commit subjects for the session range (tree-ish base = full history)", async () => {
     const cr = await app.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "4b825dc642cb6eb9a060e54bf8d69288fbee4904" }),
     });
     const { session } = await cr.json();
@@ -1432,18 +1591,41 @@ describe("GET /api/sessions/:id/changes", () => {
       async getChangeSubgraph(): Promise<ChangeSubgraph> {
         return {
           nodes: [
-            { stableId: "scip-python python svc 0.0.1 `app`/main().", label: "main", file: "app.py", startLine: 1, endLine: 3, isEntryPoint: true, changeStatus: "changed", isTest: false },
-            { stableId: "scip-python python svc 0.0.1 `app`/Client#send().", label: "send", file: "app.py", startLine: 5, endLine: 8, isEntryPoint: false, changeStatus: "changed", isTest: false },
+            {
+              stableId: "scip-python python svc 0.0.1 `app`/main().",
+              label: "main",
+              file: "app.py",
+              startLine: 1,
+              endLine: 3,
+              isEntryPoint: true,
+              changeStatus: "changed",
+              isTest: false,
+            },
+            {
+              stableId: "scip-python python svc 0.0.1 `app`/Client#send().",
+              label: "send",
+              file: "app.py",
+              startLine: 5,
+              endLine: 8,
+              isEntryPoint: false,
+              changeStatus: "changed",
+              isTest: false,
+            },
           ],
           edges: [],
         };
       },
-      async getFlows() { return []; },
-      async getNeighbors() { return { callers: [], callees: [] }; },
+      async getFlows() {
+        return [];
+      },
+      async getNeighbors() {
+        return { callers: [], callees: [] };
+      },
     };
     const pyApp = createApp({ db, graphProvider: pyProvider, repoRoot: fixtureRoot });
     const cr = await pyApp.request("/api/sessions", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
     });
     const { session } = await cr.json();
@@ -1456,7 +1638,9 @@ describe("GET /api/sessions/:id/changes", () => {
 
 describe("DELETE and PATCH /api/sessions/:id/comments/:commentId", () => {
   const json = (body: unknown, method = "POST") => ({
-    method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
   async function sessionWithNode() {
     const cr = await app.request("/api/sessions", json({ branch: "HEAD", baseRef: "main" }));
@@ -1499,7 +1683,10 @@ describe("DELETE and PATCH /api/sessions/:id/comments/:commentId", () => {
   it("reverts a reviewed-commented node to reviewed-clean when its last comment is deleted", async () => {
     const { sid, nid } = await sessionWithNode();
     const c = await postComment(sid, { nodeId: nid, text: "only one" });
-    await app.request(`/api/sessions/${sid}/nodes/${nid}`, json({ reviewStatus: "reviewed-commented", reviewedInUnit: 2 }, "PATCH"));
+    await app.request(
+      `/api/sessions/${sid}/nodes/${nid}`,
+      json({ reviewStatus: "reviewed-commented", reviewedInUnit: 2 }, "PATCH"),
+    );
     await app.request(`/api/sessions/${sid}/comments/${c.id}`, { method: "DELETE" });
     const { node } = await (await app.request(`/api/sessions/${sid}/nodes/${nid}`)).json();
     expect(node.reviewStatus).toBe("reviewed-clean");
@@ -1542,8 +1729,11 @@ describe("DELETE and PATCH /api/sessions/:id/comments/:commentId", () => {
     const { sid, nid } = await sessionWithNode();
     const c = await postComment(sid, { nodeId: nid, text: "before" });
     // Anchor/snippet are set directly: the stub provider has no real diff to anchor into.
-    db.prepare("UPDATE comments SET anchor = ?, hunk_snippet = ? WHERE id = ?")
-      .run(JSON.stringify({ startLine: 3, startSide: "new", endLine: 4, endSide: "new" }), "@@ snippet @@", c.id);
+    db.prepare("UPDATE comments SET anchor = ?, hunk_snippet = ? WHERE id = ?").run(
+      JSON.stringify({ startLine: 3, startSide: "new", endLine: 4, endSide: "new" }),
+      "@@ snippet @@",
+      c.id,
+    );
     const res = await app.request(`/api/sessions/${sid}/comments/${c.id}`, json({ text: "after" }, "PATCH"));
     const { comment } = await res.json();
     expect(comment.anchor).toEqual({ startLine: 3, startSide: "new", endLine: 4, endSide: "new" });

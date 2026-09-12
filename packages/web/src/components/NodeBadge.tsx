@@ -1,9 +1,6 @@
 import type { Node } from "../api/client.js";
 
-const STATUS_STYLES: Record<
-  Node["reviewStatus"],
-  { color: string; label: string }
-> = {
+const STATUS_STYLES: Record<Node["reviewStatus"], { color: string; label: string }> = {
   unreviewed: { color: "var(--led-unreviewed)", label: "unreviewed" },
   "reviewed-clean": { color: "var(--led-clean)", label: "reviewed" },
   "reviewed-commented": { color: "var(--led-commented)", label: "commented" },

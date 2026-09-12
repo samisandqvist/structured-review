@@ -7,11 +7,11 @@ import { useUIStore } from "../src/store/ui.js";
 const anchor = { startLine: 11, startSide: "new" as const, endLine: 12, endSide: "new" as const };
 
 const mutateSpy = vi.fn((_args: { nodeId: string; text: string }, opts?: { onSuccess?: () => void }) =>
-  opts?.onSuccess?.()
+  opts?.onSuccess?.(),
 );
 
 const updateSpy = vi.fn((_args: { commentId: string; text: string }, opts?: { onSuccess?: () => void }) =>
-  opts?.onSuccess?.()
+  opts?.onSuccess?.(),
 );
 const deleteSpy = vi.fn();
 
@@ -19,8 +19,26 @@ vi.mock("../src/api/hooks.js", () => ({
   useComments: () => ({
     data: {
       comments: [
-        { id: "c1", sessionId: "s1", nodeId: "n1", hunkSnippet: "x", text: "existing comment", structuralContext: "callers: A", createdAt: 1000, anchor: null },
-        { id: "c2", sessionId: "s1", nodeId: "n1", hunkSnippet: "x", text: "anchored one", structuralContext: "callers: A", createdAt: 1001, anchor: { startLine: 11, startSide: "new", endLine: 12, endSide: "new" } },
+        {
+          id: "c1",
+          sessionId: "s1",
+          nodeId: "n1",
+          hunkSnippet: "x",
+          text: "existing comment",
+          structuralContext: "callers: A",
+          createdAt: 1000,
+          anchor: null,
+        },
+        {
+          id: "c2",
+          sessionId: "s1",
+          nodeId: "n1",
+          hunkSnippet: "x",
+          text: "anchored one",
+          structuralContext: "callers: A",
+          createdAt: 1001,
+          anchor: { startLine: 11, startSide: "new", endLine: 12, endSide: "new" },
+        },
       ],
     },
     isLoading: false,
@@ -56,9 +74,7 @@ describe("CommentBox", () => {
     const ta = screen.getByPlaceholderText(/Leave a review comment/);
     fireEvent.change(ta, { target: { value: "new text" } });
     fireEvent.click(screen.getByText("Send"));
-    await waitFor(() =>
-      expect(mutateSpy).toHaveBeenCalledWith({ nodeId: "n1", text: "new text" }, expect.anything())
-    );
+    await waitFor(() => expect(mutateSpy).toHaveBeenCalledWith({ nodeId: "n1", text: "new text" }, expect.anything()));
   });
 });
 
@@ -78,7 +94,7 @@ describe("anchored comments", () => {
     fireEvent.change(screen.getByPlaceholderText(/Leave a review comment/), { target: { value: "on these lines" } });
     fireEvent.click(screen.getByText("Send"));
     await waitFor(() =>
-      expect(mutateSpy).toHaveBeenCalledWith({ nodeId: "n1", text: "on these lines", anchor }, expect.anything())
+      expect(mutateSpy).toHaveBeenCalledWith({ nodeId: "n1", text: "on these lines", anchor }, expect.anything()),
     );
     expect(useUIStore.getState().lineSelection).toBeNull(); // cleared on success
   });
@@ -109,9 +125,7 @@ describe("anchored comments", () => {
     renderWithProviders(<CommentBox sessionId="s1" nodeId="n1" />);
     fireEvent.change(screen.getByPlaceholderText(/Leave a review comment/), { target: { value: "plain" } });
     fireEvent.click(screen.getByText("Send"));
-    await waitFor(() =>
-      expect(mutateSpy).toHaveBeenCalledWith({ nodeId: "n1", text: "plain" }, expect.anything())
-    );
+    await waitFor(() => expect(mutateSpy).toHaveBeenCalledWith({ nodeId: "n1", text: "plain" }, expect.anything()));
   });
 });
 
@@ -134,7 +148,7 @@ describe("editing and deleting comments", () => {
     fireEvent.change(ta, { target: { value: "  revised comment " } });
     fireEvent.click(screen.getByText("Save"));
     await waitFor(() =>
-      expect(updateSpy).toHaveBeenCalledWith({ commentId: "c1", text: "revised comment" }, expect.anything())
+      expect(updateSpy).toHaveBeenCalledWith({ commentId: "c1", text: "revised comment" }, expect.anything()),
     );
     // Back to display mode after a successful save.
     expect(screen.queryByDisplayValue(/revised comment/)).not.toBeInTheDocument();
@@ -147,7 +161,7 @@ describe("editing and deleting comments", () => {
     fireEvent.change(ta, { target: { value: "quick save" } });
     fireEvent.keyDown(ta, { key: "Enter", ctrlKey: true });
     await waitFor(() =>
-      expect(updateSpy).toHaveBeenCalledWith({ commentId: "c1", text: "quick save" }, expect.anything())
+      expect(updateSpy).toHaveBeenCalledWith({ commentId: "c1", text: "quick save" }, expect.anything()),
     );
   });
 
