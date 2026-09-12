@@ -9,7 +9,7 @@ import { StubGraphProvider } from "./graph/stub.js";
 import { CrgGraphProvider } from "./graph/crg.js";
 import { ScipGraphProvider } from "./graph/scip.js";
 
-const db = createDatabase(process.env.CRW_DB_PATH || "review.db");
+const db = createDatabase(process.env.SREV_DB_PATH || "review.db");
 
 // GRAPH_PROVIDER selects the graph source; SCIP (scip-typescript) is the
 // default. Set GRAPH_PROVIDER=crg or =stub to override.
@@ -29,12 +29,12 @@ switch (which) {
 const here = dirname(fileURLToPath(import.meta.url));
 // Candidates: env override; monorepo layout (dist/index.js -> ../../web/dist,
 // same from src in dev); plugin bundle layout (plugin/dist/server.js -> ../web).
-const webDistPath = [process.env.CRW_WEB_DIST, join(here, "..", "..", "web", "dist"), join(here, "..", "web")].find(
+const webDistPath = [process.env.SREV_WEB_DIST, join(here, "..", "..", "web", "dist"), join(here, "..", "web")].find(
   (p) => p && existsSync(join(p, "index.html")),
 );
 const webBuilt = webDistPath !== undefined;
 
-const hostname = process.env.CRW_HOST || "127.0.0.1";
+const hostname = process.env.SREV_HOST || "127.0.0.1";
 if (hostname !== "127.0.0.1" && hostname !== "localhost") {
   console.warn(
     `WARNING: binding to ${hostname} — the review API is unauthenticated; keep it loopback-only unless you know why`,

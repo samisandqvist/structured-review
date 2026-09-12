@@ -5,13 +5,13 @@
 
 ## Problem
 
-CRW's plan answers "what changed and how it connects" but never "what was this
+SREV's plan answers "what changed and how it connects" but never "what was this
 change trying to do, and which slice of that story does this unit carry".
 Review units are flow-shaped (entry point → callees), which deliberately
 cross-cuts the organization the author described the change in — files,
 commits, PR bullet points. The reviewer knows the PR intent; what they don't
 know when they land on unit 4 of 7 is which part of that intent this flow
-carries. Nobody has written that mapping down anywhere, because nobody but CRW
+carries. Nobody has written that mapping down anywhere, because nobody but SREV
 produced the decomposition.
 
 Unit labels (and the existing optional `rationale`) already help in this
@@ -22,7 +22,7 @@ direction; this design completes the layer.
 The plan gains a narrative layer: one session-level **overview** ("the change
 does X, decomposed as…") and per-unit **rationales** rewritten to be
 change-relative ("carries part Y of that"). Everything is optional end-to-end
-— `crw plan --auto` plans have neither, and nothing else changes behaviour.
+— `srev plan --auto` plans have neither, and nothing else changes behaviour.
 All text is authored at plan time by whoever submits the plan (in practice
 the review skill); the server stores and serves opaque strings, never
 generates.
@@ -37,7 +37,7 @@ orientation, not an LLM review that invites rubber-stamping.
    `rationale` column; SKILL.md guidance changes its meaning from "what the
    unit does" to "its role in the overall change". No unit schema change.
 2. **Overview reaches UI + export + CLI.** Plan view header, `overview` field
-   in the export JSON, printed by `crw status`.
+   in the export JSON, printed by `srev status`.
 3. **Grounding is intent + observed.** The skill consults stated intent
    (PR description, commit subjects) when available and combines it with what
    it learned authoring the plan. Units that don't serve the stated intent get
@@ -74,9 +74,9 @@ Body becomes `{ overview?, units: [...] }`:
   `overview`.
 - `GET /api/sessions/:id/export` gains a top-level `overview` field — empty
   string when unset — so harvest tooling can prepend it to a GitHub PR review
-  body. CRW itself never posts anywhere.
-- `crw status` prints the overview (first line, truncated) alongside coverage.
-- `crw comments` passes the export's `overview` field through unchanged.
+  body. SREV itself never posts anywhere.
+- `srev status` prints the overview (first line, truncated) alongside coverage.
+- `srev comments` passes the export's `overview` field through unchanged.
 
 No new endpoints, no new tables.
 
@@ -121,7 +121,7 @@ Unit rationale rendering is untouched (`PlanView.tsx` already renders
 
 | Situation | Behaviour |
 |---|---|
-| `crw plan --auto` | No overview, no rationales; UI shows nothing new |
+| `srev plan --auto` | No overview, no rationales; UI shows nothing new |
 | Plan resubmitted without `overview` | Stored overview cleared |
 | Export with no overview | `overview: ""` |
 | No PR / bare commit messages | Skill writes observed-only overview |
@@ -133,7 +133,7 @@ Unit rationale rendering is untouched (`PlanView.tsx` already renders
   omitted (extend existing plan-submit tests).
 - Export: `overview` present, `""` when unset.
 - Auto plan: no overview anywhere (assert in existing auto-plan test).
-- `crw status`: overview line present when set, absent when not.
+- `srev status`: overview line present when set, absent when not.
 - Web: one check that the overview block renders when set and is absent
   otherwise.
 

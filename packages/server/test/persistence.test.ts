@@ -10,7 +10,7 @@ import { MIGRATIONS, SCHEMA_VERSION } from "../src/db/schema.js";
 const temporaryRoots: string[] = [];
 
 function temporaryDatabasePath(): string {
-  const root = mkdtempSync(join(tmpdir(), "crw-persistence-"));
+  const root = mkdtempSync(join(tmpdir(), "srev-persistence-"));
   temporaryRoots.push(root);
   return join(root, "review.db");
 }

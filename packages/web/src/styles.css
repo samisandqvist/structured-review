@@ -1,5 +1,5 @@
 /* ===========================================================================
-   Trace — a signal-tracing instrument for code review.
+   Structured Review — a guided view of code relationships.
    Tokens: an oscilloscope at night. Cyan is the live signal; status is told
    in LEDs. Mono is the native voice because code is the material.
    =========================================================================== */
@@ -304,7 +304,7 @@ textarea:focus {
   filter: drop-shadow(0 0 5px var(--trace-glow));
 }
 
-/* ---- Trace node (custom instrument readout) ----------------------------- */
+/* ---- Review node (custom instrument readout) ---------------------------- */
 .tnode {
   position: relative;
   width: 178px;

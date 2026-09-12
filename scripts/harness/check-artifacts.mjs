@@ -11,26 +11,26 @@ const artifactPaths = [
   "plugin/skills",
   "plugin/scripts",
   "plugin/LICENSE",
-  "plugins/code-review-walkthrough",
+  "plugins/structured-review",
 ];
 export function buildPluginArtifacts(root, output) {
   const webDist = join(output, "web-dist");
-  execFileSync("pnpm", ["--filter", "@crw/web", "exec", "vite", "build", "--outDir", webDist, "--emptyOutDir"], {
+  execFileSync("pnpm", ["--filter", "@srev/web", "exec", "vite", "build", "--outDir", webDist, "--emptyOutDir"], {
     cwd: root,
     env: { ...process.env, NODE_ENV: "production" },
     stdio: "inherit",
   });
   execFileSync(process.execPath, ["scripts/build-plugin.mjs"], {
     cwd: root,
-    env: { ...process.env, CRW_PLUGIN_OUTPUT_ROOT: output, CRW_WEB_DIST: webDist },
+    env: { ...process.env, SREV_PLUGIN_OUTPUT_ROOT: output, SREV_WEB_DIST: webDist },
     stdio: "inherit",
   });
 }
 
 export function checkArtifactsMain({ root, build = buildPluginArtifacts, log = console.log, error = console.error }) {
-  const output = mkdtempSync(join(tmpdir(), "crw-artifact-check-"));
+  const output = mkdtempSync(join(tmpdir(), "srev-artifact-check-"));
   try {
-    mkdirSync(join(output, "plugin/skills/code-review-walkthrough"), { recursive: true });
+    mkdirSync(join(output, "plugin/skills/structured-review"), { recursive: true });
     cpSync(join(root, "plugin/.claude-plugin"), join(output, "plugin/.claude-plugin"), { recursive: true });
     cpSync(join(root, "plugin/package.json"), join(output, "plugin/package.json"));
     build(root, output);

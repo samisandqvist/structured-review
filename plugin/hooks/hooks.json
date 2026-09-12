@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/crw.mjs\" --setup"
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/srev.mjs\" --setup"
           }
         ]
       }

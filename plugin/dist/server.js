@@ -18224,7 +18224,7 @@ import { readFileSync as readFileSync3 } from "node:fs";
 import { join as join4 } from "node:path";
 function loadConfiguredEntries(root) {
   try {
-    const raw2 = JSON.parse(readFileSync3(join4(root, ".crw-entry-points.json"), "utf8"));
+    const raw2 = JSON.parse(readFileSync3(join4(root, ".srev-entry-points.json"), "utf8"));
     if (!Array.isArray(raw2.entryPoints)) return [];
     return raw2.entryPoints.filter(
       (e) => !!e && typeof e.label === "string" && (e.file === void 0 || typeof e.file === "string")
@@ -18535,7 +18535,7 @@ var ScipGraphProvider = class {
   /** Run one job's SCIP indexer, decode its index, and re-root the documents. */
   async runIndexer(job) {
     const absRoot = job.root ? join5(this.repoRoot, job.root) : this.repoRoot;
-    const dir = mkdtempSync(join5(tmpdir(), "scip-crw-"));
+    const dir = mkdtempSync(join5(tmpdir(), "scip-srev-"));
     const indexPath = join5(dir, "index.scip");
     const tsconfigPath = join5(absRoot, "tsconfig.json");
     const hadTsconfig = existsSync2(tsconfigPath);
@@ -18598,7 +18598,7 @@ ${String(err.stderr).slice(-2e3)}` : "";
   }
 };
 function resolveIndexerBin(pkgName, binName) {
-  const home = process.env.CRW_INDEXER_HOME;
+  const home = process.env.SREV_INDEXER_HOME;
   const pkgPath = require2.resolve(`${pkgName}/package.json`, home ? { paths: [home] } : void 0);
   const pkg = JSON.parse(readFileSync4(pkgPath, "utf8"));
   const rel = typeof pkg.bin === "string" ? pkg.bin : pkg.bin[binName];
@@ -38189,7 +38189,7 @@ var CrgGraphProvider = class {
       command,
       args
     });
-    this.client = new Client({ name: "crw-server", version: "1.0.0" }, { capabilities: {} });
+    this.client = new Client({ name: "srev-server", version: "1.0.0" }, { capabilities: {} });
     try {
       await this.client.connect(this.transport);
       return this.client;
@@ -38324,7 +38324,7 @@ function detectRepoRoot() {
 }
 
 // packages/server/src/index.ts
-var db = createDatabase(process.env.CRW_DB_PATH || "review.db");
+var db = createDatabase(process.env.SREV_DB_PATH || "review.db");
 var which = (process.env.GRAPH_PROVIDER || "scip").toLowerCase();
 var graphProvider;
 switch (which) {
@@ -38338,11 +38338,11 @@ switch (which) {
     graphProvider = new StubGraphProvider();
 }
 var here = dirname2(fileURLToPath2(import.meta.url));
-var webDistPath = [process.env.CRW_WEB_DIST, join8(here, "..", "..", "web", "dist"), join8(here, "..", "web")].find(
+var webDistPath = [process.env.SREV_WEB_DIST, join8(here, "..", "..", "web", "dist"), join8(here, "..", "web")].find(
   (p) => p && existsSync4(join8(p, "index.html"))
 );
 var webBuilt = webDistPath !== void 0;
-var hostname3 = process.env.CRW_HOST || "127.0.0.1";
+var hostname3 = process.env.SREV_HOST || "127.0.0.1";
 if (hostname3 !== "127.0.0.1" && hostname3 !== "localhost") {
   console.warn(
     `WARNING: binding to ${hostname3} \u2014 the review API is unauthenticated; keep it loopback-only unless you know why`

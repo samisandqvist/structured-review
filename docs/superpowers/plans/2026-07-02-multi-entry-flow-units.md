@@ -62,7 +62,7 @@ describe("multi-entry unitCoverage", () => {
 
 (Adjust imports to match the file's existing import of `unitCoverage` and `Flow`.)
 
-- [ ] **Step 2: Run** `pnpm --filter @crw/server exec vitest run test/coverage.test.ts` — Expected: FAIL.
+- [ ] **Step 2: Run** `pnpm --filter @srev/server exec vitest run test/coverage.test.ts` — Expected: FAIL.
 
 - [ ] **Step 3: Implement** in `coverage.ts`:
 
@@ -101,7 +101,7 @@ export function unitCoverage(unit: PlanUnitInput, flows: Flow[], changed: Set<st
 
 (Keep the existing doc comment, updated to mention the union.)
 
-- [ ] **Step 4: Run** the coverage tests — Expected: PASS. Then `pnpm --filter @crw/server exec vitest run` — all green.
+- [ ] **Step 4: Run** the coverage tests — Expected: PASS. Then `pnpm --filter @srev/server exec vitest run` — all green.
 
 - [ ] **Step 5: Commit** `git add packages/server/src/coverage.ts packages/server/test/coverage.test.ts && git commit -m "feat(server): multi-entry flow-unit coverage union"`
 
@@ -148,7 +148,7 @@ import { computeCoverage, flowEntries, type PlanUnitInput } from "../coverage.js
     }
 ```
 
-- [ ] **Step 4: Run** `pnpm --filter @crw/server exec vitest run test/routes.test.ts` — Expected: PASS.
+- [ ] **Step 4: Run** `pnpm --filter @srev/server exec vitest run test/routes.test.ts` — Expected: PASS.
 
 - [ ] **Step 5: Commit** `git add -A packages/server && git commit -m "feat(server): plan write accepts multi-entry flow-units"`
 
@@ -223,7 +223,7 @@ describe("flows route step identity", () => {
     });
 ```
 
-- [ ] **Step 4: Run** `pnpm --filter @crw/server exec vitest run test/routes.test.ts` — Expected: PASS.
+- [ ] **Step 4: Run** `pnpm --filter @srev/server exec vitest run test/routes.test.ts` — Expected: PASS.
 
 - [ ] **Step 5: Commit** `git add -A packages/server && git commit -m "feat(server): flows expose step stableId and per-flow changedStableIds"`
 
@@ -287,7 +287,7 @@ Edit `orchestrate.ts`: mirror the `UnitInput` change; add `changedStableIds: str
 
 Build the fixture data to match the shapes the test file already uses for `useSession`/`useFlows`/`useNodes` mocks (steps must carry `stableId`).
 
-- [ ] **Step 2: Run** `pnpm --filter @crw/web exec vitest run test/PlanView.test.tsx` — Expected: FAIL.
+- [ ] **Step 2: Run** `pnpm --filter @srev/web exec vitest run test/PlanView.test.tsx` — Expected: FAIL.
 
 - [ ] **Step 3: Implement** — in `PlanView.tsx`:
 
@@ -346,7 +346,7 @@ Caller in `PlanView`:
 
 Add a minimal `.unit__track-caption` rule to `packages/web/src/styles.css` (dim, small, monospace — match `.unit__rationale` styling family).
 
-- [ ] **Step 4: Run** `pnpm --filter @crw/web exec vitest run` — Expected: PASS (all web tests, including existing PlanView ones — update their fixtures if they lack `stableId` on steps).
+- [ ] **Step 4: Run** `pnpm --filter @srev/web exec vitest run` — Expected: PASS (all web tests, including existing PlanView ones — update their fixtures if they lack `stableId` on steps).
 
 - [ ] **Step 5: Commit** `git add -A packages/web && git commit -m "feat(web): multi-entry flow-units render per-entry tracks with deduped progress"`
 

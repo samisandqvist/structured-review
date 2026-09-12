@@ -108,7 +108,7 @@ describe("ScipGraphProvider cache", () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `pnpm --filter @crw/server exec vitest run test/scip-cache.test.ts`
+Run: `pnpm --filter @srev/server exec vitest run test/scip-cache.test.ts`
 Expected: FAIL — `repoStateKey`/`indexAndBuild` do not exist / are not overridable, builds counted per call.
 
 - [ ] **Step 3: Implement the cache in `scip.ts`**
@@ -149,7 +149,7 @@ Note: the `.catch` side-channel must not swallow the rejection for callers — i
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `pnpm --filter @crw/server exec vitest run test/scip-cache.test.ts`
+Run: `pnpm --filter @srev/server exec vitest run test/scip-cache.test.ts`
 Expected: PASS (5 tests). Then run the full suite: `pnpm test` — all green.
 
 - [ ] **Step 5: Commit**
@@ -183,7 +183,7 @@ class KeyProbe extends ScipGraphProvider {
 
 describe("repoStateKey", () => {
   it("is stable for an unchanged repo and changes on edits/commits", () => {
-    const dir = mkdtempSync(join(tmpdir(), "crw-key-"));
+    const dir = mkdtempSync(join(tmpdir(), "srev-key-"));
     try {
       const git = (...a: string[]) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
       git("init");
@@ -204,7 +204,7 @@ describe("repoStateKey", () => {
   });
 
   it("returns a unique key when git is unavailable (cache miss, no throw)", () => {
-    const dir = mkdtempSync(join(tmpdir(), "crw-nogit-"));
+    const dir = mkdtempSync(join(tmpdir(), "srev-nogit-"));
     try {
       const p = new KeyProbe({ repoRoot: dir });
       expect(p.publicKey()).not.toBe(p.publicKey());
@@ -219,7 +219,7 @@ Note: `git init` in a temp dir under `/tmp` is outside any parent repo, so `git 
 
 - [ ] **Step 2: Run tests**
 
-Run: `pnpm --filter @crw/server exec vitest run test/scip-cache.test.ts`
+Run: `pnpm --filter @srev/server exec vitest run test/scip-cache.test.ts`
 Expected: PASS immediately if Task 1's implementation is correct (this task is behavioral verification of the real key; if it fails, fix `repoStateKey`).
 
 - [ ] **Step 3: Commit**

@@ -15,7 +15,7 @@ const { createServer, loadConfigFromFile } = await import(webRequire.resolve("vi
 it("preserves the browser origin through the configured Vite proxy without trusting foreign origins", async () => {
   const db = createMemoryDatabase();
   const session = createSession(db, "HEAD", "main");
-  const app = createApp({ db, graphProvider: new StubGraphProvider(), repoRoot: "/tmp/crw-proxy-test" });
+  const app = createApp({ db, graphProvider: new StubGraphProvider(), repoRoot: "/tmp/srev-proxy-test" });
   const backend = serve({ fetch: app.fetch, hostname: "127.0.0.1", port: 0 });
   let proxy;
   try {

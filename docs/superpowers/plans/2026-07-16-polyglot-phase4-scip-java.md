@@ -186,13 +186,13 @@ describe("resolveScipJavaCommand", () => {
   });
 
   it("finds a scip-java executable on PATH", () => {
-    const dir = mkdtempSync(join(tmpdir(), "crw-sj-path-"));
+    const dir = mkdtempSync(join(tmpdir(), "srev-sj-path-"));
     writeFileSync(join(dir, "scip-java"), "#!/bin/sh\n", { mode: 0o755 });
     expect(resolveScipJavaCommand({ PATH: dir })).toEqual({ argv0: "scip-java", args: [] });
   });
 
   it("falls back to coursier launch with pinned (or overridden) coordinates", () => {
-    const dir = mkdtempSync(join(tmpdir(), "crw-sj-cs-"));
+    const dir = mkdtempSync(join(tmpdir(), "srev-sj-cs-"));
     writeFileSync(join(dir, "cs"), "#!/bin/sh\n", { mode: 0o755 });
     expect(resolveScipJavaCommand({ PATH: dir, SCIP_JAVA_VERSION: "9.9.9" })).toEqual({
       argv0: "cs",
@@ -206,7 +206,7 @@ describe("resolveScipJavaCommand", () => {
   });
 
   it("prefers scip-java over cs when both are present", () => {
-    const dir = mkdtempSync(join(tmpdir(), "crw-sj-both-"));
+    const dir = mkdtempSync(join(tmpdir(), "srev-sj-both-"));
     writeFileSync(join(dir, "scip-java"), "#!/bin/sh\n", { mode: 0o755 });
     writeFileSync(join(dir, "cs"), "#!/bin/sh\n", { mode: 0o755 });
     expect(resolveScipJavaCommand({ PATH: dir })!.argv0).toBe("scip-java");
@@ -303,7 +303,7 @@ describe("scip-java integration", () => {
     "indexes a maven root and derives method-level flows",
     { timeout: 300_000 },
     async () => {
-      const dir = mkdtempSync(join(tmpdir(), "crw-java-"));
+      const dir = mkdtempSync(join(tmpdir(), "srev-java-"));
       try {
         const git = (...a: string[]) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
         git("init", "-b", "main");

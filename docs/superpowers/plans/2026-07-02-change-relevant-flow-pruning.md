@@ -81,7 +81,7 @@ describe("buildFlowTree with relevance", () => {
 });
 ```
 
-- [ ] **Step 2: Run** `pnpm --filter @crw/server exec vitest run test/graph.test.ts` — Expected: FAIL.
+- [ ] **Step 2: Run** `pnpm --filter @srev/server exec vitest run test/graph.test.ts` — Expected: FAIL.
 
 - [ ] **Step 3: Implement.** In `provider.ts` add to `FlowStep`:
 
@@ -154,7 +154,7 @@ export function buildFlowTree(
 
 Nuance: for an unaffected flow the entry is `onPath` by the `depth === 0` clause, so it descends one hop and its children are all off-path leaves; `offPath` on the entry itself is always `false`.
 
-- [ ] **Step 4: Run** `pnpm --filter @crw/server exec vitest run` — Expected: PASS (fix the existing `buildFlowTree` doc comment to describe the pruned mode).
+- [ ] **Step 4: Run** `pnpm --filter @srev/server exec vitest run` — Expected: PASS (fix the existing `buildFlowTree` doc comment to describe the pruned mode).
 
 - [ ] **Step 5: Commit** `git add -A packages/server && git commit -m "feat(server): relevance-pruned flow trees with offPath context steps"`
 
@@ -242,7 +242,7 @@ export interface GraphProvider {
 
 (move the `changedStableIds` computation above the `getFlows` call).
 
-- [ ] **Step 4: Run** `pnpm --filter @crw/server exec vitest run && pnpm typecheck` — Expected: PASS.
+- [ ] **Step 4: Run** `pnpm --filter @srev/server exec vitest run && pnpm typecheck` — Expected: PASS.
 
 - [ ] **Step 5: Commit** `git add -A packages/server && git commit -m "feat(server): thread changed set into getFlows for pruned trees"`
 
@@ -324,6 +324,6 @@ Add `useState` + `FlowStep` imports. Styles (`styles.css`):
 .flow__collapsed:hover { color: var(--text); border-color: var(--text); }
 ```
 
-- [ ] **Step 4: Run** `pnpm --filter @crw/web exec vitest run` — Expected: PASS (existing FlowTrack tests keep passing — steps without `offPath` render as before).
+- [ ] **Step 4: Run** `pnpm --filter @srev/web exec vitest run` — Expected: PASS (existing FlowTrack tests keep passing — steps without `offPath` render as before).
 
 - [ ] **Step 5: Commit** `git add -A packages/web && git commit -m "feat(web): collapse off-path flow steps into expandable runs"`

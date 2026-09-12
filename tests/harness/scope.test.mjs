@@ -8,7 +8,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 it("includes unimported JS and TS modules while rejecting an unsupported executable language", () => {
-  const root = mkdtempSync(join(tmpdir(), "crw-source-scope-"));
+  const root = mkdtempSync(join(tmpdir(), "srev-source-scope-"));
   roots.push(root);
   for (const path of sourceRoots) mkdirSync(join(root, path), { recursive: true });
   mkdirSync(join(root, "packages/web/src/test"));

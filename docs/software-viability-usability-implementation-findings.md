@@ -49,7 +49,7 @@ Each task passed an independent spec+quality review; the suite grew from 105 to
   routes with structured `{ error, issues }` 400s; comment creation enforces
   node/session ownership.
 - Entry-point inference too narrow / no confidence (Medium) — pluggable
-  evidence (`graph-root` / `exported` / `.crw-entry-points.json` configured
+  evidence (`graph-root` / `exported` / `.srev-entry-points.json` configured
   entries) with deterministic 0.4/0.7/1.0 confidence, exposed via the flows
   API and a plan-view chip; configured entries head flows despite callers.
 - Residual bounding boxes (Medium) — residual pseudo-nodes store their exact
@@ -68,7 +68,7 @@ branch.
 
 ## Executive summary
 
-Code Review Walkthrough has a strong and credible product thesis: large changes,
+Structured Review has a strong and credible product thesis: large changes,
 especially AI-generated changes, are often easier to understand in behavioral and
 dependency order than in file-tree order. The project has also developed several
 thoughtful mechanisms that distinguish it from a simple reordered diff viewer:
@@ -251,7 +251,7 @@ Create explicit development and production launch contracts:
   - add a `start` script for the compiled server;
   - make the skill open the server URL.
 - Development:
-  - make the Vite URL explicit through `CRW_UI_URL`, or have the root development
+  - make the Vite URL explicit through `SREV_UI_URL`, or have the root development
     command pass it to the skill;
   - keep API calls proxied to the server.
 

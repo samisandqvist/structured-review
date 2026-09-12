@@ -131,7 +131,7 @@ feature degrades to passes 1+2).
 - Web PlanView `unitProgress` and CLI `status.ts unitProgress`: totals include
   counted attachments. Both read the persisted `attached` field — no
   recomputation, no drift.
-- `crw plan` output gains per-unit attached counts; `crw status` picks the new
+- `srev plan` output gains per-unit attached counts; `srev status` picks the new
   totals up automatically.
 
 ## UI
@@ -169,4 +169,4 @@ leftovers worth an explicit orphan-unit (or a plan gap).
 - Reviewer-controlled attachment overrides (pin/exclude) — revisit if
   derivation misattaches in practice.
 - Type symbols as first-class graph nodes.
-- `crw context` surfacing attachability hints to the planner.
+- `srev context` surfacing attachability hints to the planner.

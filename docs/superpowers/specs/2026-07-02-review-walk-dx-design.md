@@ -53,7 +53,7 @@ Global listener (in `SplitLayout`), inert while focus is in an input/textarea:
 ### 3. Persisted position
 
 `useUIStore` gains `zustand/middleware` `persist` to `localStorage`, keyed by
-session (`crw-ui:<sessionId>`), persisting `currentNodeId` and `splitRatio`
+session (`srev-ui:<sessionId>`), persisting `currentNodeId` and `splitRatio`
 plus the unit-collapse state from §4. Reopening the UI mid-review lands on the
 node you left. (Server stays stateless about UI position.)
 

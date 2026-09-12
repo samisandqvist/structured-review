@@ -18,11 +18,11 @@ export function createApp(ctx: AppContext) {
   const app = new Hono();
   app.use("*", localRequestsOnly);
   // repoRoot + pid let a CLI tell "the right hub for this repo" apart from a
-  // stranger squatting on the port (crw serve reuse-or-error decision).
+  // stranger squatting on the port (srev serve reuse-or-error decision).
   app.get("/health", (c) =>
     c.json({ ok: true, repoRoot: resolved.repoRoot, pid: process.pid, provider: resolved.providerName ?? "unknown" }),
   );
-  // Sanctioned stop for `crw gc`: the hub must be down before its DB files are
+  // Sanctioned stop for `srev gc`: the hub must be down before its DB files are
   // removed (WAL). The handler fires after the response is written.
   app.post("/api/shutdown", (c) => {
     if (!resolved.onShutdown) return c.json({ ok: false, error: "shutdown not supported" }, 501);

@@ -25,17 +25,17 @@ let session: SessionCreate;
 test.beforeAll(async () => {
   review = await createShippedReview();
   await review.start();
-  session = await review.crw<SessionCreate>("session", "create", "--branch", "HEAD", "--base", "HEAD");
+  session = await review.srev<SessionCreate>("session", "create", "--branch", "HEAD", "--base", "HEAD");
   expect(session.changedNodes).toBeGreaterThan(0);
   expect(session.indexWarnings).toEqual([]);
-  const context = await review.crw<{ flows: unknown[]; changes: unknown[] }>(
+  const context = await review.srev<{ flows: unknown[]; changes: unknown[] }>(
     "context",
     "--session",
     session.sessionId,
     "--brief",
   );
   expect(context.changes.length).toBeGreaterThan(0);
-  await review.crw("plan", "--session", session.sessionId, "--auto");
+  await review.srev("plan", "--session", session.sessionId, "--auto");
 });
 
 test.afterAll(async () => {
@@ -103,7 +103,7 @@ test("shipped CLI, server, and UI preserve an anchored comment through edit and 
   await reselectPersistedComment(page);
   await expectComment(page, "Quantity must reject negative values before pricing");
 
-  const exported = await review.crw<Exported>("comments", "--session", session.sessionId);
+  const exported = await review.srev<Exported>("comments", "--session", session.sessionId);
   expect(exported.comments).toHaveLength(1);
   expect(exported.comments[0]).toMatchObject({
     text: "Quantity must reject negative values before pricing",
@@ -115,9 +115,9 @@ test("shipped CLI, server, and UI preserve an anchored comment through edit and 
   await expect(page.getByText("Quantity must reject negative values before pricing", { exact: true })).toBeHidden();
   await expect(page.getByText("reviewed", { exact: true })).toBeVisible();
   await expect
-    .poll(async () => (await review.crw<Exported>("comments", "--session", session.sessionId)).comments.length)
+    .poll(async () => (await review.srev<Exported>("comments", "--session", session.sessionId)).comments.length)
     .toBe(0);
-  const status = await review.crw<ReviewStatus>("status", "--session", session.sessionId);
+  const status = await review.srev<ReviewStatus>("status", "--session", session.sessionId);
   expect(status.units.reduce((sum, unit) => sum + unit.reviewed, 0)).toBe(1);
   expect(status.unreviewed).toHaveLength(status.coverage.changedTotal - 1);
 
@@ -126,13 +126,13 @@ test("shipped CLI, server, and UI preserve an anchored comment through edit and 
 });
 
 test("shipped CLI rejects invalid bases and refuses a hub for a different repository", async () => {
-  const invalidBase = await review.crwFailure("session", "create", "--branch", "HEAD", "--base", "missing-base-ref");
+  const invalidBase = await review.srevFailure("session", "create", "--branch", "HEAD", "--base", "missing-base-ref");
   expect(invalidBase.code).not.toBe(0);
   expect(invalidBase.stderr).toContain("missing-base-ref");
 
   let wrongRepo: { code?: number; stderr?: string } | undefined;
   try {
-    await review.crwFrom(review.otherRepo, "serve", "--repo", review.otherRepo);
+    await review.srevFrom(review.otherRepo, "serve", "--repo", review.otherRepo);
   } catch (error) {
     wrongRepo = error as { code?: number; stderr?: string };
   }

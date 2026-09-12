@@ -1,5 +1,5 @@
 {
-  "name": "crw-plugin-deps",
+  "name": "srev-plugin-deps",
   "private": true,
   "type": "module",
   "description": "Shared runtime indexers. The launcher installs these into its writable data directory on first use.",

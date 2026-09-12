@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Plans gain an optional session-level `overview` narrative ("the change does X, decomposed as…") carried through submit → DB → session GET → export → `crw status` → web plan view, plus SKILL.md guidance making unit rationales change-relative.
+**Goal:** Plans gain an optional session-level `overview` narrative ("the change does X, decomposed as…") carried through submit → DB → session GET → export → `srev status` → web plan view, plus SKILL.md guidance making unit rationales change-relative.
 
 **Architecture:** One new sqlite column on `review_sessions` (migration v9). The overview travels inside the existing plan-submit body and is replaced (or cleared when absent) on every resubmit. The server stores and serves opaque text — all generation lives in SKILL.md guidance. Spec: `docs/superpowers/specs/2026-07-25-plan-narrative-design.md`.
 
@@ -12,9 +12,9 @@
 
 - Package manager: `pnpm` (never npm). Run tests with `pnpm test` (vitest, whole workspace) or `npx vitest run <file>` for one file.
 - The plugin ships a **committed bundle**: after any `packages/skill` or `packages/server` runtime change, run `pnpm build && pnpm build:plugin` and commit the `plugin/` diff (final task).
-- `overview` is optional end-to-end: `crw plan --auto` produces none; absent field on resubmit **clears** the stored value; export emits `overview: ""` when unset.
+- `overview` is optional end-to-end: `srev plan --auto` produces none; absent field on resubmit **clears** the stored value; export emits `overview: ""` when unset.
 - Server never generates text; overview is trimmed but otherwise stored verbatim. No server-side length cap.
-- Two skill docs exist and BOTH get the guidance edits: `packages/skill/skill.md` (dev) and `plugin/skills/code-review-walkthrough/SKILL.md` (plugin copy, hand-maintained — not generated).
+- Two skill docs exist and BOTH get the guidance edits: `packages/skill/skill.md` (dev) and `plugin/skills/structured-review/SKILL.md` (plugin copy, hand-maintained — not generated).
 - Git: work directly on `main` (repo convention: rebase + ff-only, no merge commits), commit per task.
 
 ---
@@ -266,7 +266,7 @@ git commit -m "feat(server): comment export carries session overview"
   - `Session.overview?: string` (api.ts)
   - `parsePlanFile(text: string): { units: UnitInput[]; overview?: string }` — accepts a bare `UnitInput[]` (legacy format) or `{ overview?, units }`; throws `Error("plan file must be a units array or { overview?, units }")` otherwise.
   - `writePlan(base, sessionId, units, overview?)` — body `{ units, overview? }` (field omitted when `undefined`, which the server treats as clear); return type gains `overview: string`.
-  - `exportComments` return type gains `overview: string` (flows through `crw comments` via the existing `...exported` spread at cli.ts:228 — no cli change needed for comments).
+  - `exportComments` return type gains `overview: string` (flows through `srev comments` via the existing `...exported` spread at cli.ts:228 — no cli change needed for comments).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -325,7 +325,7 @@ export async function writePlan(
 4. New parser next to `UnitInput`:
 
 ```ts
-/** Plan file for `crw plan --units`: either a bare UnitInput[] (legacy) or
+/** Plan file for `srev plan --units`: either a bare UnitInput[] (legacy) or
  *  { overview?, units }. The overview travels with the plan so a replan
  *  always re-states (or clears) the narrative. */
 export function parsePlanFile(text: string): { units: UnitInput[]; overview?: string } {
@@ -390,12 +390,12 @@ Expected: PASS (cli.test.ts guards cmdPlan against regressions).
 
 ```bash
 git add packages/skill/src/api.ts packages/skill/src/cli.ts packages/skill/test/api.test.ts
-git commit -m "feat(crw): plan file accepts { overview, units }; overview flows through plan/export"
+git commit -m "feat(srev): plan file accepts { overview, units }; overview flows through plan/export"
 ```
 
 ---
 
-### Task 5: `crw status` prints the overview
+### Task 5: `srev status` prints the overview
 
 **Files:**
 - Modify: `packages/skill/src/status.ts` (SessionStatus, computeStatus)
@@ -472,7 +472,7 @@ Expected: PASS.
 
 ```bash
 git add packages/skill/src/status.ts packages/skill/src/cli.ts packages/skill/test/status.test.ts
-git commit -m "feat(crw): status includes and pretty-prints the session overview"
+git commit -m "feat(srev): status includes and pretty-prints the session overview"
 ```
 
 ---
@@ -601,7 +601,7 @@ git commit -m "feat(web): collapsible plan-overview block above the unit list"
 
 **Files:**
 - Modify: `packages/skill/skill.md` (dev copy)
-- Modify: `plugin/skills/code-review-walkthrough/SKILL.md` (plugin copy — same edits; the two differ only in their invocation preamble)
+- Modify: `plugin/skills/structured-review/SKILL.md` (plugin copy — same edits; the two differ only in their invocation preamble)
 
 **Interfaces:**
 - Consumes: plan file format from Task 4 (`{ overview?, units }`).
@@ -663,13 +663,13 @@ Renumber the remaining steps (old 5→7, old 6→8) and keep their text unchange
 
 - [ ] **Step 2: Verify**
 
-Run: `diff <(sed -n '/## Building the review plan/,/Never run `git diff`/p' packages/skill/skill.md) <(sed -n '/## Building the review plan/,/Never run `git diff`/p' plugin/skills/code-review-walkthrough/SKILL.md)`
+Run: `diff <(sed -n '/## Building the review plan/,/Never run `git diff`/p' packages/skill/skill.md) <(sed -n '/## Building the review plan/,/Never run `git diff`/p' plugin/skills/structured-review/SKILL.md)`
 Expected: no output (sections identical). Read both once end-to-end for renumbering mistakes.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add packages/skill/skill.md plugin/skills/code-review-walkthrough/SKILL.md
+git add packages/skill/skill.md plugin/skills/structured-review/SKILL.md
 git commit -m "docs(skill): plan narrative guidance — intent gathering, overview, change-relative rationales"
 ```
 
@@ -692,22 +692,22 @@ Expected: build clean, all tests PASS across server/skill/web. Fix anything red 
 - [ ] **Step 2: Rebuild the committed plugin bundle**
 
 Run: `pnpm build:plugin`
-Expected: `plugin/dist/crw.js` (and any other bundle outputs) change in `git status` — the CLI runtime changed in Tasks 4–5.
+Expected: `plugin/dist/srev.js` (and any other bundle outputs) change in `git status` — the CLI runtime changed in Tasks 4–5.
 
 - [ ] **Step 3: Smoke-test the walkthrough end-to-end**
 
 ```bash
-node plugin/dist/crw.js serve --repo . &
+node plugin/dist/srev.js serve --repo . &
 sleep 1
-node plugin/dist/crw.js session create --branch HEAD --base HEAD~1
+node plugin/dist/srev.js session create --branch HEAD --base HEAD~1
 # with the printed <id>:
 echo '{ "overview": "Smoke overview.", "units": [] }' > /tmp/claude-plan-smoke.json
-node plugin/dist/crw.js plan --session <id> --units /tmp/claude-plan-smoke.json
-node plugin/dist/crw.js status --session <id> --pretty   # expect "overview: Smoke overview."
-node plugin/dist/crw.js comments --session <id>          # expect "overview": "Smoke overview."
+node plugin/dist/srev.js plan --session <id> --units /tmp/claude-plan-smoke.json
+node plugin/dist/srev.js status --session <id> --pretty   # expect "overview: Smoke overview."
+node plugin/dist/srev.js comments --session <id>          # expect "overview": "Smoke overview."
 ```
 
-Expected: overview line in pretty status; `overview` field in comments JSON. Clean up afterwards: `node plugin/dist/crw.js session delete --session <id>`, then `curl -X POST http://localhost:3456/api/shutdown` (there is no `crw shutdown` subcommand) or kill the process.
+Expected: overview line in pretty status; `overview` field in comments JSON. Clean up afterwards: `node plugin/dist/srev.js session delete --session <id>`, then `curl -X POST http://localhost:3456/api/shutdown` (there is no `srev shutdown` subcommand) or kill the process.
 
 - [ ] **Step 4: Commit the bundle**
 

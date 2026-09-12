@@ -351,7 +351,7 @@ export class ScipGraphProvider implements GraphProvider {
   /** Run one job's SCIP indexer, decode its index, and re-root the documents. */
   protected async runIndexer(job: IndexerJob): Promise<ScipDocument[]> {
     const absRoot = job.root ? join(this.repoRoot, job.root) : this.repoRoot;
-    const dir = mkdtempSync(join(tmpdir(), "scip-crw-"));
+    const dir = mkdtempSync(join(tmpdir(), "scip-srev-"));
     const indexPath = join(dir, "index.scip");
     // --infer-tsconfig writes a tsconfig.json into the root if none exists;
     // clean it up so we don't leave an artifact in the reviewed tree.
@@ -420,10 +420,10 @@ export class ScipGraphProvider implements GraphProvider {
 }
 
 function resolveIndexerBin(pkgName: string, binName: string): string {
-  // CRW_INDEXER_HOME points at a directory whose node_modules holds the
+  // SREV_INDEXER_HOME points at a directory whose node_modules holds the
   // indexer packages (plugin mode: ${CLAUDE_PLUGIN_DATA}, npm-installed by the
   // SessionStart hook). Unset = resolve from our own node_modules (dev mode).
-  const home = process.env.CRW_INDEXER_HOME;
+  const home = process.env.SREV_INDEXER_HOME;
   const pkgPath = require.resolve(`${pkgName}/package.json`, home ? { paths: [home] } : undefined);
   const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { bin: string | Record<string, string> };
   const rel = typeof pkg.bin === "string" ? pkg.bin : pkg.bin[binName];

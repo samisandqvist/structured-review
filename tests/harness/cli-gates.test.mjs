@@ -18,7 +18,7 @@ afterEach(() => {
 });
 
 function coverageFixture() {
-  const root = mkdtempSync(join(tmpdir(), "crw-cli-coverage-"));
+  const root = mkdtempSync(join(tmpdir(), "srev-cli-coverage-"));
   dirs.push(root);
   for (const path of [
     "packages/server/src",
@@ -48,7 +48,7 @@ function coverageFixture() {
 }
 
 function staticFixture() {
-  const root = mkdtempSync(join(tmpdir(), "crw-cli-static-real-"));
+  const root = mkdtempSync(join(tmpdir(), "srev-cli-static-real-"));
   dirs.push(root);
   symlinkSync(join(repositoryRoot, "node_modules"), join(root, "node_modules"), "dir");
   for (const file of ["eslint.config.mjs", "knip.json", "tsconfig.base.json"])
@@ -124,7 +124,7 @@ describe("static CLI gate", () => {
   });
 
   it("fails closed without a baseline and propagates strict findings", async () => {
-    const root = mkdtempSync(join(tmpdir(), "crw-cli-static-"));
+    const root = mkdtempSync(join(tmpdir(), "srev-cli-static-"));
     dirs.push(root);
     const collect = vi.fn(async () => ({ lint: ["a.ts|rule|bad|line"], unused: [] }));
     await expect(checkStaticMain({ root, args: [], collect })).rejects.toThrow(/baseline|ENOENT/);
@@ -152,7 +152,7 @@ describe("artifact CLI gate", () => {
     expect(checkArtifactsMain({ root: repositoryRoot, build, log: vi.fn(), error })).toBe(1);
     expect(error).toHaveBeenCalledWith("plugin/LICENSE");
 
-    const missingRoot = mkdtempSync(join(tmpdir(), "crw-cli-artifact-missing-"));
+    const missingRoot = mkdtempSync(join(tmpdir(), "srev-cli-artifact-missing-"));
     dirs.push(missingRoot);
     expect(() => checkArtifactsMain({ root: missingRoot, log: vi.fn(), error })).toThrow();
   });
@@ -182,7 +182,7 @@ describe("verify CLI gate", () => {
   });
 
   it("runs every required check, propagates failure, and writes an auditable report", async () => {
-    const root = mkdtempSync(join(tmpdir(), "crw-cli-verify-"));
+    const root = mkdtempSync(join(tmpdir(), "srev-cli-verify-"));
     dirs.push(root);
     const commands = [];
     const execute = vi.fn(async (command) => {
@@ -201,7 +201,7 @@ describe("verify CLI gate", () => {
   });
 
   it("returns success and the subprocess adapter preserves success and failure exits", async () => {
-    const root = mkdtempSync(join(tmpdir(), "crw-cli-verify-success-"));
+    const root = mkdtempSync(join(tmpdir(), "srev-cli-verify-success-"));
     dirs.push(root);
     expect(await verifyMain({ root, args: [], execute: async () => 0, log: vi.fn(), table: vi.fn() })).toBe(0);
     expect(await spawnCommand([process.execPath, "-e", "process.exit(0)"], vi.fn())).toBe(0);

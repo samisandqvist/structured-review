@@ -1,4 +1,4 @@
-# Code Review Walkthrough — Design
+# Structured Review — Design
 
 **Status:** Design with stack selected — ready for implementation planning
 **Date:** 2026-06-19

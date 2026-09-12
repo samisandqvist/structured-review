@@ -3,9 +3,9 @@
 // so the CLI stays correct across schema migrations.
 import { spawn } from "node:child_process";
 
-export const DEFAULT_BASE_URL = process.env.CRW_SERVER_URL || "http://localhost:3456";
+export const DEFAULT_BASE_URL = process.env.SREV_SERVER_URL || "http://localhost:3456";
 
-/** git's well-known empty tree; `crw session create --base empty` maps here,
+/** git's well-known empty tree; `srev session create --base empty` maps here,
  *  making the session a whole-repo review (diff from nothing). */
 export const EMPTY_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
@@ -74,7 +74,7 @@ export interface OrphanDTO {
  *  orphans reduced to what a plan references and grouped by directory (the
  *  triage a planner does anyway — docs vs configs vs code residuals). This is
  *  what an LLM planner needs to author units; the full flat dump is behind
- *  `crw context --full`. */
+ *  `srev context --full`. */
 export function compactContext(
   flows: FlowDTO[],
   orphans: OrphanDTO[],
@@ -121,7 +121,7 @@ export interface ChangeSummary {
   signature?: string | null;
 }
 
-/** Scannable planning view with no SCIP stableIds anywhere (`crw context
+/** Scannable planning view with no SCIP stableIds anywhere (`srev context
  *  --brief`): flows named by their numeric id + a short human entry, merge
  *  suggestions by group index + flow ids, orphan groups as directory + file
  *  list, changes without stableId/signature. With numeric plan refs
@@ -273,10 +273,10 @@ export type UnitInput =
       kind: "flow";
       flowEntryStableId?: string;
       flowEntryStableIds?: string[];
-      /** Numeric flow ids as printed by `crw context` — resolved to entry
+      /** Numeric flow ids as printed by `srev context` — resolved to entry
        *  stableIds CLI-side (resolvePlanRefs) before the plan is submitted. */
       flowIds?: number[];
-      /** Index into `crw context`'s mergeSuggestions — expands to that
+      /** Index into `srev context`'s mergeSuggestions — expands to that
        *  group's entryStableIds. */
       mergeGroup?: number;
       label: string;
@@ -285,7 +285,7 @@ export type UnitInput =
   | { kind: "orphans"; orphanStableIds?: string[]; orphanFiles?: string[]; label: string; rationale?: string };
 
 /** Expand numeric plan refs (`flowIds`, `mergeGroup`) into
- *  `flowEntryStableIds`, so a plan can reference flows the way `crw context`
+ *  `flowEntryStableIds`, so a plan can reference flows the way `srev context`
  *  names them instead of transcribing 100+-char SCIP stableIds. Resolution
  *  must run against the same compacted flows + suggestMerges output the
  *  context printed, so the numbering is guaranteed to line up. Unknown refs
@@ -323,7 +323,7 @@ export function resolvePlanRefs(
   });
 }
 
-/** Plan file for `crw plan --units`: either a bare UnitInput[] (legacy) or
+/** Plan file for `srev plan --units`: either a bare UnitInput[] (legacy) or
  *  { overview?, units }. The overview travels with the plan so a replan
  *  always re-states (or clears) the narrative. */
 export function parsePlanFile(text: string): { units: UnitInput[]; overview?: string } {

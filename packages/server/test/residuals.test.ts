@@ -10,7 +10,7 @@ let dir: string;
 const git = (...a: string[]) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
 
 beforeAll(() => {
-  dir = mkdtempSync(join(tmpdir(), "crw-resid-"));
+  dir = mkdtempSync(join(tmpdir(), "srev-resid-"));
   git("init", "-b", "main");
   git("config", "user.email", "t@t");
   git("config", "user.name", "t");

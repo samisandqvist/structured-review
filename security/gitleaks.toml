@@ -1,4 +1,4 @@
-title = "Code Review Walkthrough secret scanning"
+title = "Structured Review secret scanning"
 
 [extend]
 useDefault = true

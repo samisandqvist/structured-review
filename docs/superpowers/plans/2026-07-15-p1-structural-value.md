@@ -88,7 +88,7 @@ describe("extractHunkDiff line coordinates", () => {
 
 Also find the existing `getNodeDiff` test that covers an **unchanged** node (it asserts `oldText === newText` from a temp-repo slice) and add one assertion to it: `expect(d.lines[0]).toEqual({ type: "context", oldLine: <that test's startLine>, newLine: <same>, text: <first sliced line> });` — unchanged context lines must be numbered from the node's real `startLine`.
 
-- [ ] **Step 2: Run tests to verify they fail** — `pnpm --filter @crw/server test`. Expected: new tests FAIL (`lines` is undefined / type error mentions `lines` missing on `NodeDiff`).
+- [ ] **Step 2: Run tests to verify they fail** — `pnpm --filter @srev/server test`. Expected: new tests FAIL (`lines` is undefined / type error mentions `lines` missing on `NodeDiff`).
 
 - [ ] **Step 3: Implement.** In `packages/server/src/diff.ts`:
 
@@ -179,7 +179,7 @@ Update every `NodeDiff` construction site to go through the helpers:
 
 Note: `withTexts(contextLines("", ...))` would produce `{oldText: "", newText: "", lines: []}` — acceptable, matches old behavior for missing files.
 
-- [ ] **Step 4: Run tests** — `pnpm --filter @crw/server test` then `pnpm typecheck`. Expected: all server tests PASS (existing `oldText`/`newText` assertions must pass unmodified — texts are now derived from lines). Typecheck will fail in `packages/web` only if it references `NodeDiff` from server — it doesn't (types are duplicated), so full typecheck should PASS.
+- [ ] **Step 4: Run tests** — `pnpm --filter @srev/server test` then `pnpm typecheck`. Expected: all server tests PASS (existing `oldText`/`newText` assertions must pass unmodified — texts are now derived from lines). Typecheck will fail in `packages/web` only if it references `NodeDiff` from server — it doesn't (types are duplicated), so full typecheck should PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -237,7 +237,7 @@ it("renders a gap separator between discontinuous regions", () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail** — `pnpm --filter @crw/web test`. Expected: FAIL (no `data-line-type` rows; old component renders via ReactDiffViewer).
+- [ ] **Step 2: Run tests to verify they fail** — `pnpm --filter @srev/web test`. Expected: FAIL (no `data-line-type` rows; old component renders via ReactDiffViewer).
 
 - [ ] **Step 3: Implement.** In `packages/web/src/api/client.ts` replace line 24:
 
@@ -337,12 +337,12 @@ const lines = diff?.lines ?? [];
 Delete the `diffStyles` constant and the `react-diff-viewer-continued` import. Then:
 
 ```bash
-pnpm --filter @crw/web remove react-diff-viewer-continued
+pnpm --filter @srev/web remove react-diff-viewer-continued
 ```
 
 Update `packages/web/test/SplitLayout.test.tsx:20` mock: `diff: { oldText: "", newText: "", lines: [] }`.
 
-- [ ] **Step 4: Run tests** — `pnpm --filter @crw/web test && pnpm typecheck`. Expected: PASS (update any old DiffView test that asserted ReactDiffViewer-specific output to assert against the new table).
+- [ ] **Step 4: Run tests** — `pnpm --filter @srev/web test && pnpm typecheck`. Expected: PASS (update any old DiffView test that asserted ReactDiffViewer-specific output to assert against the new table).
 
 - [ ] **Step 5: Commit**
 
@@ -430,7 +430,7 @@ it("structuralContextFor lists callers, callees, and tests", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure** — `pnpm --filter @crw/server test`. Expected: FAIL (functions don't exist).
+- [ ] **Step 2: Run to verify failure** — `pnpm --filter @srev/server test`. Expected: FAIL (functions don't exist).
 
 - [ ] **Step 3: Implement the helpers.** In `packages/server/src/diff.ts`:
 
@@ -707,7 +707,7 @@ describe("Relations drawer detours", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure** — `pnpm --filter @crw/web test`. Expected: FAIL (`RelationsPanel` module not found; no breadcrumb testids).
+- [ ] **Step 2: Run to verify failure** — `pnpm --filter @srev/web test`. Expected: FAIL (`RelationsPanel` module not found; no breadcrumb testids).
 
 - [ ] **Step 3: Implement the store change.** In `packages/web/src/store/ui.ts`: remove `popWalkPath` (dead — nothing calls it) from the interface and implementation; add:
 
@@ -876,7 +876,7 @@ Render the breadcrumb bar just above `<DiffView …>` inside the `currentNode ? 
 
 (`jumpToBreadcrumb(0)` is exactly "return to where the detour began and clear the stack".) Import `RelationsPanel` at the top. `useNode`'s `callers`/`callees` are already in `nodeData` — no hook changes needed.
 
-- [ ] **Step 6: Run tests** — `pnpm --filter @crw/web test && pnpm typecheck`. Expected: PASS, including the pre-existing walk-navigation tests (unchanged semantics — `walkTo` only additionally clears an empty stack).
+- [ ] **Step 6: Run tests** — `pnpm --filter @srev/web test && pnpm typecheck`. Expected: PASS, including the pre-existing walk-navigation tests (unchanged semantics — `walkTo` only additionally clears an empty stack).
 
 - [ ] **Step 7: Commit**
 
@@ -902,7 +902,7 @@ git commit -m "feat(web): relations drawer with breadcrumb detours and return-to
 - [ ] **Step 1: Add the dependency**
 
 ```bash
-pnpm --filter @crw/server add zod
+pnpm --filter @srev/server add zod
 ```
 
 - [ ] **Step 2: Write failing route tests** in `packages/server/test/routes.test.ts` (reuse the file's existing session-creation helpers):
@@ -986,7 +986,7 @@ describe("runtime validation", () => {
 });
 ```
 
-- [ ] **Step 3: Run to verify failure** — `pnpm --filter @crw/server test`. Expected: the new describe FAILS (current routes 500 or accept the input).
+- [ ] **Step 3: Run to verify failure** — `pnpm --filter @srev/server test`. Expected: the new describe FAILS (current routes 500 or accept the input).
 
 - [ ] **Step 4: Implement.** Create `packages/server/src/validate.ts`:
 
@@ -1186,7 +1186,7 @@ Expected: all green; build copies `scip.proto` and produces `packages/web/dist`.
 - [ ] **Step 2: Launch the built app against this repo** (the feature branch itself is the review target — dogfood):
 
 ```bash
-CRW_DB_PATH=/tmp/crw-verify.db pnpm start &
+SREV_DB_PATH=/tmp/srev-verify.db pnpm start &
 sleep 3
 curl -s -X POST localhost:3456/api/sessions -H 'Content-Type: application/json' -d '{"branch":"HEAD","baseRef":"main"}'
 ```

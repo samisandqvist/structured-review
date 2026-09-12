@@ -51,7 +51,7 @@ describe("subtractRanges", () => {
 });
 ```
 
-- [ ] **Step 2: Run** `pnpm --filter @crw/server exec vitest run test/diff.test.ts` — Expected: FAIL (`subtractRanges` not exported).
+- [ ] **Step 2: Run** `pnpm --filter @srev/server exec vitest run test/diff.test.ts` — Expected: FAIL (`subtractRanges` not exported).
 
 - [ ] **Step 3: Implement** in `diff.ts`:
 
@@ -103,7 +103,7 @@ let dir: string;
 const git = (...a: string[]) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
 
 beforeAll(() => {
-  dir = mkdtempSync(join(tmpdir(), "crw-resid-"));
+  dir = mkdtempSync(join(tmpdir(), "srev-resid-"));
   git("init", "-b", "main");
   git("config", "user.email", "t@t"); git("config", "user.name", "t");
   writeFileSync(join(dir, "types.ts"), "export interface Order {\n  id: string;\n}\n");
@@ -127,7 +127,7 @@ describe("changedFiles", () => {
 });
 ```
 
-- [ ] **Step 2: Run** `pnpm --filter @crw/server exec vitest run test/residuals.test.ts` — Expected: FAIL (`changedFiles` not exported).
+- [ ] **Step 2: Run** `pnpm --filter @srev/server exec vitest run test/residuals.test.ts` — Expected: FAIL (`changedFiles` not exported).
 
 - [ ] **Step 3: Implement.** In `diff.ts`:
 
@@ -154,7 +154,7 @@ export const isTestFile = (p: string) =>
 
 In `scip.ts` delete the local `isTestFile` const and add `import { isTestFile } from "../util.js";`.
 
-- [ ] **Step 4: Run** `pnpm --filter @crw/server exec vitest run` — Expected: PASS (all server tests, including scip ones).
+- [ ] **Step 4: Run** `pnpm --filter @srev/server exec vitest run` — Expected: PASS (all server tests, including scip ones).
 
 - [ ] **Step 5: Commit** `git add -A packages/server && git commit -m "feat(server): changedFiles helper; share isTestFile via util"`
 
@@ -260,7 +260,7 @@ export function computeResiduals(
 }
 ```
 
-- [ ] **Step 4: Run** `pnpm --filter @crw/server exec vitest run test/residuals.test.ts` — Expected: PASS.
+- [ ] **Step 4: Run** `pnpm --filter @srev/server exec vitest run test/residuals.test.ts` — Expected: PASS.
 
 - [ ] **Step 5: Commit** `git add packages/server/src/residuals.ts packages/server/test/residuals.test.ts && git commit -m "feat(server): computeResiduals — uncovered hunks to pseudo-nodes"`
 
@@ -285,7 +285,7 @@ import { join } from "node:path";
 let fixtureRoot: string;
 beforeEach(() => {
   db = createMemoryDatabase();
-  fixtureRoot = mkdtempSync(join(tmpdir(), "crw-routes-")); // not a git repo → no diffs
+  fixtureRoot = mkdtempSync(join(tmpdir(), "srev-routes-")); // not a git repo → no diffs
   app = createApp({ db, graphProvider: new StubGraphProvider(), repoRoot: fixtureRoot });
 });
 afterEach(() => { db.close(); rmSync(fixtureRoot, { recursive: true, force: true }); });
@@ -327,7 +327,7 @@ describe("residual pseudo-nodes", () => {
 });
 ```
 
-- [ ] **Step 2: Run** `pnpm --filter @crw/server exec vitest run test/routes.test.ts` — Expected: FAIL (`repoRoot` not in AppContext / no residual node).
+- [ ] **Step 2: Run** `pnpm --filter @srev/server exec vitest run test/routes.test.ts` — Expected: FAIL (`repoRoot` not in AppContext / no residual node).
 
 - [ ] **Step 3: Implement.** `app.ts`:
 
@@ -370,7 +370,7 @@ for (const r of computeResiduals(body.baseRef, spansByFile, ctx.repoRoot!)) {
 
 Also: `reconcileSubgraph` calls `fileChangedRanges(baseRef, n.file)` with the default root — thread `ctx.repoRoot` through as a third argument so refinement uses the same repo.
 
-- [ ] **Step 4: Run** `pnpm --filter @crw/server exec vitest run` — Expected: PASS (all).
+- [ ] **Step 4: Run** `pnpm --filter @srev/server exec vitest run` — Expected: PASS (all).
 
 - [ ] **Step 5: Commit** `git add -A packages/server && git commit -m "feat(server): residual pseudo-nodes at session creation; explicit repoRoot in AppContext"`
 
@@ -408,7 +408,7 @@ Also: `reconcileSubgraph` calls `fileChangedRanges(baseRef, n.file)` with the de
         : n.isTest ? "test" : n.stableId.includes("#") ? "method" : "function";
 ```
 
-- [ ] **Step 4: Run** `pnpm --filter @crw/server exec vitest run test/routes.test.ts` — Expected: PASS.
+- [ ] **Step 4: Run** `pnpm --filter @srev/server exec vitest run test/routes.test.ts` — Expected: PASS.
 
 - [ ] **Step 5: Commit** `git add -A packages/server && git commit -m "feat(server): kind 'file' for residual changes in change summary"`
 

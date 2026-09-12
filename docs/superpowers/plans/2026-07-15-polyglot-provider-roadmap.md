@@ -90,7 +90,7 @@ extension / root language:
   (py). Keep the TS patterns.
 - **Entry evidence** (`graph/entry-points.ts`): `isExportedAt` reads the
   `export` keyword — TS-only. v1 (this phase): Java/Python entries fall
-  back to graph-root 0.4 + `.crw-entry-points.json` (already
+  back to graph-root 0.4 + `.srev-entry-points.json` (already
   language-neutral, ships today). v2 (separate, optional, can slip):
   detector variants that are *stronger* than TS's — Java annotations
   (`@RestController`/`@GetMapping` → http-route, `@Scheduled`/
@@ -196,7 +196,7 @@ user's review output (comments, reviewed states). That works but is
 error-prone, undiscoverable, and exactly the part the walkthrough skill
 scripts — it deserves a stable command surface.
 
-**Shape:** a small Node CLI (extend `packages/skill/src`, e.g. `crw <cmd>`),
+**Shape:** a small Node CLI (extend `packages/skill/src`, e.g. `srev <cmd>`),
 JSON on stdout for agent consumption, human-readable with `--pretty`. Thin
 wrapper over the existing HTTP API (and server lifecycle) — no new server
 endpoints unless a gap shows up; notably NO direct SQLite access, so it
@@ -204,28 +204,28 @@ stays correct across schema migrations.
 
 Setup side:
 
-- `crw serve [--repo <path>] [--port N]` — ensure the hub is running against
+- `srev serve [--repo <path>] [--port N]` — ensure the hub is running against
   a repo (start if needed, reuse if healthy), print base URL + PID.
-- `crw session create --branch <b> --base <ref>` — create a session; print
+- `srev session create --branch <b> --base <ref>` — create a session; print
   session id, UI URL (`…/?session=<id>`), node/flow counts, and
   `indexWarnings` (the agent must relay degradation warnings to the user).
-- `crw plan --session <id> --auto` — mechanical plan: top flow entries per
+- `srev plan --session <id> --auto` — mechanical plan: top flow entries per
   language + auto orphans (what the Phase 4 dogfood did by hand);
-  `crw plan --session <id> --units <file.json>` for an LLM-authored plan.
+  `srev plan --session <id> --units <file.json>` for an LLM-authored plan.
 
 Harvest side (act on the user's review output):
 
-- `crw status --session <id>` — coverage, per-unit reviewed/total,
+- `srev status --session <id>` — coverage, per-unit reviewed/total,
   remaining-unreviewed node list; stale flag.
-- `crw comments --session <id>` — all comments with node label, file,
+- `srev comments --session <id>` — all comments with node label, file,
   anchor (start/end line + side), hunk snippet, and review status —
   GitHub-mappable, ready for the skill's wrap-up (PR feedback / report).
-- `crw wait --session <id> [--until reviewed|commented]` — optional: poll
+- `srev wait --session <id> [--until reviewed|commented]` — optional: poll
   until review activity settles, for "tell me when Sami is done" flows.
 
 Feeds plugin packaging directly: packaging task 3 (skill paths → built CLI)
 ships this same binary via `${CLAUDE_PLUGIN_ROOT}`, and the skill.md shrinks
-to "run `crw …`" invocations.
+to "run `srev …`" invocations.
 
 ## Unassigned-changes revisit — attach tests and uncalled types to their context (design + implement, after the CLI, before/alongside plugin packaging)
 
@@ -263,7 +263,7 @@ count toward the unit's reviewed n/m or keep their own ledger? Ordering
 within a node: code first, then its tests? What happens when a test
 exercises nodes in two different units (first unit in plan order wins,
 duplicate as reference, or reviewer choice)? And how much should the
-mechanical `crw plan --auto` exploit this vs. leaving it to LLM-authored
+mechanical `srev plan --auto` exploit this vs. leaving it to LLM-authored
 plans?
 
 Not scoped yet — needs its own brainstorm → plan cycle. Rough guess ~1–2
@@ -302,7 +302,7 @@ plan.
 
 **Packaging tasks (new, on top of phases 1–4):**
 
-1. Publish the server to npm and launch via `npx @crw/server` (cleanest),
+1. Publish the server to npm and launch via `npx @srev/server` (cleanest),
    or a `SessionStart` hook installing into `${CLAUDE_PLUGIN_DATA}`.
    Caveat: `better-sqlite3` is a native module — prebuilds cover common
    platforms; consider migrating to Node 22's built-in `node:sqlite` to

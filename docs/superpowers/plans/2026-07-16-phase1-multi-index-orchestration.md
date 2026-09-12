@@ -44,7 +44,7 @@ Append to `packages/server/test/diff.test.ts` (it already imports `execFileSync`
 ```ts
 describe("subtreeFingerprint", () => {
   function makeRepo(): { dir: string; git: (...a: string[]) => string } {
-    const dir = mkdtempSync(join(tmpdir(), "crw-subtree-"));
+    const dir = mkdtempSync(join(tmpdir(), "srev-subtree-"));
     const git = (...a: string[]) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
     git("init", "-b", "main");
     git("config", "user.email", "t@t");
@@ -110,7 +110,7 @@ describe("subtreeFingerprint", () => {
   });
 
   it("returns null when git is unavailable", () => {
-    const dir = mkdtempSync(join(tmpdir(), "crw-subtree-nogit-"));
+    const dir = mkdtempSync(join(tmpdir(), "srev-subtree-nogit-"));
     try {
       expect(subtreeFingerprint("a", dir)).toBeNull();
     } finally {
@@ -206,7 +206,7 @@ import { discoverLanguageRoots, rootHasSources } from "../src/graph/roots.js";
 
 /** Lay out files under a fresh temp dir; keys are relative paths. */
 function fixture(files: Record<string, string>): string {
-  const dir = mkdtempSync(join(tmpdir(), "crw-roots-"));
+  const dir = mkdtempSync(join(tmpdir(), "srev-roots-"));
   for (const [rel, content] of Object.entries(files)) {
     mkdirSync(join(dir, rel, ".."), { recursive: true });
     writeFileSync(join(dir, rel), content);
@@ -743,7 +743,7 @@ private jobCache = new Map<string, { key: string; docs: Promise<ScipDocument[]> 
   /** Run one job's SCIP indexer, decode its index, and re-root the documents. */
   protected async runIndexer(job: IndexerJob): Promise<ScipDocument[]> {
     const absRoot = job.root ? join(this.repoRoot, job.root) : this.repoRoot;
-    const dir = mkdtempSync(join(tmpdir(), "scip-crw-"));
+    const dir = mkdtempSync(join(tmpdir(), "scip-srev-"));
     const indexPath = join(dir, "index.scip");
     // --infer-tsconfig writes a tsconfig.json into the root if none exists;
     // clean it up so we don't leave an artifact in the reviewed tree.
@@ -827,7 +827,7 @@ Add `@sourcegraph/scip-python` (npm package, same acquisition path as scip-types
 
 - [ ] **Step 1: Add the dependency**
 
-Run: `pnpm --filter @crw/server add @sourcegraph/scip-python`
+Run: `pnpm --filter @srev/server add @sourcegraph/scip-python`
 Expected: `packages/server/package.json` gains the dependency; lockfile updates.
 
 - [ ] **Step 2: Write the failing integration test**
@@ -845,7 +845,7 @@ import { ScipGraphProvider } from "../src/graph/scip.js";
 // Real scip-python run over a tiny fixture — slow-ish (~seconds), so one test.
 describe("scip-python integration", () => {
   it("indexes a python root and derives a call flow with repo-relative paths", { timeout: 120_000 }, async () => {
-    const dir = mkdtempSync(join(tmpdir(), "crw-py-"));
+    const dir = mkdtempSync(join(tmpdir(), "srev-py-"));
     try {
       const git = (...a: string[]) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
       git("init", "-b", "main");
@@ -1006,7 +1006,7 @@ Manual verification (the roadmap's Phase 1 exit criterion): on the sample-projec
 ```bash
 pnpm build
 cd ~/Projects/<sample-project-checkout>   # the checkout with the sample-feature branch checked out
-CRW_DB_PATH=/tmp/crw-dogfood.db PORT=3456 node /path/to/structured-review/packages/server/dist/index.js
+SREV_DB_PATH=/tmp/srev-dogfood.db PORT=3456 node /path/to/structured-review/packages/server/dist/index.js
 ```
 
 Expected startup log: one `scip: ts root ...` line per TS root and one `scip: py root ...` line per Python root after the first session request (indexing is lazy).

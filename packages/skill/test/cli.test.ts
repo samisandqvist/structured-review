@@ -94,15 +94,15 @@ describe("prettyBrief", () => {
 
 describe("statePaths", () => {
   afterEach(() => {
-    delete process.env.CRW_DATA_DIR;
+    delete process.env.SREV_DATA_DIR;
   });
 
-  it("keeps state in the repo without CRW_DATA_DIR", () => {
-    expect(statePaths("/home/x/repo")).toEqual({ logDir: "/home/x/repo/.crw" });
+  it("keeps state in the repo without SREV_DATA_DIR", () => {
+    expect(statePaths("/home/x/repo")).toEqual({ logDir: "/home/x/repo/.srev" });
   });
 
   it("keys DB and logs by repo name + path hash under the data dir", () => {
-    process.env.CRW_DATA_DIR = "/data";
+    process.env.SREV_DATA_DIR = "/data";
     const a = statePaths("/home/x/repo");
     const b = statePaths("/home/y/repo"); // same basename, different path
     expect(a.dbPath).toMatch(/^\/data\/db\/repo-[0-9a-f]+\.db$/);

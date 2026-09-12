@@ -6,7 +6,7 @@ import { discoverLanguageRoots, languagePathspecs, rootHasSources } from "../src
 
 /** Lay out files under a fresh temp dir; keys are relative paths. */
 function fixture(files: Record<string, string>): string {
-  const dir = mkdtempSync(join(tmpdir(), "crw-roots-"));
+  const dir = mkdtempSync(join(tmpdir(), "srev-roots-"));
   for (const [rel, content] of Object.entries(files)) {
     mkdirSync(join(dir, rel, ".."), { recursive: true });
     writeFileSync(join(dir, rel), content);

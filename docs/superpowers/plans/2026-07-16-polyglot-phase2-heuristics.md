@@ -134,7 +134,7 @@ Append to `packages/server/test/entry-points.test.ts` (imports at top already in
 ```ts
 describe("pythonEntryReasons", () => {
   const write = (content: string) => {
-    const dir = mkdtempSync(join(tmpdir(), "crw-pyentry-"));
+    const dir = mkdtempSync(join(tmpdir(), "srev-pyentry-"));
     writeFileSync(join(dir, "app.py"), content);
     return dir;
   };
@@ -445,7 +445,7 @@ Append inside the existing `describe("subtreeFingerprint", …)` block in `packa
 
 ```ts
   it("with pathspecs, only moves when files of that language (or its markers) change", () => {
-    const dir = mkdtempSync(join(tmpdir(), "crw-fp-lang-"));
+    const dir = mkdtempSync(join(tmpdir(), "srev-fp-lang-"));
     try {
       const g = (...a: string[]) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
       g("init", "-b", "main");

@@ -5,10 +5,10 @@
   },
   "plugins": [
     {
-      "name": "code-review-walkthrough",
+      "name": "structured-review",
       "source": {
         "source": "local",
-        "path": "./plugins/code-review-walkthrough"
+        "path": "./plugins/structured-review"
       },
       "policy": {
         "installation": "AVAILABLE",

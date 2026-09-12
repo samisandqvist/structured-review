@@ -30,25 +30,25 @@ describe("entryEvidence", () => {
 });
 
 describe("loadConfiguredEntries", () => {
-  it("reads .crw-entry-points.json", () => {
-    const dir = mkdtempSync(join(tmpdir(), "crw-entries-"));
+  it("reads .srev-entry-points.json", () => {
+    const dir = mkdtempSync(join(tmpdir(), "srev-entries-"));
     writeFileSync(
-      join(dir, ".crw-entry-points.json"),
+      join(dir, ".srev-entry-points.json"),
       JSON.stringify({ entryPoints: [{ label: "main", file: "src/cli.ts" }] }),
     );
     expect(loadConfiguredEntries(dir)).toEqual([{ label: "main", file: "src/cli.ts" }]);
   });
   it("returns [] when the file is missing or invalid", () => {
-    const dir = mkdtempSync(join(tmpdir(), "crw-entries-"));
+    const dir = mkdtempSync(join(tmpdir(), "srev-entries-"));
     expect(loadConfiguredEntries(dir)).toEqual([]);
-    writeFileSync(join(dir, ".crw-entry-points.json"), "{not json");
+    writeFileSync(join(dir, ".srev-entry-points.json"), "{not json");
     expect(loadConfiguredEntries(dir)).toEqual([]);
   });
 });
 
 describe("isExportedAt", () => {
   it("detects an export keyword at the definition line", () => {
-    const dir = mkdtempSync(join(tmpdir(), "crw-exp-"));
+    const dir = mkdtempSync(join(tmpdir(), "srev-exp-"));
     mkdirSync(join(dir, "src"));
     writeFileSync(join(dir, "src", "a.ts"), "const x = 1;\nexport function foo() {}\nfunction bar() {}\n");
     expect(isExportedAt(dir, "src/a.ts", 2)).toBe(true);
@@ -58,7 +58,7 @@ describe("isExportedAt", () => {
     expect(isExportedAt("/nonexistent", "nope.ts", 1)).toBe(false);
   });
   it("does not match 'export' as a substring of a method name (e.g. exportData)", () => {
-    const dir = mkdtempSync(join(tmpdir(), "crw-exp-"));
+    const dir = mkdtempSync(join(tmpdir(), "srev-exp-"));
     mkdirSync(join(dir, "src"));
     writeFileSync(join(dir, "src", "b.ts"), "class Foo {\n  exportData() {\n    return 1;\n  }\n}\n");
     expect(isExportedAt(dir, "src/b.ts", 2)).toBe(false);
@@ -67,7 +67,7 @@ describe("isExportedAt", () => {
 
 describe("pythonEntryReasons", () => {
   const write = (content: string) => {
-    const dir = mkdtempSync(join(tmpdir(), "crw-pyentry-"));
+    const dir = mkdtempSync(join(tmpdir(), "srev-pyentry-"));
     writeFileSync(join(dir, "app.py"), content);
     return dir;
   };

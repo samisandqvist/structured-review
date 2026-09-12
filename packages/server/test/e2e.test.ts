@@ -30,7 +30,7 @@ function git(root: string, ...args: string[]): string {
  * helper and handler nodes register as changed against baseRef HEAD.
  */
 function makeFixture(): string {
-  const root = mkdtempSync(join(tmpdir(), "crw-e2e-"));
+  const root = mkdtempSync(join(tmpdir(), "srev-e2e-"));
   dir = root; // assign before any git/fs step so afterEach cleans up a partial fixture
 
   git(root, "init", "-b", "main");
@@ -77,12 +77,12 @@ function makeFixture(): string {
  * A committed fixture where `helper` has a *non-test* caller (`handler`) —
  * which disqualifies it from graph-root status — and itself calls `util`, so
  * it still has callees (a configured entry needs callees to head a flow).
- * `.crw-entry-points.json` names it by a bare filename ("helper.ts") to
+ * `.srev-entry-points.json` names it by a bare filename ("helper.ts") to
  * exercise the path-segment-boundary suffix match against the real
  * "src/helper.ts" path.
  */
 function makeConfiguredEntryFixture(): string {
-  const root = mkdtempSync(join(tmpdir(), "crw-e2e-configured-"));
+  const root = mkdtempSync(join(tmpdir(), "srev-e2e-configured-"));
   dir = root;
 
   git(root, "init", "-b", "main");
@@ -112,7 +112,7 @@ function makeConfiguredEntryFixture(): string {
     'import { helper } from "./helper.js";\nexport function handler(): number {\n  return helper(1);\n}\n',
   );
   writeFileSync(
-    join(root, ".crw-entry-points.json"),
+    join(root, ".srev-entry-points.json"),
     JSON.stringify({ entryPoints: [{ label: "helper", file: "helper.ts" }] }) + "\n",
   );
   git(root, "add", ".");

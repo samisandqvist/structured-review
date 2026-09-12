@@ -96,7 +96,7 @@ export class CrgGraphProvider implements GraphProvider {
       command,
       args,
     });
-    this.client = new Client({ name: "crw-server", version: "1.0.0" }, { capabilities: {} });
+    this.client = new Client({ name: "srev-server", version: "1.0.0" }, { capabilities: {} });
     try {
       await this.client.connect(this.transport);
       return this.client;

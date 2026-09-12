@@ -4,7 +4,7 @@
 
 **Goal:** Make one review trustworthy end to end, fixing the release-blocking defects from `docs/software-viability-usability-implementation-findings.md` (2026-07-12).
 
-**Architecture:** All fixes stay inside the existing package layout: `@crw/server` (Hono + better-sqlite3 + SCIP provider), `@crw/web` (Vite/React), `@crw/skill` (orchestration CLI). No new runtime dependencies — Node builtins (`crypto`, `fs`, `path`) only. Server remains the single git/graph/state authority.
+**Architecture:** All fixes stay inside the existing package layout: `@srev/server` (Hono + better-sqlite3 + SCIP provider), `@srev/web` (Vite/React), `@srev/skill` (orchestration CLI). No new runtime dependencies — Node builtins (`crypto`, `fs`, `path`) only. Server remains the single git/graph/state authority.
 
 **Tech Stack:** TypeScript strict ESM (imports use `.js` suffixes), pnpm workspaces, vitest, Hono, better-sqlite3.
 
@@ -53,7 +53,7 @@ it("preserves multiple comments on one node in creation order", () => {
 
 Also add a route-level test asserting `GET /api/sessions/:id/export` responds `{ comments: [...] }` with both comments.
 
-- [ ] **Step 2: Run to verify failure** — `pnpm --filter @crw/server test` → new tests FAIL (length 1 / wrong shape).
+- [ ] **Step 2: Run to verify failure** — `pnpm --filter @srev/server test` → new tests FAIL (length 1 / wrong shape).
 
 - [ ] **Step 3: Implement** — in `repo/comments.ts` replace the record-building loop:
 
@@ -73,7 +73,7 @@ export function exportComments(db: DB, sessionId: string): ExportedComment[] {
 
 Add `id: string` to `ExportedComment` in `types.ts`. Route becomes `c.json({ comments: exportComments(...) })`. Update the skill/web client return types to `{ comments: unknown[] }`-shaped generics (`Promise<{ comments: Record<string, unknown>[] }>` is fine).
 
-- [ ] **Step 4: Run tests + typecheck** — `pnpm --filter @crw/server test && pnpm typecheck` → PASS. Fix any existing tests that asserted the old record shape (they now assert array shape — order preserved).
+- [ ] **Step 4: Run tests + typecheck** — `pnpm --filter @srev/server test && pnpm typecheck` → PASS. Fix any existing tests that asserted the old record shape (they now assert array shape — order preserved).
 
 - [ ] **Step 5: Commit** — `git commit -m "fix(server): export all comments per node as ordered array"`
 
@@ -161,7 +161,7 @@ if (!resolveRef(body.baseRef, ctx.repoRoot)) {
 
 and wrap the subgraph/residuals block in `try/catch (e)` → `if (e instanceof GitError) return c.json({ error: e.message, phase: e.phase }, 400); throw e;`. Pass the already-resolved `headSha` to `createSession` (no more `?? ""`).
 
-- [ ] **Step 4: Run** `pnpm --filter @crw/server test && pnpm typecheck` → PASS, and confirm expected-failure tests no longer print git stderr noise.
+- [ ] **Step 4: Run** `pnpm --filter @srev/server test && pnpm typecheck` → PASS, and confirm expected-failure tests no longer print git stderr noise.
 
 - [ ] **Step 5: Commit** — `git commit -m "fix(server): fail session creation loudly on git errors"`
 
@@ -464,9 +464,9 @@ The skill opens `http://localhost:3456?session=...` but the server mounts only A
 **Files:**
 - Rewrite: `packages/server/src/static.ts` (self-contained static + SPA-fallback router; drop the unused `serveStatic` import)
 - Modify: `packages/server/src/app.ts` (optional `webDistPath` in `AppContext`; mount static/fallback AFTER API routes)
-- Modify: `packages/server/src/index.ts` (default dist path, loopback binding, `CRW_HOST` override warning)
+- Modify: `packages/server/src/index.ts` (default dist path, loopback binding, `SREV_HOST` override warning)
 - Modify: `packages/server/package.json` (`"start": "node dist/index.js"`)
-- Modify: root `package.json` (`"start": "pnpm --filter @crw/server start"`)
+- Modify: root `package.json` (`"start": "pnpm --filter @srev/server start"`)
 - Test: `packages/server/test/static.test.ts` (new)
 
 **Interfaces:**
@@ -476,7 +476,7 @@ The skill opens `http://localhost:3456?session=...` but the server mounts only A
 
 ```ts
 // static.test.ts
-const dist = mkdtempSync(join(tmpdir(), "crw-dist-"));
+const dist = mkdtempSync(join(tmpdir(), "srev-dist-"));
 mkdirSync(join(dist, "assets"), { recursive: true });
 writeFileSync(join(dist, "index.html"), "<!doctype html><div id=root></div>");
 writeFileSync(join(dist, "assets", "app.js"), "console.log(1)");
@@ -558,9 +558,9 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // dist/index.js -> ../../web/dist ; src/index.ts (dev) resolves the same way
-const webDistPath = process.env.CRW_WEB_DIST ?? join(here, "..", "..", "web", "dist");
+const webDistPath = process.env.SREV_WEB_DIST ?? join(here, "..", "..", "web", "dist");
 
-const hostname = process.env.CRW_HOST || "127.0.0.1";
+const hostname = process.env.SREV_HOST || "127.0.0.1";
 if (hostname !== "127.0.0.1" && hostname !== "localhost") {
   console.warn(`WARNING: binding to ${hostname} — the review API is unauthenticated; keep it loopback-only unless you know why`);
 }
@@ -613,7 +613,7 @@ it("rejects a session for a non-checked-out branch", async () => { /* branch: "r
 
 Write the real code for every numbered step — the comments above are the spec, the test body must be executable assertions. Use `baseRef: "HEAD"` so the diff is the uncommitted working-tree change.
 
-- [ ] **Step 2: Run** — `pnpm --filter @crw/server test e2e` → PASS. If scip-typescript needs a `package.json` in the fixture for module resolution, add a minimal `{ "name": "fixture", "type": "module" }` plus `tsconfig.json` (`{"compilerOptions": {"module": "esnext", "moduleResolution": "bundler"}, "include": ["src"]}`) to the fixture.
+- [ ] **Step 2: Run** — `pnpm --filter @srev/server test e2e` → PASS. If scip-typescript needs a `package.json` in the fixture for module resolution, add a minimal `{ "name": "fixture", "type": "module" }` plus `tsconfig.json` (`{"compilerOptions": {"module": "esnext", "moduleResolution": "bundler"}, "include": ["src"]}`) to the fixture.
 
 - [ ] **Step 3: Run the full suite** — `pnpm test && pnpm typecheck` → all green.
 
@@ -629,14 +629,14 @@ There is no user-facing README; AGENTS.md is contributor guidance. Write one hon
 - Create: `README.md`
 
 **Interfaces:**
-- Consumes: exact commands and env vars from Task 7 (`pnpm build`, `pnpm start`, `CRW_HOST`, `CRW_WEB_DIST`, `CRW_DB_PATH`, `PORT`, `GRAPH_PROVIDER`), export shape from Task 1, branch contract from Task 3.
+- Consumes: exact commands and env vars from Task 7 (`pnpm build`, `pnpm start`, `SREV_HOST`, `SREV_WEB_DIST`, `SREV_DB_PATH`, `PORT`, `GRAPH_PROVIDER`), export shape from Task 1, branch contract from Task 3.
 
 - [ ] **Step 1: Write README.md** covering, in this order:
   1. One-paragraph pitch: TypeScript-first, coverage-guaranteed review walkthrough that orders every changed hunk by execution flow. Status: alpha.
   2. **Quick start (production):** `pnpm install` → `pnpm build` → `pnpm start` → open `http://localhost:3456` (the CLI below opens it with a session).
   3. **Create a review session:** `node packages/skill/dist/orchestrate.js --base main` (reviews the *current working tree* against `--base`; the branch named in the session must be checked out — that is the contract, state it plainly). Development mode: `pnpm dev` (Vite on 5173 proxying `/api`).
   4. **Scope and contract:** TypeScript only today (scip-typescript); reviews current working tree vs `baseRef`; staged+unstaged included; stale warning appears if HEAD moves or the tree changes after session creation.
-  5. **Providers and env vars:** table of `GRAPH_PROVIDER` (scip default / crg / stub), `CRW_DB_PATH` (default `review.db`), `PORT` (3456), `CRW_HOST` (127.0.0.1; warning if changed), `CRW_WEB_DIST`, `CRW_SERVER_URL`, `SCIP_CONTEXT_DEPTH`, `SCIP_NO_CACHE`.
+  5. **Providers and env vars:** table of `GRAPH_PROVIDER` (scip default / crg / stub), `SREV_DB_PATH` (default `review.db`), `PORT` (3456), `SREV_HOST` (127.0.0.1; warning if changed), `SREV_WEB_DIST`, `SREV_SERVER_URL`, `SCIP_CONTEXT_DEPTH`, `SCIP_NO_CACHE`.
   6. **Comment export:** `GET /api/sessions/:id/export` → `{ comments: [...] }` ordered array, one entry per comment (multiple per node preserved).
   7. **Data & privacy:** everything local; server binds loopback; DB is a local SQLite file.
   8. **Troubleshooting:** stale session chip (recreate session), "not a git repository"/"cannot resolve base ref" 400s, "database schema newer than application", web UI not built hint.

@@ -1,4 +1,4 @@
-// packages/skill/src/gc.ts — sanctioned state cleanup for `crw gc`.
+// packages/skill/src/gc.ts — sanctioned state cleanup for `srev gc`.
 // Removes per-repo hub state (SQLite DB + WAL/SHM siblings, log dir), stopping
 // the hub first so files are never deleted under a live WAL. File-level by
 // design: gc exists precisely for when the CLI/HTTP surface can't help
@@ -32,7 +32,7 @@ function removePaths(paths: string[]): string[] {
 
 function repoStateFiles(repoRoot: string): string[] {
   const { dbPath, logDir } = statePaths(repoRoot);
-  // Without CRW_DATA_DIR the DB is review.db in the repo (server default).
+  // Without SREV_DATA_DIR the DB is review.db in the repo (server default).
   const db = dbPath ?? join(repoRoot, "review.db");
   return [db, `${db}-wal`, `${db}-shm`, logDir];
 }
@@ -58,14 +58,14 @@ export async function stopHubIfServing(baseUrl: string, repoRoot: string): Promi
   throw new Error(`hub at ${baseUrl} did not stop within 5s — its DB was left in place`);
 }
 
-/** `crw gc --repo <path>`: stop the repo's hub (if on baseUrl) and remove its state. */
+/** `srev gc --repo <path>`: stop the repo's hub (if on baseUrl) and remove its state. */
 export async function gcRepo(repoPath: string, baseUrl: string): Promise<GcRepoResult> {
   const repoRoot = resolveGitRoot(repoPath);
   const hubStopped = await stopHubIfServing(baseUrl, repoRoot);
   return { repoRoot, hubStopped, removed: removePaths(repoStateFiles(repoRoot)) };
 }
 
-/** `crw gc --all`: sweep CRW_DATA_DIR state whose repo no longer exists.
+/** `srev gc --all`: sweep SREV_DATA_DIR state whose repo no longer exists.
  *  Keys without a repo-root sidecar (pre-sidecar state) are skipped, not
  *  guessed at; keys whose repo still exists are left alone. */
 export function gcSweep(dataDir: string): GcSweepResult {
@@ -80,7 +80,7 @@ export function gcSweep(dataDir: string): GcSweepResult {
     const logDir = join(dataDir, "logs", key);
     const sidecar = join(logDir, "repo-root");
     if (!existsSync(sidecar)) {
-      result.skipped.push({ key, reason: "no repo-root sidecar (state predates crw gc) — use crw gc --repo <path>" });
+      result.skipped.push({ key, reason: "no repo-root sidecar (state predates srev gc) — use srev gc --repo <path>" });
       continue;
     }
     const repoRoot = readFileSync(sidecar, "utf8").trim();

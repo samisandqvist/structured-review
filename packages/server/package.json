@@ -1,5 +1,5 @@
 {
-  "name": "@crw/server",
+  "name": "@srev/server",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",

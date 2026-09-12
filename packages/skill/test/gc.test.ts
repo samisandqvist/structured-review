@@ -1,5 +1,5 @@
-// packages/skill/test/gc.test.ts — file-level pieces of `crw gc`: the
-// dead-repo sweep over CRW_DATA_DIR state. Hub-stopping paths need a live
+// packages/skill/test/gc.test.ts — file-level pieces of `srev gc`: the
+// dead-repo sweep over SREV_DATA_DIR state. Hub-stopping paths need a live
 // server and are covered by the server's shutdown route tests.
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -9,7 +9,7 @@ import { gcSweep } from "../src/gc.js";
 
 let dataDir: string;
 beforeEach(() => {
-  dataDir = mkdtempSync(join(tmpdir(), "crw-gc-"));
+  dataDir = mkdtempSync(join(tmpdir(), "srev-gc-"));
   mkdirSync(join(dataDir, "db"), { recursive: true });
 });
 afterEach(() => rmSync(dataDir, { recursive: true, force: true }));
@@ -35,7 +35,7 @@ describe("gcSweep", () => {
   });
 
   it("leaves state alone when the repo still exists", () => {
-    const repo = mkdtempSync(join(tmpdir(), "crw-gc-repo-"));
+    const repo = mkdtempSync(join(tmpdir(), "srev-gc-repo-"));
     try {
       fakeState("alive-def456", repo);
       const result = gcSweep(dataDir);
@@ -57,7 +57,7 @@ describe("gcSweep", () => {
   });
 
   it("handles a data dir with no db directory", () => {
-    const empty = mkdtempSync(join(tmpdir(), "crw-gc-empty-"));
+    const empty = mkdtempSync(join(tmpdir(), "srev-gc-empty-"));
     try {
       expect(gcSweep(empty)).toEqual({ swept: [], skipped: [] });
     } finally {

@@ -5,7 +5,7 @@ readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly FIXTURE_ROOT="$(mktemp -d)"
 trap 'rm -rf -- "$FIXTURE_ROOT"' EXIT
 
-fake_secret="$(printf 'crw-security-negative-probe' | sha256sum)"
+fake_secret="$(printf 'srev-security-negative-probe' | sha256sum)"
 fake_secret="${fake_secret%% *}"
 printf 'const apiKey = "%s";\n' "$fake_secret" >"$FIXTURE_ROOT/secret.ts"
 

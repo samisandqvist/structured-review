@@ -1,4 +1,4 @@
-// Copied to each plugin's scripts/crw.mjs by build-plugin.mjs.
+// Copied to each plugin's scripts/srev.mjs by build-plugin.mjs.
 // Resolve immutable assets from this file, and keep mutable state outside the
 // plugin cache and reviewed checkout. Do not depend on a SessionStart hook.
 import { spawnSync } from "node:child_process";
@@ -12,18 +12,18 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
 const [major, minor] = process.versions.node.split(".").map(Number);
 if (major < 22 || (major === 22 && minor < 13)) {
-  console.error("crw requires Node >= 22.13. Upgrade Node and retry.");
+  console.error("srev requires Node >= 22.13. Upgrade Node and retry.");
   process.exit(1);
 }
 
 const data = resolve(
-  process.env.CRW_DATA_DIR ||
+  process.env.SREV_DATA_DIR ||
     process.env.PLUGIN_DATA ||
     process.env.CLAUDE_PLUGIN_DATA ||
-    join(process.env.XDG_DATA_HOME || join(homedir(), ".local", "share"), "code-review-walkthrough"),
+    join(process.env.XDG_DATA_HOME || join(homedir(), ".local", "share"), "structured-review"),
 );
-const indexers = resolve(process.env.CRW_INDEXER_HOME || data);
-const env = { ...process.env, CRW_DATA_DIR: data, CRW_INDEXER_HOME: indexers };
+const indexers = resolve(process.env.SREV_INDEXER_HOME || data);
+const env = { ...process.env, SREV_DATA_DIR: data, SREV_INDEXER_HOME: indexers };
 const setup = args[0] === "--setup";
 // Positionals as the wrapped CLI parses them: flags may appear anywhere, and
 // non-boolean flags consume the next token. Keep BOOL_FLAGS in sync with
@@ -48,10 +48,10 @@ function indexersPresent() {
 
 try {
   if (needsIndexers && (!env.GRAPH_PROVIDER || env.GRAPH_PROVIDER === "scip")) {
-    if (process.env.CRW_INDEXER_HOME && indexers !== data) {
+    if (process.env.SREV_INDEXER_HOME && indexers !== data) {
       if (!indexersPresent())
         throw new Error(
-          `Missing indexers in CRW_INDEXER_HOME (${indexers}). Install them there or unset the override.`,
+          `Missing indexers in SREV_INDEXER_HOME (${indexers}). Install them there or unset the override.`,
         );
     } else {
       const manifest = readFileSync(join(root, "package.json"), "utf8");
@@ -62,7 +62,7 @@ try {
         mkdirSync(data, { recursive: true });
         writeFileSync(join(data, "package.json"), manifest);
         console.error(`Installing review indexers in ${data}. This can take a minute on first use.`);
-        // Send npm output to stderr: crw's stdout remains machine-readable JSON.
+        // Send npm output to stderr: srev's stdout remains machine-readable JSON.
         // Windows npm is npm.cmd, which Node only spawns through a shell (the
         // arguments are fixed strings, so shell interpolation is not a concern).
         const win = process.platform === "win32";
@@ -83,12 +83,12 @@ try {
     }
   }
   if (!setup) {
-    const child = spawnSync(process.execPath, [join(root, "dist", "crw.js"), ...args], { env, stdio: "inherit" });
+    const child = spawnSync(process.execPath, [join(root, "dist", "srev.js"), ...args], { env, stdio: "inherit" });
     if (child.error) throw child.error;
     process.exitCode = child.status ?? 1;
   }
 } catch (error) {
-  console.error(`crw: ${error.message}`);
+  console.error(`srev: ${error.message}`);
   // --setup is a best-effort pre-warm run by session-start hooks: a failure
   // (offline, registry down) must not surface a hook error on every session.
   // Real commands bootstrap for themselves and do fail loudly.

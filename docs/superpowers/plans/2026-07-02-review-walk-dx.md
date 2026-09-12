@@ -15,7 +15,7 @@
 - The auto "Unassigned changes" unit is not renamable/reorderable (server 400).
 - Test chip hidden when a unit has no linked tests; warning tint when tests exist but none changed.
 - `stale` degrades silently when git is unavailable.
-- localStorage key: `crw-ui:<sessionId>`.
+- localStorage key: `srev-ui:<sessionId>`.
 
 ---
 
@@ -71,7 +71,7 @@ describe("stale session indicator", () => {
 
 (First test needs its own non-git-then-git fixture; since `beforeEach` makes a fresh `fixtureRoot`, the first test may git-init it.)
 
-- [ ] **Step 2: Run** `pnpm --filter @crw/server exec vitest run test/routes.test.ts` — Expected: FAIL.
+- [ ] **Step 2: Run** `pnpm --filter @srev/server exec vitest run test/routes.test.ts` — Expected: FAIL.
 
 - [ ] **Step 3: Implement.**
 
@@ -120,7 +120,7 @@ GET `/:id`:
     return c.json({ session, units, coverage: {...}, ...(stale === undefined ? {} : { stale }) });
 ```
 
-- [ ] **Step 4: Run** `pnpm --filter @crw/server exec vitest run` — Expected: PASS.
+- [ ] **Step 4: Run** `pnpm --filter @srev/server exec vitest run` — Expected: PASS.
 
 - [ ] **Step 5: Commit** `git add -A packages/server && git commit -m "feat(server): head_sha on sessions + stale flag"`
 
@@ -239,7 +239,7 @@ import { createUnit, getUnitsBySession, deleteUnit, updateUnitLabel, setUnitPosi
   });
 ```
 
-- [ ] **Step 4: Run** `pnpm --filter @crw/server exec vitest run test/routes.test.ts` — Expected: PASS.
+- [ ] **Step 4: Run** `pnpm --filter @srev/server exec vitest run test/routes.test.ts` — Expected: PASS.
 
 - [ ] **Step 5: Commit** `git add -A packages/server && git commit -m "feat(server): PATCH unit rename/reorder with dense reindex"`
 
@@ -309,7 +309,7 @@ describe("navigation", () => {
 });
 ```
 
-- [ ] **Step 2: Run** `pnpm --filter @crw/web exec vitest run test/walk-order.test.ts` — Expected: FAIL.
+- [ ] **Step 2: Run** `pnpm --filter @srev/web exec vitest run test/walk-order.test.ts` — Expected: FAIL.
 
 - [ ] **Step 3: Implement** `packages/web/src/walk-order.ts`:
 
@@ -377,7 +377,7 @@ export function nextUnreviewed(order: WalkEntry[], nodes: Node[], currentNodeId:
 
 **Interfaces:**
 - Consumes: Task 3 selectors; existing `useUpdateNodeStatus`.
-- Produces: `useUIStore` persisted (`currentNodeId`, `splitRatio`, `collapsedUnits: string[]`) under `crw-ui:<sessionId>`; footer gains "Next unreviewed →" (`data-testid="next-unreviewed"`); global keydown handler; CommentBox textarea gets `data-testid="comment-input"`.
+- Produces: `useUIStore` persisted (`currentNodeId`, `splitRatio`, `collapsedUnits: string[]`) under `srev-ui:<sessionId>`; footer gains "Next unreviewed →" (`data-testid="next-unreviewed"`); global keydown handler; CommentBox textarea gets `data-testid="comment-input"`.
 
 - [ ] **Step 1: Failing tests** (`SplitLayout.test.tsx`, mock hooks the same way `PlanView.test.tsx` does; fixtures: 2 changed nodes n-a unreviewed, n-b unreviewed, one orphan unit):
 
@@ -440,7 +440,7 @@ export const useUIStore = create<UIState>()(
           : { collapsedUnits: [...new Set([...s.collapsedUnits, unitId])], expandedUnits: s.expandedUnits.filter((id) => id !== unitId) }),
     }),
     {
-      name: `crw-ui:${sessionKey}`,
+      name: `srev-ui:${sessionKey}`,
       partialize: (s) => ({
         currentNodeId: s.currentNodeId, splitRatio: s.splitRatio,
         collapsedUnits: s.collapsedUnits, expandedUnits: s.expandedUnits,
@@ -525,7 +525,7 @@ The `?` shortcut overlay — a fixed-position `<dl>` listing the keys, toggled b
 
 with `else if (e.key === "?") setShowKeys((v) => !v);` in the handler and a `.keys-overlay` style block (fixed, centered, `var(--panel)` background, `var(--line)` border).
 
-- [ ] **Step 4: Run** `pnpm --filter @crw/web exec vitest run` — Expected: PASS.
+- [ ] **Step 4: Run** `pnpm --filter @srev/web exec vitest run` — Expected: PASS.
 
 - [ ] **Step 5: Commit** `git add -A packages/web && git commit -m "feat(web): keyboard walk, next-unreviewed, persisted position"`
 
@@ -613,7 +613,7 @@ Body renders only when `!collapsed`. `toggleUnitCollapsed` must handle the auto-
 
 Styles: `.unit__chevron`, `.unit__bulk` — small, dim, hover-bright, no background.
 
-- [ ] **Step 4: Run** `pnpm --filter @crw/web exec vitest run` — Expected: PASS.
+- [ ] **Step 4: Run** `pnpm --filter @srev/web exec vitest run` — Expected: PASS.
 
 - [ ] **Step 5: Commit** `git add -A packages/web && git commit -m "feat(web): unit collapse + bulk mark-remaining-reviewed"`
 
@@ -706,7 +706,7 @@ Drag reorder — HTML5 DnD on the unit wrapper (non-auto only):
     >
 ```
 
-- [ ] **Step 4: Run** `pnpm --filter @crw/web exec vitest run` — Expected: PASS.
+- [ ] **Step 4: Run** `pnpm --filter @srev/web exec vitest run` — Expected: PASS.
 
 - [ ] **Step 5: Commit** `git add -A packages/web && git commit -m "feat(web): drag-reorder and inline rename for plan units"`
 
@@ -777,7 +777,7 @@ function unitTestStats(
 
 Styles: `.unit__tests` small chip; `--warn` variant uses `var(--warn, #d98a2b)`.
 
-- [ ] **Step 4: Run** `pnpm --filter @crw/web exec vitest run` — Expected: PASS.
+- [ ] **Step 4: Run** `pnpm --filter @srev/web exec vitest run` — Expected: PASS.
 
 - [ ] **Step 5: Commit** `git add -A packages/web && git commit -m "feat(web): per-unit test chip (changed/total linked tests)"`
 
@@ -813,6 +813,6 @@ Styles: `.unit__tests` small chip; `--warn` variant uses `var(--warn, #d98a2b)`.
       )}
 ```
 
-- [ ] **Step 4: Run** `pnpm --filter @crw/web exec vitest run && pnpm test && pnpm typecheck` — Expected: PASS (full suite, final gate).
+- [ ] **Step 4: Run** `pnpm --filter @srev/web exec vitest run && pnpm test && pnpm typecheck` — Expected: PASS (full suite, final gate).
 
 - [ ] **Step 5: Commit** `git add -A packages/web && git commit -m "feat(web): stale-session warning chip"`

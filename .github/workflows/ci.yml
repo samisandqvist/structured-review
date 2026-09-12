@@ -46,8 +46,8 @@ jobs:
           cs version
           java -version
           mvn --version
-          pnpm --filter @crw/server exec scip-typescript --version
-          pnpm --filter @crw/server exec scip-python --version
+          pnpm --filter @srev/server exec scip-typescript --version
+          pnpm --filter @srev/server exec scip-python --version
           cs launch com.sourcegraph:scip-java_2.13:0.12.3 -M com.sourcegraph.scip_java.ScipJava -- --help
 
       - name: Cache security tool downloads

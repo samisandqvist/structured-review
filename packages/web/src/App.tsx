@@ -51,12 +51,12 @@ function ReviewShell() {
         <p className="session-picker__hint">
           {isError
             ? "The review server didn't answer. Is it still running?"
-            : "Ask your agent to start a code-review-walkthrough session. For example:"}
+            : "Ask your agent to start a structured-review session. For example:"}
         </p>
         {!isError && (
           <>
             <pre style={{ whiteSpace: "pre-wrap", maxWidth: 600, padding: 16, background: "var(--surface)" }}>
-              Use code-review-walkthrough to review my current changes against main and open the review.
+              Use structured-review to review my current changes against main and open the review.
             </pre>
             <p className="session-picker__hint">
               Replace main with your base branch. The agent will give you a link to the planned review.
@@ -90,7 +90,7 @@ export function StatusBar({ sessionId }: { sessionId: string }) {
   return (
     <header className="statusbar">
       <div className="statusbar__brand">
-        <TraceMark />
+        <ReviewMark />
         <h1
           style={{
             fontFamily: "var(--display)",
@@ -100,10 +100,10 @@ export function StatusBar({ sessionId }: { sessionId: string }) {
             margin: 0,
           }}
         >
-          Trace
+          Structured Review
         </h1>
         <span className="statusbar__sub" style={{ color: "var(--dim)", fontSize: 17, marginTop: 1 }}>
-          code review walkthrough
+          guided code review
         </span>
       </div>
 
@@ -212,7 +212,7 @@ function Field({ label, className, children }: { label: string; className?: stri
 }
 
 /** A small downward-tracing glyph — a signal stepping through call depth. */
-function TraceMark() {
+function ReviewMark() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
       <path d="M3 3.5h4M3 9h8M3 14.5h5" stroke="var(--trace)" strokeWidth="1.6" strokeLinecap="round" />

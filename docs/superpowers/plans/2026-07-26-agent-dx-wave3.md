@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Fold the ad-hoc scripting a planning agent needs today (empty-tree bases, flow-merge math, orphan triage, stableId hand-listing, intent gathering) into `crw` itself.
+**Goal:** Fold the ad-hoc scripting a planning agent needs today (empty-tree bases, flow-merge math, orphan triage, stableId hand-listing, intent gathering) into `srev` itself.
 
-**Architecture:** Four independent features plus a docs/packaging task. Server-side: tree-ish base refs, commit subjects in the changes payload, glob-based orphan-unit resolution at plan submit. CLI-side: `--base empty` alias, `mergeSuggestions` and directory-grouped orphans in `crw context` (pure functions in `api.ts`, composed in `cli.ts`).
+**Architecture:** Four independent features plus a docs/packaging task. Server-side: tree-ish base refs, commit subjects in the changes payload, glob-based orphan-unit resolution at plan submit. CLI-side: `--base empty` alias, `mergeSuggestions` and directory-grouped orphans in `srev context` (pure functions in `api.ts`, composed in `cli.ts`).
 
 **Tech Stack:** TypeScript strict, Hono, zod, node:sqlite, Vitest. No new dependencies — glob matching is a ~20-line converter, not a package.
 
-**Origin:** Findings from dogfooding a whole-repo review session (2026-07-26): every jq invocation the planning agent wrote is a missing `crw` affordance.
+**Origin:** Findings from dogfooding a whole-repo review session (2026-07-26): every jq invocation the planning agent wrote is a missing `srev` affordance.
 
 ## Global Constraints
 
@@ -73,7 +73,7 @@ describe("resolveBaseAlias", () => {
 });
 ```
 
-- [x] **Step 2: Run tests, verify they fail** (`pnpm --filter @crw/server test -- diff`, etc.)
+- [x] **Step 2: Run tests, verify they fail** (`pnpm --filter @srev/server test -- diff`, etc.)
 
 - [x] **Step 3: Implement**
 
@@ -102,7 +102,7 @@ Note: `HEAD^{tree}` succeeds for commit refs too, but the commit peel runs first
 `packages/skill/src/api.ts`:
 
 ```ts
-/** git's well-known empty tree; `crw session create --base empty` maps here. */
+/** git's well-known empty tree; `srev session create --base empty` maps here. */
 export const EMPTY_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
 /** Base-ref conveniences: "empty" = the empty tree (whole-repo review). */
@@ -112,10 +112,10 @@ export function resolveBaseAlias(ref: string): string {
 ```
 
 `packages/skill/src/cli.ts` cmdSessionCreate: `const baseRef = resolveBaseAlias(required(flags, "base"));`
-USAGE: `crw session create --branch <b> --base <ref|empty> [--open]`
+USAGE: `srev session create --branch <b> --base <ref|empty> [--open]`
 
 - [x] **Step 4: Run tests, verify pass**
-- [x] **Step 5: Commit** `feat(server,crw): tree-ish base refs — --base empty reviews the whole repo`
+- [x] **Step 5: Commit** `feat(server,srev): tree-ish base refs — --base empty reviews the whole repo`
 
 ---
 
@@ -192,9 +192,9 @@ export function commitSubjects(baseRef: string, root: string = repoRoot(), limit
 
 ---
 
-### Task 3: Merge suggestions in `crw context`
+### Task 3: Merge suggestions in `srev context`
 
-The skill's merge guideline (shared changed ids ≥ half the smaller flow's set) is mechanical. Compute it CLI-side from data `crw context` already fetches.
+The skill's merge guideline (shared changed ids ≥ half the smaller flow's set) is mechanical. Compute it CLI-side from data `srev context` already fetches.
 
 **Files:**
 - Modify: `packages/skill/src/api.ts` (add `suggestMerges`)
@@ -281,7 +281,7 @@ export function suggestMerges(
 `cli.ts` cmdContext (compact branch): `mergeSuggestions: suggestMerges(compact.flows)` — insert after flows in output object.
 
 - [x] **Step 4: Run, verify pass**
-- [x] **Step 5: Commit** `feat(crw): context emits mergeSuggestions — the merge guideline, precomputed`
+- [x] **Step 5: Commit** `feat(srev): context emits mergeSuggestions — the merge guideline, precomputed`
 
 ---
 
@@ -333,7 +333,7 @@ const orphanGroups = [...byDir.keys()].sort().map((dir) => ({
 Update the function's return type and JSDoc. Fix any existing test that asserts the old `orphans` field of compact output.
 
 - [x] **Step 4: Run, verify pass**
-- [x] **Step 5: Commit** `feat(crw): compact context groups orphans by directory`
+- [x] **Step 5: Commit** `feat(srev): compact context groups orphans by directory`
 
 ---
 
@@ -526,14 +526,14 @@ Then use `resolvedUnits` everywhere `body.units` was used below (computeCoverage
 ### Task 6: Docs, version, bundle
 
 **Files:**
-- Modify: `packages/skill/skill.md`, `plugin/skills/code-review-walkthrough/SKILL.md` (check whether build-plugin.mjs copies it — if generated, edit only the source)
-- Modify: `README.md`, `AGENTS.md` (crw CLI blocks)
+- Modify: `packages/skill/skill.md`, `plugin/skills/structured-review/SKILL.md` (check whether build-plugin.mjs copies it — if generated, edit only the source)
+- Modify: `README.md`, `AGENTS.md` (srev CLI blocks)
 - Modify: `plugin/.claude-plugin/plugin.json` (0.4.0)
 - Rebuild: `node scripts/build-plugin.mjs`
 
 - [x] **Step 1: Doc updates** — in both skill docs and README/AGENTS:
-  - `crw session create --branch <b> --base <ref|empty>` — note `empty` reviews the whole repo.
-  - `crw context` output: `mergeSuggestions` (pre-computed merge guideline — trust it, spend judgment on labels/order), `orphanGroups` (directory-grouped), `commitSubjects` (replaces the git-log intent step — drop that step from the skill instructions).
+  - `srev session create --branch <b> --base <ref|empty>` — note `empty` reviews the whole repo.
+  - `srev context` output: `mergeSuggestions` (pre-computed merge guideline — trust it, spend judgment on labels/order), `orphanGroups` (directory-grouped), `commitSubjects` (replaces the git-log intent step — drop that step from the skill instructions).
   - Plan file: orphan-units accept `orphanFiles` globs (`**`, `*`, `?`); prefer globs over stableId lists; first unit wins on overlap; empty match = submit error.
 - [x] **Step 2: Bump plugin version to 0.4.0; rebuild bundle; `git status` must show only intended files**
 - [x] **Step 3: `pnpm typecheck && pnpm test` — all green**

@@ -69,7 +69,7 @@ describe("nodeChangeStats", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter @crw/server exec vitest run test/diff.test.ts`
+Run: `pnpm --filter @srev/server exec vitest run test/diff.test.ts`
 Expected: FAIL — `nodeChangeStats is not a function`.
 
 - [ ] **Step 3: Implement the helpers**
@@ -131,7 +131,7 @@ export function nodeSignature(file: string, startLine: number, root: string = re
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm --filter @crw/server exec vitest run test/diff.test.ts`
+Run: `pnpm --filter @srev/server exec vitest run test/diff.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -202,7 +202,7 @@ describe("computeCoverage", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter @crw/server exec vitest run test/coverage.test.ts`
+Run: `pnpm --filter @srev/server exec vitest run test/coverage.test.ts`
 Expected: FAIL — cannot find `../src/coverage.js`.
 
 - [ ] **Step 3: Implement `coverage.ts`**
@@ -247,7 +247,7 @@ export function computeCoverage(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm --filter @crw/server exec vitest run test/coverage.test.ts`
+Run: `pnpm --filter @srev/server exec vitest run test/coverage.test.ts`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
@@ -344,7 +344,7 @@ describe("units repo (kind-tagged)", () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `pnpm --filter @crw/server exec vitest run test/repo.test.ts test/routes.test.ts`
+Run: `pnpm --filter @srev/server exec vitest run test/repo.test.ts test/routes.test.ts`
 Expected: FAIL — `createUnit` arity/shape mismatch; plan response lacks `kind`.
 
 - [ ] **Step 3: Migrate the schema**
@@ -499,7 +499,7 @@ Add the import `import { computeCoverage, type PlanUnitInput } from "../coverage
 
 - [ ] **Step 8: Run the full server suite**
 
-Run: `pnpm --filter @crw/server test`
+Run: `pnpm --filter @srev/server test`
 Expected: PASS. If `schema.test.ts` asserts specific columns, update it to the new `units` columns and the removed `unit_id`.
 
 - [ ] **Step 9: Commit**
@@ -564,7 +564,7 @@ describe("coverage reconciliation", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter @crw/server exec vitest run test/routes.test.ts`
+Run: `pnpm --filter @srev/server exec vitest run test/routes.test.ts`
 Expected: FAIL — `coverage` undefined; no auto unit.
 
 - [ ] **Step 3: Implement reconciliation in plan PUT**
@@ -629,7 +629,7 @@ router.get("/:id", (c) => {
 
 - [ ] **Step 5: Run tests**
 
-Run: `pnpm --filter @crw/server exec vitest run test/routes.test.ts`
+Run: `pnpm --filter @srev/server exec vitest run test/routes.test.ts`
 Expected: PASS. The earlier `GET /api/sessions/:id` test asserting `units: []` still passes; if it asserts the exact response object, add `coverage: { changedTotal: 0, covered: 0, unassigned: 0 }`.
 
 - [ ] **Step 6: Commit**
@@ -684,7 +684,7 @@ describe("GET /api/sessions/:id/flows", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter @crw/server exec vitest run test/routes.test.ts`
+Run: `pnpm --filter @srev/server exec vitest run test/routes.test.ts`
 Expected: FAIL — `body.orphans` undefined.
 
 - [ ] **Step 3: Implement**
@@ -720,7 +720,7 @@ return c.json({ flows, orphans });
 
 - [ ] **Step 4: Run tests**
 
-Run: `pnpm --filter @crw/server exec vitest run test/routes.test.ts`
+Run: `pnpm --filter @srev/server exec vitest run test/routes.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -781,7 +781,7 @@ describe("GET /api/sessions/:id/changes", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter @crw/server exec vitest run test/routes.test.ts`
+Run: `pnpm --filter @srev/server exec vitest run test/routes.test.ts`
 Expected: FAIL — 404 (route not mounted).
 
 - [ ] **Step 3: Implement the route**
@@ -841,7 +841,7 @@ app.route("/api/sessions", createChangesRoute(ctx));
 
 - [ ] **Step 4: Run tests**
 
-Run: `pnpm --filter @crw/server exec vitest run test/routes.test.ts`
+Run: `pnpm --filter @srev/server exec vitest run test/routes.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -910,7 +910,7 @@ Remove the old `orchestrates the full flow` test's reliance on the old `partitio
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter @crw/skill exec vitest run`
+Run: `pnpm --filter @srev/skill exec vitest run`
 Expected: FAIL — `defaultPartition` missing; `writePlan` return shape.
 
 - [ ] **Step 3: Implement**
@@ -1008,7 +1008,7 @@ Update or remove the old `orchestrate(branch, baseRef, partitionFn)` export and 
 
 - [ ] **Step 4: Run tests**
 
-Run: `pnpm --filter @crw/skill exec vitest run`
+Run: `pnpm --filter @srev/skill exec vitest run`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -1144,7 +1144,7 @@ Remove the `GraphView` import and the `viewMode` line from `SplitLayout.tsx`. (F
 
 - [ ] **Step 4: Typecheck**
 
-Run: `pnpm --filter @crw/web typecheck`
+Run: `pnpm --filter @srev/web typecheck`
 Expected: errors only where `App.tsx` still references `ViewToggle`/`viewMode` and `useNodes(…, unitId)` — those are fixed in Task 10/12. If `App.tsx` blocks the typecheck, proceed to Task 10 before re-running; otherwise it should pass.
 
 - [ ] **Step 5: Commit**
@@ -1194,7 +1194,7 @@ pnpm install
 
 - [ ] **Step 5: Verify build**
 
-Run: `pnpm --filter @crw/web typecheck && pnpm --filter @crw/web build`
+Run: `pnpm --filter @srev/web typecheck && pnpm --filter @srev/web build`
 Expected: PASS (no dangling imports).
 
 - [ ] **Step 6: Commit**
@@ -1263,7 +1263,7 @@ describe("PlanView", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter @crw/web exec vitest run test/PlanView.test.tsx`
+Run: `pnpm --filter @srev/web exec vitest run test/PlanView.test.tsx`
 Expected: FAIL — cannot find `PlanView`.
 
 - [ ] **Step 3: Implement `PlanView.tsx`**
@@ -1457,7 +1457,7 @@ git rm packages/web/src/components/FlowsView.tsx
 
 - [ ] **Step 6: Run tests + build**
 
-Run: `pnpm --filter @crw/web exec vitest run test/PlanView.test.tsx && pnpm --filter @crw/web typecheck`
+Run: `pnpm --filter @srev/web exec vitest run test/PlanView.test.tsx && pnpm --filter @srev/web typecheck`
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
@@ -1512,7 +1512,7 @@ To make `StatusBar` importable, add `export` to its declaration in `App.tsx` (`e
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter @crw/web exec vitest run test/StatusBar.test.tsx`
+Run: `pnpm --filter @srev/web exec vitest run test/StatusBar.test.tsx`
 Expected: FAIL — `StatusBar` not exported / chip missing.
 
 - [ ] **Step 3: Implement**
@@ -1546,7 +1546,7 @@ const units = sessionData?.units ?? [];
 
 - [ ] **Step 4: Run tests + full web suite**
 
-Run: `pnpm --filter @crw/web test && pnpm --filter @crw/web typecheck`
+Run: `pnpm --filter @srev/web test && pnpm --filter @srev/web typecheck`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**

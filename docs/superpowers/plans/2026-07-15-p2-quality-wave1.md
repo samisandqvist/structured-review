@@ -4,7 +4,7 @@
 
 **Goal:** Implement P2 roadmap items 1–3 from `docs/software-viability-usability-implementation-findings.md`: entry-point provenance + confidence, exact residual ranges instead of one bounding box per file, and atomic bulk review mutations with SQLite transactions.
 
-**Architecture:** Residual pseudo-nodes keep their one-chip-per-file identity but store the exact residual `LineRange[]` in a new nullable `nodes.residual_ranges` column (migration v3); the node-detail diff is then assembled per range via the existing `extractHunkDiff` clipping, so hunks already covered by function nodes never re-render. Entry-point detection stays SCIP-side but gains evidence: a flow's entry now reports *why* it heads a flow (`graph-root` / `exported` / `configured`) with a deterministic confidence score, sourced from the call graph, the `export` keyword at the definition line, and an optional `.crw-entry-points.json`. Bulk review updates become one `PATCH /api/sessions/:id/nodes` request executed in a single better-sqlite3 transaction (all-or-nothing, per-node comment normalization preserved), and the two existing multi-write routes (session creation, plan replacement) are wrapped in transactions with the edge-insert node lookup switched to a `Map`.
+**Architecture:** Residual pseudo-nodes keep their one-chip-per-file identity but store the exact residual `LineRange[]` in a new nullable `nodes.residual_ranges` column (migration v3); the node-detail diff is then assembled per range via the existing `extractHunkDiff` clipping, so hunks already covered by function nodes never re-render. Entry-point detection stays SCIP-side but gains evidence: a flow's entry now reports *why* it heads a flow (`graph-root` / `exported` / `configured`) with a deterministic confidence score, sourced from the call graph, the `export` keyword at the definition line, and an optional `.srev-entry-points.json`. Bulk review updates become one `PATCH /api/sessions/:id/nodes` request executed in a single better-sqlite3 transaction (all-or-nothing, per-node comment normalization preserved), and the two existing multi-write routes (session creation, plan replacement) are wrapped in transactions with the edge-insert node lookup switched to a `Map`.
 
 **Tech Stack:** TypeScript ESM (`.js` import suffixes), Hono, better-sqlite3 (synchronous `db.transaction`), zod 4, React 19, @tanstack/react-query, Vitest 3.
 
@@ -110,7 +110,7 @@ In `packages/server/test/schema.test.ts` (follow its existing migration-test pat
 
 In `packages/server/test/routes.test.ts`: extend an existing session-creation test (or add one) so a residual node round-trips: after POST /api/sessions on a fixture repo with an uncovered change, GET the residual node from `/nodes` and assert `node.residualRanges` is a nonempty array of `{start, end}` objects.
 
-- [ ] **Step 3: Run to verify failure** — `pnpm --filter @crw/server test`. Expected: FAIL (`ranges`/`extractLinesForRanges`/`residualRanges` don't exist; schema v3 missing).
+- [ ] **Step 3: Run to verify failure** — `pnpm --filter @srev/server test`. Expected: FAIL (`ranges`/`extractLinesForRanges`/`residualRanges` don't exist; schema v3 missing).
 
 - [ ] **Step 4: Implement.**
 
@@ -270,7 +270,7 @@ Confidence model (deterministic, documented in code):
 - `graph-root` only → **0.4** (could be an internal utility the indexer sees no callers for)
 - reasons listed in the fixed order `graph-root`, `exported`, `configured`.
 
-Configured entries file: **`.crw-entry-points.json`** at the provider's repo root:
+Configured entries file: **`.srev-entry-points.json`** at the provider's repo root:
 
 ```json
 { "entryPoints": [ { "label": "main", "file": "src/cli.ts" } ] }
@@ -305,23 +305,23 @@ describe("entryEvidence", () => {
 });
 
 describe("loadConfiguredEntries", () => {
-  it("reads .crw-entry-points.json", () => {
-    const dir = mkdtempSync(join(tmpdir(), "crw-entries-"));
-    writeFileSync(join(dir, ".crw-entry-points.json"),
+  it("reads .srev-entry-points.json", () => {
+    const dir = mkdtempSync(join(tmpdir(), "srev-entries-"));
+    writeFileSync(join(dir, ".srev-entry-points.json"),
       JSON.stringify({ entryPoints: [{ label: "main", file: "src/cli.ts" }] }));
     expect(loadConfiguredEntries(dir)).toEqual([{ label: "main", file: "src/cli.ts" }]);
   });
   it("returns [] when the file is missing or invalid", () => {
-    const dir = mkdtempSync(join(tmpdir(), "crw-entries-"));
+    const dir = mkdtempSync(join(tmpdir(), "srev-entries-"));
     expect(loadConfiguredEntries(dir)).toEqual([]);
-    writeFileSync(join(dir, ".crw-entry-points.json"), "{not json");
+    writeFileSync(join(dir, ".srev-entry-points.json"), "{not json");
     expect(loadConfiguredEntries(dir)).toEqual([]);
   });
 });
 
 describe("isExportedAt", () => {
   it("detects an export keyword at the definition line", () => {
-    const dir = mkdtempSync(join(tmpdir(), "crw-exp-"));
+    const dir = mkdtempSync(join(tmpdir(), "srev-exp-"));
     mkdirSync(join(dir, "src"));
     writeFileSync(join(dir, "src", "a.ts"), "const x = 1;\nexport function foo() {}\nfunction bar() {}\n");
     expect(isExportedAt(dir, "src/a.ts", 2)).toBe(true);
@@ -346,7 +346,7 @@ it("shows entry confidence on flow units", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure** — `pnpm --filter @crw/server test` / `pnpm --filter @crw/web test`. Expected: module-not-found / missing chip.
+- [ ] **Step 2: Run to verify failure** — `pnpm --filter @srev/server test` / `pnpm --filter @srev/web test`. Expected: module-not-found / missing chip.
 
 - [ ] **Step 3: Implement the detector module.** Create `packages/server/src/graph/entry-points.ts`:
 
@@ -369,7 +369,7 @@ export interface ConfiguredEntry {
 /** Optional explicit entry-point config at the repo root. Malformed or missing → []. */
 export function loadConfiguredEntries(root: string): ConfiguredEntry[] {
   try {
-    const raw = JSON.parse(readFileSync(join(root, ".crw-entry-points.json"), "utf8")) as {
+    const raw = JSON.parse(readFileSync(join(root, ".srev-entry-points.json"), "utf8")) as {
       entryPoints?: unknown;
     };
     if (!Array.isArray(raw.entryPoints)) return [];
@@ -859,7 +859,7 @@ as `entryReasons` (`graph-root` / `exported` / `configured`) and
 
 Framework-registered entry points (HTTP routes, CLI commands, event
 handlers) often have callers in the graph and are missed by inference —
-declare them in `.crw-entry-points.json` at the repository root:
+declare them in `.srev-entry-points.json` at the repository root:
 
 ```json
 { "entryPoints": [ { "label": "main", "file": "src/cli.ts" } ] }
@@ -874,7 +874,7 @@ graph shows callers.
 
 ```markdown
 - Entry-point inference too narrow / no confidence (Medium) — pluggable
-  evidence (`graph-root` / `exported` / `.crw-entry-points.json` configured
+  evidence (`graph-root` / `exported` / `.srev-entry-points.json` configured
   entries) with deterministic 0.4/0.7/1.0 confidence, exposed via the flows
   API and a plan-view chip; configured entries head flows despite callers.
 - Residual bounding boxes (Medium) — residual pseudo-nodes store their exact
@@ -903,12 +903,12 @@ git commit -m "docs: mark P2 items 1-3 implemented; document entry-point configu
 **Files:** none (verification only; fix regressions if found)
 
 - [ ] **Step 1:** `pnpm test && pnpm typecheck && pnpm build` — all green.
-- [ ] **Step 2:** Launch the built app against this repo (`CRW_DB_PATH=<scratchpad>/crw-p2.db pnpm start`), create a session vs `main`, PUT a plan with flow units from `/flows`.
+- [ ] **Step 2:** Launch the built app against this repo (`SREV_DB_PATH=<scratchpad>/srev-p2.db pnpm start`), create a session vs `main`, PUT a plan with flow units from `/flows`.
 - [ ] **Step 3:** Verify via API + Playwright (browser works while the user's X session is active — do this early):
   1. `/flows` responses carry `entryReasons`/`entryConfidence`; the plan view shows the ⚑ confidence chip on flow units.
   2. A residual node (e.g. a docs/config file or module-scope residual) returns `residualRanges` and its diff pane shows only residual fragments with `⋯` gaps — no function hunks repeated from flow nodes.
   3. "✓✓ mark remaining" issues exactly ONE `PATCH /api/sessions/:id/nodes` (check the network or server log) and all chips flip in one refetch wave.
-  4. Drop a `.crw-entry-points.json` naming a mid-graph function; recreate the session/flows and confirm a `configured`-reason flow at confidence 1.0 appears.
+  4. Drop a `.srev-entry-points.json` naming a mid-graph function; recreate the session/flows and confirm a `configured`-reason flow at confidence 1.0 appears.
 - [ ] **Step 4:** Kill the server, remove the scratch config file, run the final whole-branch review, then report.
 
 ---

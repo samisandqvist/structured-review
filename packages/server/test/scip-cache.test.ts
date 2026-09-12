@@ -180,7 +180,7 @@ describe("discoverJobs filtering", () => {
   });
 
   it("no marker files anywhere: falls back to a single ts root-repo job", () => {
-    const dir = mkdtempSync(join(tmpdir(), "crw-no-markers-"));
+    const dir = mkdtempSync(join(tmpdir(), "srev-no-markers-"));
     try {
       writeFileSync(join(dir, "a.ts"), "export const x = 1;\n");
       const p = new JobsProbe({ repoRoot: dir });
@@ -191,7 +191,7 @@ describe("discoverJobs filtering", () => {
   });
 
   it("no marker files, and ts not enabled: the fallback does not fire", () => {
-    const dir = mkdtempSync(join(tmpdir(), "crw-no-markers-"));
+    const dir = mkdtempSync(join(tmpdir(), "srev-no-markers-"));
     try {
       writeFileSync(join(dir, "a.ts"), "export const x = 1;\n");
       process.env.SCIP_LANGS = "py";
@@ -253,7 +253,7 @@ class KeyProbe extends ScipGraphProvider {
 
 describe("repoStateKey", () => {
   it("is stable for an unchanged repo and changes on edits/commits", () => {
-    const dir = mkdtempSync(join(tmpdir(), "crw-key-"));
+    const dir = mkdtempSync(join(tmpdir(), "srev-key-"));
     try {
       const git = (...a: string[]) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
       git("init");
@@ -278,7 +278,7 @@ describe("repoStateKey", () => {
   });
 
   it("re-indexes after editing an already-dirty file (content-sensitive key)", () => {
-    const dir = mkdtempSync(join(tmpdir(), "crw-key-dirty-"));
+    const dir = mkdtempSync(join(tmpdir(), "srev-key-dirty-"));
     try {
       const git = (...a: string[]) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
       git("init");
@@ -299,7 +299,7 @@ describe("repoStateKey", () => {
   });
 
   it("returns a unique key when git is unavailable (cache miss, no throw)", () => {
-    const dir = mkdtempSync(join(tmpdir(), "crw-nogit-"));
+    const dir = mkdtempSync(join(tmpdir(), "srev-nogit-"));
     try {
       const p = new KeyProbe({ repoRoot: dir });
       expect(p.publicKey()).not.toBe(p.publicKey());

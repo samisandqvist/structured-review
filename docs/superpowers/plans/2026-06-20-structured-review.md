@@ -1,4 +1,4 @@
-# Code Review Walkthrough Implementation Plan
+# Structured Review Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -15,7 +15,7 @@
 - Graph providers plug in behind a `GraphProvider` interface; CRG is provider #1
 - The skill and server are separate: skill is orchestrator, server is stateful backend
 - Local single-user only: localhost, no auth, SQLite on disk
-- Package scope names: `@crw/server`, `@crw/web`, `@crw/skill`
+- Package scope names: `@srev/server`, `@srev/web`, `@srev/skill`
 - Node.js >= 20
 
 ---
@@ -132,11 +132,11 @@ packages:
 
 ```json
 {
-  "name": "code-review-walkthrough",
+  "name": "structured-review",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "concurrently -n server,web -c blue,green \"pnpm --filter @crw/server dev\" \"pnpm --filter @crw/web dev\"",
+    "dev": "concurrently -n server,web -c blue,green \"pnpm --filter @srev/server dev\" \"pnpm --filter @srev/web dev\"",
     "build": "pnpm -r build",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -189,7 +189,7 @@ export default defineConfig({
 
 ```json
 {
-  "name": "@crw/server",
+  "name": "@srev/server",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -251,7 +251,7 @@ serve({ fetch: app.fetch, port: 3456 }, (info) => {
 
 ```json
 {
-  "name": "@crw/web",
+  "name": "@srev/web",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -334,7 +334,7 @@ export default defineConfig({
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Code Review Walkthrough</title>
+    <title>Structured Review</title>
   </head>
   <body>
     <div id="root"></div>
@@ -348,7 +348,7 @@ export default defineConfig({
 import { createRoot } from "react-dom/client";
 
 function App() {
-  return <div>Code Review Walkthrough</div>;
+  return <div>Structured Review</div>;
 }
 
 const root = document.getElementById("root");
@@ -364,7 +364,7 @@ import "@testing-library/jest-dom/vitest";
 
 ```json
 {
-  "name": "@crw/skill",
+  "name": "@srev/skill",
   "type": "module",
   "scripts": {
     "build": "tsc",
@@ -663,7 +663,7 @@ describe("schema", () => {
 
 - [ ] **Step 6: Run schema test to verify it passes**
 
-Run: `pnpm --filter @crw/server test`
+Run: `pnpm --filter @srev/server test`
 Expected: PASS
 
 - [ ] **Step 7: Write sessions repository**
@@ -979,10 +979,10 @@ describe("comments repo", () => {
 
 - [ ] **Step 12: Run tests and typecheck**
 
-Run: `pnpm --filter @crw/server test`
+Run: `pnpm --filter @srev/server test`
 Expected: PASS
 
-Run: `pnpm --filter @crw/server typecheck`
+Run: `pnpm --filter @srev/server typecheck`
 Expected: PASS
 
 - [ ] **Step 13: Commit**
@@ -1098,7 +1098,7 @@ describe("StubGraphProvider", () => {
 
 - [ ] **Step 4: Run tests and commit**
 
-Run: `pnpm --filter @crw/server test`
+Run: `pnpm --filter @srev/server test`
 Expected: PASS
 
 ```bash
@@ -1233,7 +1233,7 @@ describe("PATCH /api/sessions/:id/nodes/:nodeId", () => {
 
 - [ ] **Step 2: Run test to verify it fails (app.ts doesn't exist)**
 
-Run: `pnpm --filter @crw/server test`
+Run: `pnpm --filter @srev/server test`
 Expected: FAIL — cannot find module `../src/app.js`
 
 - [ ] **Step 3: Write the app factory**
@@ -1372,7 +1372,7 @@ import { createApp } from "./app.js";
 import { createDatabase } from "./db/connection.js";
 import { StubGraphProvider } from "./graph/stub.js";
 
-const db = createDatabase(process.env.CRW_DB_PATH || "review.db");
+const db = createDatabase(process.env.SREV_DB_PATH || "review.db");
 const app = createApp({ db, graphProvider: new StubGraphProvider() });
 
 const port = Number(process.env.PORT) || 3456;
@@ -1383,10 +1383,10 @@ serve({ fetch: app.fetch, port }, (info) => {
 
 - [ ] **Step 7: Run tests and typecheck**
 
-Run: `pnpm --filter @crw/server test`
+Run: `pnpm --filter @srev/server test`
 Expected: PASS
 
-Run: `pnpm --filter @crw/server typecheck`
+Run: `pnpm --filter @srev/server typecheck`
 Expected: PASS
 
 - [ ] **Step 8: Commit**
@@ -1588,10 +1588,10 @@ export function createApp(ctx: AppContext) {
 
 - [ ] **Step 6: Run tests and typecheck**
 
-Run: `pnpm --filter @crw/server test`
+Run: `pnpm --filter @srev/server test`
 Expected: PASS
 
-Run: `pnpm --filter @crw/server typecheck`
+Run: `pnpm --filter @srev/server typecheck`
 Expected: PASS
 
 - [ ] **Step 7: Commit**
@@ -1814,7 +1814,7 @@ function ReviewShell() {
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
       <header style={{ padding: "8px 16px", borderBottom: "1px solid #333" }}>
-        <h1 style={{ margin: 0, fontSize: "1rem" }}>Code Review Walkthrough</h1>
+        <h1 style={{ margin: 0, fontSize: "1rem" }}>Structured Review</h1>
       </header>
       <SplitLayout sessionId="placeholder" currentNodeId={currentNodeId} />
     </div>
@@ -1844,7 +1844,7 @@ import { App } from "../src/App.js";
 describe("App", () => {
   it("renders the header", () => {
     render(<App />);
-    expect(screen.getByText("Code Review Walkthrough")).toBeInTheDocument();
+    expect(screen.getByText("Structured Review")).toBeInTheDocument();
   });
   it("renders graph and diff placeholders", () => {
     render(<App />);
@@ -1856,10 +1856,10 @@ describe("App", () => {
 
 - [ ] **Step 8: Run tests and typecheck**
 
-Run: `pnpm --filter @crw/web test`
+Run: `pnpm --filter @srev/web test`
 Expected: PASS
 
-Run: `pnpm --filter @crw/web typecheck`
+Run: `pnpm --filter @srev/web typecheck`
 Expected: PASS
 
 - [ ] **Step 9: Commit**
@@ -1952,7 +1952,7 @@ describe("GraphView", () => {
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `pnpm --filter @crw/web test`
+Run: `pnpm --filter @srev/web test`
 Expected: FAIL — GraphView not found
 
 - [ ] **Step 4: Write GraphView with React Flow**
@@ -2075,10 +2075,10 @@ export function SplitLayout({ sessionId, currentNodeId }: {
 
 - [ ] **Step 6: Run tests and typecheck**
 
-Run: `pnpm --filter @crw/web test`
+Run: `pnpm --filter @srev/web test`
 Expected: PASS
 
-Run: `pnpm --filter @crw/web typecheck`
+Run: `pnpm --filter @srev/web typecheck`
 Expected: PASS
 
 - [ ] **Step 7: Commit**
@@ -2381,10 +2381,10 @@ export function SplitLayout({ sessionId, currentNodeId }: {
 
 - [ ] **Step 8: Run all web tests and typecheck**
 
-Run: `pnpm --filter @crw/web test`
+Run: `pnpm --filter @srev/web test`
 Expected: PASS
 
-Run: `pnpm --filter @crw/web typecheck`
+Run: `pnpm --filter @srev/web typecheck`
 Expected: PASS
 
 - [ ] **Step 9: Commit**
@@ -2412,11 +2412,11 @@ git commit -m "feat: add diff viewer, frontier strip, comment box, and review st
 ```markdown
 <!-- packages/skill/skill.md -->
 ---
-name: code-review-walkthrough
+name: structured-review
 description: Walk a reviewer through code changes along the call/dependency graph instead of a file tree. Produces a structured review plan, launches a local web UI for graph-based navigation, and exports node-anchored comments.
 ---
 
-# Code Review Walkthrough
+# Structured Review
 
 ## What this skill does
 
@@ -2465,7 +2465,7 @@ The script will:
 // packages/skill/src/orchestrate.ts
 import { spawn } from "node:child_process";
 
-const SERVER_URL = process.env.CRW_SERVER_URL || "http://localhost:3456";
+const SERVER_URL = process.env.SREV_SERVER_URL || "http://localhost:3456";
 
 interface Session { id: string; branch: string; baseRef: string; status: string; createdAt: number; }
 interface GraphNode { stableId: string; label: string; file: string; startLine: number; endLine: number; isEntryPoint: boolean; changeStatus: string; }
@@ -2603,10 +2603,10 @@ describe("orchestrate", () => {
 
 - [ ] **Step 4: Run tests and typecheck**
 
-Run: `pnpm --filter @crw/skill test`
+Run: `pnpm --filter @srev/skill test`
 Expected: PASS
 
-Run: `pnpm --filter @crw/skill typecheck`
+Run: `pnpm --filter @srev/skill typecheck`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -2663,7 +2663,7 @@ export class CrgGraphProvider implements GraphProvider {
   private async getClient(): Promise<Client> {
     if (this.client) return this.client;
     this.transport = new StdioClientTransport({ command: this.command[0], args: this.command.slice(1) });
-    this.client = new Client({ name: "crw-server", version: "1.0.0" }, { capabilities: {} });
+    this.client = new Client({ name: "srev-server", version: "1.0.0" }, { capabilities: {} });
     await this.client.connect(this.transport);
     return this.client;
   }
@@ -2764,7 +2764,7 @@ import { createDatabase } from "./db/connection.js";
 import { StubGraphProvider } from "./graph/stub.js";
 import { CrgGraphProvider } from "./graph/crg.js";
 
-const db = createDatabase(process.env.CRW_DB_PATH || "review.db");
+const db = createDatabase(process.env.SREV_DB_PATH || "review.db");
 const useCrg = process.env.CRG_COMMAND !== undefined;
 const graphProvider = useCrg
   ? new CrgGraphProvider(process.env.CRG_COMMAND!.split(" "))
