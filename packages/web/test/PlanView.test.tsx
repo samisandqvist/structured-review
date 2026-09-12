@@ -425,3 +425,55 @@ describe("PlanView", () => {
     expect(screen.queryByText("Adds Redis rate limiting.")).toBeNull();
   });
 });
+
+describe("unit header interaction boundaries", () => {
+  it("cancels bulk review without sending a mutation", () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={() => {}} />);
+    fireEvent.click(screen.getAllByTestId("mark-remaining")[0]);
+    expect(mockBulkMutate).not.toHaveBeenCalled();
+  });
+
+  it("includes counted attachments, but not cross-unit references, in bulk review", () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={() => {}} />);
+    fireEvent.click(screen.getAllByTestId("mark-remaining")[1]);
+    expect(mockBulkMutate).toHaveBeenCalledWith({ nodeIds: ["n2", "n-t1"], reviewStatus: "reviewed-clean" });
+  });
+
+  it("restores the original draft on Escape and rejects an empty rename", () => {
+    render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={() => {}} />);
+    fireEvent.doubleClick(screen.getByText("Order handling"));
+    const input = screen.getByDisplayValue("Order handling");
+    fireEvent.change(input, { target: { value: "   " } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(mockUpdateUnit).not.toHaveBeenCalled();
+    fireEvent.keyDown(input, { key: "Escape" });
+    fireEvent.doubleClick(screen.getByText("Order handling"));
+    expect(screen.getByDisplayValue("Order handling")).toBeInTheDocument();
+  });
+
+  it("ends editing on blur and restores dragging", () => {
+    render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={() => {}} />);
+    const unit = screen.getByText("Order handling").closest(".unit")!;
+    fireEvent.doubleClick(screen.getByText("Order handling"));
+    expect(unit).toHaveAttribute("draggable", "false");
+    fireEvent.blur(screen.getByDisplayValue("Order handling"));
+    expect(unit).toHaveAttribute("draggable", "true");
+    expect(mockUpdateUnit).not.toHaveBeenCalled();
+  });
+
+  it("reorders a dropped unit, but ignores self-drops and automatic units", () => {
+    render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={() => {}} />);
+    const dataTransfer = { setData: vi.fn(), getData: vi.fn().mockReturnValue("u1") };
+    const first = screen.getByText("Order handling").closest(".unit")!;
+    fireEvent.dragStart(first, { dataTransfer });
+    expect(dataTransfer.setData).toHaveBeenCalledWith("text/unit-id", "u1");
+    fireEvent.dragOver(first, { dataTransfer });
+    fireEvent.drop(first, { dataTransfer });
+    fireEvent.drop(screen.getByText("Unassigned changes").closest(".unit")!, { dataTransfer });
+    expect(mockUpdateUnit).not.toHaveBeenCalled();
+    fireEvent.drop(screen.getByText("Validation helpers").closest(".unit")!, { dataTransfer });
+    expect(mockUpdateUnit).toHaveBeenCalledExactlyOnceWith({ unitId: "u1", position: 1 });
+  });
+});

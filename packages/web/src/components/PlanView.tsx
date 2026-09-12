@@ -119,16 +119,7 @@ function unitTestStats(
   return { total: testIds.length, changed, firstTestNodeId: testIds[0] ?? null };
 }
 
-function UnitBlock({
-  sessionId,
-  unit,
-  flows,
-  nodeByStable,
-  nodeById,
-  edges,
-  currentNodeId,
-  onSelectNode,
-}: {
+type UnitBlockProps = {
   sessionId: string;
   unit: Unit;
   flows: Flow[];
@@ -137,163 +128,231 @@ function UnitBlock({
   edges: GraphEdgeDTO[];
   currentNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
-}) {
-  const memberNodes = unit.memberStableIds.map((s) => nodeByStable.get(s)).filter((n): n is Node => !!n);
+};
 
-  // For a flow-unit with resolved flows, progress is over the distinct changed
-  // steps across all its tracks (a shared node counts once). For orphan-units
-  // (or flow-units with no resolved flow), progress is over memberNodes.
-  const changedByStable = new Map<string, FlowStep>();
-  for (const f of flows) {
-    for (const s of f.steps) {
-      if (s.changeStatus === "changed" && !changedByStable.has(s.stableId)) changedByStable.set(s.stableId, s);
+/** Shared flow steps count once, with their first occurrence supplying status. */
+function changedFlowSteps(flows: Flow[]): FlowStep[] {
+  const changed = new Map<string, FlowStep>();
+  for (const flow of flows) {
+    for (const step of flow.steps) {
+      if (step.changeStatus === "changed" && !changed.has(step.stableId)) changed.set(step.stableId, step);
     }
   }
-  // Server-derived attachments (tests / DTOs / residuals nested under covered
-  // nodes at plan-write time). Counted ones join this unit's walk and ledger;
-  // counted=false are cross-unit references, render-only.
-  const attachedByParent = new Map<string, AttachedMember[]>();
-  for (const m of unit.attached ?? []) {
-    const list = attachedByParent.get(m.parentStableId) ?? [];
-    list.push(m);
-    attachedByParent.set(m.parentStableId, list);
+  return [...changed.values()];
+}
+
+function flowReviewProgress(steps: FlowStep[]) {
+  return {
+    total: steps.length,
+    reviewed: steps.filter((step) => step.reviewStatus && step.reviewStatus !== "unreviewed").length,
+    remaining: steps
+      .filter((step) => step.nodeId && (!step.reviewStatus || step.reviewStatus === "unreviewed"))
+      .map((step) => step.nodeId as string),
+  };
+}
+
+function nodeReviewProgress(nodes: Node[]) {
+  return {
+    total: nodes.length,
+    reviewed: nodes.filter((node) => node.reviewStatus !== "unreviewed").length,
+    remaining: nodes.filter((node) => node.reviewStatus === "unreviewed").map((node) => node.id),
+  };
+}
+
+function groupAttachments(members: AttachedMember[]) {
+  const byParent = new Map<string, AttachedMember[]>();
+  for (const member of members) {
+    const list = byParent.get(member.parentStableId) ?? [];
+    list.push(member);
+    byParent.set(member.parentStableId, list);
   }
-  const attachedNodes = (unit.attached ?? [])
-    .filter((m) => m.counted)
-    .map((m) => nodeByStable.get(m.stableId))
-    .filter((n): n is Node => !!n && n.changeStatus === "changed");
+  return byParent;
+}
 
+/** Resolved flow units count changed steps; orphan/unresolved units count members.
+ * Counted attachments join progress; cross-unit references are render-only. */
+function unitReviewState({ unit, flows, nodeByStable, nodeById, edges }: UnitBlockProps) {
+  const memberNodes = unit.memberStableIds.map((id) => nodeByStable.get(id)).filter((node): node is Node => !!node);
+  const attachments = unit.attached ?? [];
+  const attachedNodes = attachments
+    .filter((member) => member.counted)
+    .map((member) => nodeByStable.get(member.stableId))
+    .filter((node): node is Node => !!node && node.changeStatus === "changed");
   const useFlowProgress = unit.kind === "flow" && flows.length > 0;
-  const total = (useFlowProgress ? changedByStable.size : memberNodes.length) + attachedNodes.length;
-  const reviewed =
-    (useFlowProgress
-      ? [...changedByStable.values()].filter((s) => s.reviewStatus && s.reviewStatus !== "unreviewed").length
-      : memberNodes.filter((n) => n.reviewStatus !== "unreviewed").length) +
-    attachedNodes.filter((n) => n.reviewStatus !== "unreviewed").length;
+  const progress = useFlowProgress ? flowReviewProgress(changedFlowSteps(flows)) : nodeReviewProgress(memberNodes);
+  const attachedProgress = nodeReviewProgress(attachedNodes);
+  // Test linkage includes unchanged production steps too.
+  const unitNodeIds = new Set(
+    useFlowProgress
+      ? flows
+          .flatMap((flow) => flow.steps)
+          .map((step) => step.nodeId)
+          .filter((id): id is string => !!id)
+      : memberNodes.map((node) => node.id),
+  );
+  return {
+    total: progress.total + attachedProgress.total,
+    reviewed: progress.reviewed + attachedProgress.reviewed,
+    remaining: progress.remaining.concat(attachedProgress.remaining),
+    attachedByParent: groupAttachments(attachments),
+    testStats: unitTestStats(unitNodeIds, edges, nodeById),
+  };
+}
 
-  // Collapse: manual toggle wins; a fully reviewed unit auto-collapses until
-  // deliberately re-expanded.
-  const collapsedSet = useUIStore((s) => s.collapsedUnits);
-  const expandedSet = useUIStore((s) => s.expandedUnits);
-  const toggle = useUIStore((s) => s.toggleUnitCollapsed);
-  const allReviewed = total > 0 && reviewed === total;
+type UnitProgress = ReturnType<typeof unitReviewState>;
+
+function useUnitActions(sessionId: string, unit: Unit, progress: UnitProgress) {
+  const collapsedSet = useUIStore((state) => state.collapsedUnits);
+  const expandedSet = useUIStore((state) => state.expandedUnits);
+  const toggle = useUIStore((state) => state.toggleUnitCollapsed);
+  const allReviewed = progress.total > 0 && progress.reviewed === progress.total;
   const collapsed = collapsedSet.includes(unit.id) || (allReviewed && !expandedSet.includes(unit.id));
-
-  // Inline rename (double-click) — the auto unit is not editable.
   const updateUnit = useUpdateUnit(sessionId);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(unit.label);
-
   const bulkStatus = useBulkUpdateNodeStatus(sessionId);
-  // Unreviewed changed nodeIds of this unit: flow-units from their tracks'
-  // steps, orphan-units (or unresolved flows) from memberNodes.
-  const remaining: string[] = (
-    useFlowProgress
-      ? [...changedByStable.values()]
-          .filter((s) => s.nodeId && (!s.reviewStatus || s.reviewStatus === "unreviewed"))
-          .map((s) => s.nodeId as string)
-      : memberNodes.filter((n) => n.reviewStatus === "unreviewed").map((n) => n.id)
-  ).concat(attachedNodes.filter((n) => n.reviewStatus === "unreviewed").map((n) => n.id));
   const markRemaining = () => {
+    const { remaining } = progress;
     if (!window.confirm(`Mark ${remaining.length} node${remaining.length === 1 ? "" : "s"} reviewed?`)) return;
     bulkStatus.mutate({ nodeIds: remaining, reviewStatus: "reviewed-clean" });
   };
+  return { collapsed, toggle, updateUnit, editing, setEditing, draft, setDraft, markRemaining };
+}
 
-  // Production nodes of this unit, for test linkage.
-  const unitNodeIds = new Set<string>(
-    useFlowProgress
-      ? flows
-          .flatMap((f) => f.steps)
-          .map((s) => s.nodeId)
-          .filter((id): id is string => !!id)
-      : memberNodes.map((n) => n.id),
-  );
-  const testStats = unitTestStats(unitNodeIds, edges, nodeById);
+type UnitActions = ReturnType<typeof useUnitActions>;
 
+function UnitBlock(props: UnitBlockProps) {
+  const { sessionId, unit, flows, onSelectNode } = props;
+  const progress = unitReviewState(props);
+  const actions = useUnitActions(sessionId, unit, progress);
   return (
     <div
       className={`unit${unit.auto ? " unit--auto" : ""}`}
-      draggable={!unit.auto && !editing}
-      onDragStart={(e) => e.dataTransfer.setData("text/unit-id", unit.id)}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => {
-        const draggedId = e.dataTransfer.getData("text/unit-id");
+      draggable={!unit.auto && !actions.editing}
+      onDragStart={(event) => event.dataTransfer.setData("text/unit-id", unit.id)}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => {
+        const draggedId = event.dataTransfer.getData("text/unit-id");
         if (draggedId && draggedId !== unit.id && !unit.auto) {
-          updateUnit.mutate({ unitId: draggedId, position: unit.position });
+          actions.updateUnit.mutate({ unitId: draggedId, position: unit.position });
         }
       }}
     >
-      <div className="unit__bar">
-        <button
-          data-testid="unit-collapse"
-          className="unit__chevron"
-          aria-label={collapsed ? "expand unit" : "collapse unit"}
-          onClick={() => toggle(unit.id, collapsed)}
-        >
-          {collapsed ? "▸" : "▾"}
-        </button>
-        {editing && !unit.auto ? (
-          <input
-            autoFocus
-            className="unit__name-input"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && draft.trim()) {
-                updateUnit.mutate({ unitId: unit.id, label: draft.trim() });
-                setEditing(false);
-              }
-              if (e.key === "Escape") {
-                setDraft(unit.label);
-                setEditing(false);
-              }
-            }}
-            onBlur={() => setEditing(false)}
-          />
-        ) : (
-          <h3 className="unit__name" onDoubleClick={() => !unit.auto && setEditing(true)}>
-            {unit.label}
-          </h3>
-        )}
-        {unit.auto && <span className="unit__badge">unassigned</span>}
-        {unit.kind === "flow" && flows.length > 0 && (
-          <span
-            className="unit__badge"
-            data-testid={`entry-conf-${unit.id}`}
-            title={`entry evidence: ${flows.map((f) => `${f.name}: ${(f.entryReasons ?? []).join("+")}`).join("; ")}`}
-          >
-            ⚑ {Math.round(Math.max(...flows.map((f) => f.entryConfidence ?? 0.4)) * 100)}%
-          </span>
-        )}
-        {testStats.total > 0 && (
-          <button
-            data-testid={`test-chip-${unit.id}`}
-            className={`unit__tests${testStats.changed === 0 ? " unit__tests--warn" : ""}`}
-            title="Tests linked to this unit (changed/total)"
-            onClick={() => testStats.firstTestNodeId && onSelectNode(testStats.firstTestNodeId)}
-          >
-            tests {testStats.changed}/{testStats.total}
-          </button>
-        )}
-        {remaining.length > 0 && (
-          <button
-            data-testid="mark-remaining"
-            className="unit__bulk"
-            title="Mark remaining reviewed"
-            onClick={markRemaining}
-          >
-            ✓✓
-          </button>
-        )}
-        {total > 0 && (
-          <span className="unit__progress">
-            {reviewed}/{total}
-          </span>
-        )}
-      </div>
-      {!collapsed && unit.rationale && <p className="unit__rationale">{unit.rationale}</p>}
+      <UnitHeader unit={unit} flows={flows} progress={progress} actions={actions} onSelectNode={onSelectNode} />
+      {!actions.collapsed && <UnitContents {...props} attachedByParent={progress.attachedByParent} />}
+    </div>
+  );
+}
 
-      {collapsed ? null : unit.kind === "flow" && flows.length > 0 ? (
+function UnitName({ unit, actions }: { unit: Unit; actions: UnitActions }) {
+  const { editing, draft } = actions;
+  return (
+    <>
+      {editing && !unit.auto ? (
+        <input
+          autoFocus
+          className="unit__name-input"
+          value={draft}
+          onChange={(e) => actions.setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && draft.trim()) {
+              actions.updateUnit.mutate({ unitId: unit.id, label: draft.trim() });
+              actions.setEditing(false);
+            }
+            if (e.key === "Escape") {
+              actions.setDraft(unit.label);
+              actions.setEditing(false);
+            }
+          }}
+          onBlur={() => actions.setEditing(false)}
+        />
+      ) : (
+        <h3 className="unit__name" onDoubleClick={() => !unit.auto && actions.setEditing(true)}>
+          {unit.label}
+        </h3>
+      )}
+    </>
+  );
+}
+
+function UnitHeader({
+  unit,
+  flows,
+  progress,
+  actions,
+  onSelectNode,
+}: {
+  unit: Unit;
+  flows: Flow[];
+  progress: UnitProgress;
+  actions: UnitActions;
+  onSelectNode: (nodeId: string) => void;
+}) {
+  const { total, reviewed, remaining, testStats } = progress;
+  const { collapsed, toggle, markRemaining } = actions;
+  return (
+    <div className="unit__bar">
+      <button
+        data-testid="unit-collapse"
+        className="unit__chevron"
+        aria-label={collapsed ? "expand unit" : "collapse unit"}
+        onClick={() => toggle(unit.id, collapsed)}
+      >
+        {collapsed ? "▸" : "▾"}
+      </button>
+      <UnitName unit={unit} actions={actions} />
+      {unit.auto && <span className="unit__badge">unassigned</span>}
+      {unit.kind === "flow" && flows.length > 0 && (
+        <span
+          className="unit__badge"
+          data-testid={`entry-conf-${unit.id}`}
+          title={`entry evidence: ${flows.map((f) => `${f.name}: ${(f.entryReasons ?? []).join("+")}`).join("; ")}`}
+        >
+          ⚑ {Math.round(Math.max(...flows.map((f) => f.entryConfidence ?? 0.4)) * 100)}%
+        </span>
+      )}
+      {testStats.total > 0 && (
+        <button
+          data-testid={`test-chip-${unit.id}`}
+          className={`unit__tests${testStats.changed === 0 ? " unit__tests--warn" : ""}`}
+          title="Tests linked to this unit (changed/total)"
+          onClick={() => testStats.firstTestNodeId && onSelectNode(testStats.firstTestNodeId)}
+        >
+          tests {testStats.changed}/{testStats.total}
+        </button>
+      )}
+      {remaining.length > 0 && (
+        <button
+          data-testid="mark-remaining"
+          className="unit__bulk"
+          title="Mark remaining reviewed"
+          onClick={markRemaining}
+        >
+          ✓✓
+        </button>
+      )}
+      {total > 0 && (
+        <span className="unit__progress">
+          {reviewed}/{total}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function UnitContents({
+  unit,
+  flows,
+  nodeByStable,
+  currentNodeId,
+  onSelectNode,
+  attachedByParent,
+}: UnitBlockProps & { attachedByParent: Map<string, AttachedMember[]> }) {
+  return (
+    <>
+      {unit.rationale && <p className="unit__rationale">{unit.rationale}</p>}
+
+      {unit.kind === "flow" && flows.length > 0 ? (
         flows.map((f) => (
           <div key={f.entryStableId}>
             {flows.length > 1 && <div className="unit__track-caption">{f.name}</div>}
@@ -315,7 +374,7 @@ function UnitBlock({
           onSelectNode={onSelectNode}
         />
       )}
-    </div>
+    </>
   );
 }
 
