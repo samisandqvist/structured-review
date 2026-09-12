@@ -37,7 +37,9 @@ function ReviewShell() {
     return (
       <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
         <StatusBar sessionId={resolution.sessionId} />
-        <SplitLayout sessionId={resolution.sessionId} currentNodeId={currentNodeId} />
+        <main style={{ flex: 1, display: "flex", minHeight: 0 }}>
+          <SplitLayout sessionId={resolution.sessionId} currentNodeId={currentNodeId} />
+        </main>
       </div>
     );
   }
@@ -45,21 +47,25 @@ function ReviewShell() {
   if (resolution.kind === "empty" || isError) {
     return (
       <div className="session-picker" data-testid="session-empty">
-        <h1 className="session-picker__title">
-          {isError ? "Couldn't load sessions" : "No review sessions"}
-        </h1>
+        <h1 className="session-picker__title">{isError ? "Couldn't load sessions" : "No review sessions"}</h1>
         <p className="session-picker__hint">
           {isError
             ? "The review server didn't answer. Is it still running?"
             : "Ask your agent to start a code-review-walkthrough session. For example:"}
         </p>
-        {!isError && <>
-          <pre style={{ whiteSpace: "pre-wrap", maxWidth: 600, padding: 16, background: "var(--surface)" }}>
-            Use code-review-walkthrough to review my current changes against main and open the review.
-          </pre>
-          <p className="session-picker__hint">Replace main with your base branch. The agent will give you a link to the planned review.</p>
-          <p className="session-picker__hint">Trying it from source? Run <code>pnpm demo</code> for a small example review.</p>
-        </>}
+        {!isError && (
+          <>
+            <pre style={{ whiteSpace: "pre-wrap", maxWidth: 600, padding: 16, background: "var(--surface)" }}>
+              Use code-review-walkthrough to review my current changes against main and open the review.
+            </pre>
+            <p className="session-picker__hint">
+              Replace main with your base branch. The agent will give you a link to the planned review.
+            </p>
+            <p className="session-picker__hint">
+              Trying it from source? Run <code>pnpm demo</code> for a small example review.
+            </p>
+          </>
+        )}
       </div>
     );
   }
@@ -85,23 +91,24 @@ export function StatusBar({ sessionId }: { sessionId: string }) {
     <header className="statusbar">
       <div className="statusbar__brand">
         <TraceMark />
-        <span
+        <h1
           style={{
             fontFamily: "var(--display)",
             fontWeight: 700,
             fontSize: 19,
             letterSpacing: "-0.01em",
+            margin: 0,
           }}
         >
           Trace
-        </span>
+        </h1>
         <span className="statusbar__sub" style={{ color: "var(--dim)", fontSize: 17, marginTop: 1 }}>
           code review walkthrough
         </span>
       </div>
 
       <Field label="branch">
-        <BranchSwitcher sessionId={sessionId} currentBranch={session?.branch} />
+        <BranchSwitcher sessionId={sessionId} {...(session ? { currentBranch: session.branch } : {})} />
       </Field>
       {coverage && (
         <div
@@ -119,7 +126,12 @@ export function StatusBar({ sessionId }: { sessionId: string }) {
       {sessionData?.stale && (
         <div className="statusbar__field" data-testid="stale-chip" style={{ color: "var(--warn, #d98a2b)" }}>
           <span style={{ fontSize: 15 }}>⚠</span>
-          <span style={{ fontSize: 16 }} title="Recreate this review session to include the current working tree. Saved review marks describe the earlier version.">repo moved since session start — recreate review</span>
+          <span
+            style={{ fontSize: 16 }}
+            title="Recreate this review session to include the current working tree. Saved review marks describe the earlier version."
+          >
+            repo moved since session start — recreate review
+          </span>
         </div>
       )}
       <div style={{ flex: 1, minWidth: 8 }} />
@@ -164,13 +176,7 @@ export function StatusBar({ sessionId }: { sessionId: string }) {
 
 /** Plain branch text normally; a dropdown once the server holds several
  *  sessions, so switching doesn't require hand-editing the URL. */
-function BranchSwitcher({
-  sessionId,
-  currentBranch,
-}: {
-  sessionId: string;
-  currentBranch?: string;
-}) {
+function BranchSwitcher({ sessionId, currentBranch }: { sessionId: string; currentBranch?: string }) {
   const { data } = useSessions();
   const sessions = data?.sessions ?? [];
   if (sessions.length < 2) return <>{currentBranch ?? "—"}</>;
@@ -192,15 +198,7 @@ function BranchSwitcher({
   );
 }
 
-function Field({
-  label,
-  className,
-  children,
-}: {
-  label: string;
-  className?: string;
-  children: React.ReactNode;
-}) {
+function Field({ label, className, children }: { label: string; className?: string; children: React.ReactNode }) {
   return (
     <div className={`statusbar__field${className ? ` ${className}` : ""}`}>
       <span style={{ color: "var(--dim)", fontSize: 15, letterSpacing: "0.08em", flexShrink: 0 }}>
@@ -217,12 +215,7 @@ function Field({
 function TraceMark() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
-      <path
-        d="M3 3.5h4M3 9h8M3 14.5h5"
-        stroke="var(--trace)"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
+      <path d="M3 3.5h4M3 9h8M3 14.5h5" stroke="var(--trace)" strokeWidth="1.6" strokeLinecap="round" />
       <circle cx="14" cy="9" r="2" fill="var(--trace)" />
       <circle cx="13" cy="3.5" r="1.4" fill="var(--dim)" />
       <circle cx="10.5" cy="14.5" r="1.4" fill="var(--dim)" />

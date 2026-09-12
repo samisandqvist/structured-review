@@ -15,29 +15,75 @@ export function resolveBaseAlias(ref: string): string {
 }
 
 export interface Session {
-  id: string; branch: string; baseRef: string; status: string; createdAt: number;
-  headSha?: string; indexWarnings?: string[]; overview?: string;
+  id: string;
+  branch: string;
+  baseRef: string;
+  status: string;
+  createdAt: number;
+  headSha?: string;
+  indexWarnings?: string[];
+  overview?: string;
 }
-export interface GraphNode { stableId: string; label: string; file: string; startLine: number; endLine: number; isEntryPoint: boolean; changeStatus: string; }
-export interface GraphEdge { sourceStableId: string; targetStableId: string; edgeType: string; }
-export interface ChangeSubgraph { nodes: GraphNode[]; edges: GraphEdge[]; }
+export interface GraphNode {
+  stableId: string;
+  label: string;
+  file: string;
+  startLine: number;
+  endLine: number;
+  isEntryPoint: boolean;
+  changeStatus: string;
+}
+export interface GraphEdge {
+  sourceStableId: string;
+  targetStableId: string;
+  edgeType: string;
+}
+export interface ChangeSubgraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
 
 export interface FlowStep {
-  stableId: string; label: string; file: string; startLine: number; endLine: number;
-  isTest: boolean; depth: number;
-  nodeId: string | null; changeStatus: string | null; reviewStatus: string | null;
+  stableId: string;
+  label: string;
+  file: string;
+  startLine: number;
+  endLine: number;
+  isTest: boolean;
+  depth: number;
+  nodeId: string | null;
+  changeStatus: string | null;
+  reviewStatus: string | null;
 }
-export interface FlowDTO { id: number; name: string; affected: boolean; entryStableId: string; changedStableIds: string[]; steps: FlowStep[]; }
-export interface OrphanDTO { stableId: string; label: string; file: string; residualKind?: string | null; }
+export interface FlowDTO {
+  id: number;
+  name: string;
+  affected: boolean;
+  entryStableId: string;
+  changedStableIds: string[];
+  steps: FlowStep[];
+}
+export interface OrphanDTO {
+  stableId: string;
+  label: string;
+  file: string;
+  residualKind?: string | null;
+}
 
 /** Planning view of a session: affected flows without their step arrays,
  *  orphans reduced to what a plan references and grouped by directory (the
  *  triage a planner does anyway — docs vs configs vs code residuals). This is
  *  what an LLM planner needs to author units; the full flat dump is behind
  *  `crw context --full`. */
-export function compactContext(flows: FlowDTO[], orphans: OrphanDTO[]): {
+export function compactContext(
+  flows: FlowDTO[],
+  orphans: OrphanDTO[],
+): {
   flows: { id: number; name: string; entryStableId: string; changedStableIds: string[] }[];
-  orphanGroups: { dir: string; orphans: { stableId: string; label: string; file: string; residualKind?: string | null }[] }[];
+  orphanGroups: {
+    dir: string;
+    orphans: { stableId: string; label: string; file: string; residualKind?: string | null }[];
+  }[];
 } {
   const dirOf = (file: string) => (file.includes("/") ? file.slice(0, file.lastIndexOf("/")) : ".");
   const byDir = new Map<string, OrphanDTO[]>();
@@ -52,7 +98,9 @@ export function compactContext(flows: FlowDTO[], orphans: OrphanDTO[]): {
     orphanGroups: [...byDir.keys()].sort().map((dir) => ({
       dir,
       orphans: byDir.get(dir)!.map((o) => ({
-        stableId: o.stableId, label: o.label, file: o.file,
+        stableId: o.stableId,
+        label: o.label,
+        file: o.file,
         ...(o.residualKind !== undefined ? { residualKind: o.residualKind } : {}),
       })),
     })),
@@ -61,9 +109,16 @@ export function compactContext(flows: FlowDTO[], orphans: OrphanDTO[]): {
 
 /** Per-node change summary as served by GET /:id/changes. */
 export interface ChangeSummary {
-  stableId: string; label: string; kind: string; file: string;
-  startLine: number; endLine: number;
-  status: string; added: number; removed: number; signature?: string | null;
+  stableId: string;
+  label: string;
+  kind: string;
+  file: string;
+  startLine: number;
+  endLine: number;
+  status: string;
+  added: number;
+  removed: number;
+  signature?: string | null;
 }
 
 /** Scannable planning view with no SCIP stableIds anywhere (`crw context
@@ -73,23 +128,36 @@ export interface ChangeSummary {
  *  (resolvePlanRefs) and orphanFiles globs this is everything plan authoring
  *  needs — the group indexes and flow ids here are exactly what `mergeGroup`
  *  and `flowIds` resolve against at plan submit. */
-export function briefContext(flows: FlowDTO[], orphans: OrphanDTO[], changes: ChangeSummary[]): {
+export function briefContext(
+  flows: FlowDTO[],
+  orphans: OrphanDTO[],
+  changes: ChangeSummary[],
+): {
   flows: { id: number; name: string; entry: string; changedCount: number }[];
   mergeSuggestions: { group: number; flowIds: number[]; names: string[] }[];
   orphanGroups: { dir: string; files: string[] }[];
-  changes: { file: string; lines: string; label: string; kind: string; status: string; added: number; removed: number }[];
+  changes: {
+    file: string;
+    lines: string;
+    label: string;
+    kind: string;
+    status: string;
+    added: number;
+    removed: number;
+  }[];
 } {
   const compact = compactContext(flows, orphans);
   const entryOf = new Map(
     flows.map((f) => {
       const s = f.steps[0];
       return [f.id, s ? `${s.label} — ${s.file}` : f.entryStableId] as const;
-    })
+    }),
   );
   const idByEntry = new Map(compact.flows.map((f) => [f.entryStableId, f.id]));
   return {
     flows: compact.flows.map((f) => ({
-      id: f.id, name: f.name,
+      id: f.id,
+      name: f.name,
       entry: entryOf.get(f.id) ?? f.entryStableId,
       changedCount: f.changedStableIds.length,
     })),
@@ -100,8 +168,13 @@ export function briefContext(flows: FlowDTO[], orphans: OrphanDTO[], changes: Ch
     })),
     orphanGroups: compact.orphanGroups.map((g) => ({ dir: g.dir, files: g.orphans.map((o) => o.file) })),
     changes: changes.map((c) => ({
-      file: c.file, lines: `${c.startLine}-${c.endLine}`, label: c.label,
-      kind: c.kind, status: c.status, added: c.added, removed: c.removed,
+      file: c.file,
+      lines: `${c.startLine}-${c.endLine}`,
+      label: c.label,
+      kind: c.kind,
+      status: c.status,
+      added: c.added,
+      removed: c.removed,
     })),
   };
 }
@@ -118,7 +191,7 @@ export interface MergeSuggestion {
  *  multi-entry unit when they share >= half of the smaller flow's changed set.
  *  Qualifying pairs union into components; the LLM keeps label/order judgment. */
 export function suggestMerges(
-  flows: { entryStableId: string; name: string; changedStableIds: string[] }[]
+  flows: { entryStableId: string; name: string; changedStableIds: string[] }[],
 ): MergeSuggestion[] {
   const parent = new Map<string, string>();
   const find = (x: string): string => (parent.get(x) === x ? x : find(parent.get(x)!));
@@ -129,6 +202,7 @@ export function suggestMerges(
     for (let j = i + 1; j < flows.length; j++) {
       const A = flows[i];
       const B = flows[j];
+      if (!A || !B) continue;
       const bSet = new Set(B.changedStableIds);
       const shared = A.changedStableIds.filter((id) => bSet.has(id)).length;
       const smaller = Math.min(A.changedStableIds.length, B.changedStableIds.length);
@@ -154,9 +228,15 @@ export function suggestMerges(
 }
 
 export interface SessionNode {
-  id: string; stableId: string; label: string; file: string;
-  startLine: number; endLine: number;
-  changeStatus: string; reviewStatus: string; isTest: boolean;
+  id: string;
+  stableId: string;
+  label: string;
+  file: string;
+  startLine: number;
+  endLine: number;
+  changeStatus: string;
+  reviewStatus: string;
+  isTest: boolean;
 }
 
 /** Server-derived nesting (tests/DTOs/residuals under covered nodes).
@@ -167,11 +247,25 @@ export interface AttachedMember {
   reason: "tested-by" | "required-by" | "same-file";
   counted: boolean;
 }
-export interface Unit { id: string; label: string; kind: "flow" | "orphans"; memberStableIds: string[]; auto: boolean; attached: AttachedMember[]; }
-export interface Coverage { changedTotal: number; covered: number; unassigned: number; }
+export interface Unit {
+  id: string;
+  label: string;
+  kind: "flow" | "orphans";
+  memberStableIds: string[];
+  auto: boolean;
+  attached: AttachedMember[];
+}
+export interface Coverage {
+  changedTotal: number;
+  covered: number;
+  unassigned: number;
+}
 export interface SessionInfo {
-  session: Session; units: Unit[]; coverage: Coverage;
-  stale?: boolean; staleReason?: "head-moved" | "working-tree-changed";
+  session: Session;
+  units: Unit[];
+  coverage: Coverage;
+  stale?: boolean;
+  staleReason?: "head-moved" | "working-tree-changed";
 }
 
 export type UnitInput =
@@ -200,20 +294,17 @@ export type UnitInput =
 export function resolvePlanRefs(
   units: UnitInput[],
   flows: { id: number; name: string; entryStableId: string }[],
-  mergeSuggestions: MergeSuggestion[]
+  mergeSuggestions: MergeSuggestion[],
 ): UnitInput[] {
   const byId = new Map(flows.map((f) => [f.id, f.entryStableId]));
   return units.map((u) => {
     if (u.kind !== "flow" || (u.flowIds === undefined && u.mergeGroup === undefined)) return u;
-    const entries = [
-      ...(u.flowEntryStableIds ?? []),
-      ...(u.flowEntryStableId ? [u.flowEntryStableId] : []),
-    ];
+    const entries = [...(u.flowEntryStableIds ?? []), ...(u.flowEntryStableId ? [u.flowEntryStableId] : [])];
     for (const id of u.flowIds ?? []) {
       const entry = byId.get(id);
       if (entry === undefined) {
         throw new Error(
-          `unit '${u.label}': unknown flowId ${id} (affected flows: ${[...byId.keys()].join(", ") || "none"})`
+          `unit '${u.label}': unknown flowId ${id} (affected flows: ${[...byId.keys()].join(", ") || "none"})`,
         );
       }
       entries.push(entry);
@@ -222,7 +313,7 @@ export function resolvePlanRefs(
       const group = mergeSuggestions[u.mergeGroup];
       if (!group) {
         throw new Error(
-          `unit '${u.label}': mergeGroup ${u.mergeGroup} out of range (${mergeSuggestions.length} suggestion(s), zero-indexed)`
+          `unit '${u.label}': mergeGroup ${u.mergeGroup} out of range (${mergeSuggestions.length} suggestion(s), zero-indexed)`,
         );
       }
       entries.push(...group.entryStableIds);
@@ -249,32 +340,49 @@ export function parsePlanFile(text: string): { units: UnitInput[]; overview?: st
 }
 
 export interface CommentAnchor {
-  startLine: number; startSide: "old" | "new";
-  endLine: number; endSide: "old" | "new";
+  startLine: number;
+  startSide: "old" | "new";
+  endLine: number;
+  endSide: "old" | "new";
 }
 export interface ExportedNodeComment {
   scope: "node";
-  id: string; nodeId: string; stableId: string; label: string; file: string;
-  startLine: number; endLine: number;
-  hunkSnippet: string; text: string; structuralContext: string; createdAt: number;
+  id: string;
+  nodeId: string;
+  stableId: string;
+  label: string;
+  file: string;
+  startLine: number;
+  endLine: number;
+  hunkSnippet: string;
+  text: string;
+  structuralContext: string;
+  createdAt: number;
   anchor: CommentAnchor | null;
 }
 /** Session-wide remark; maps to a GitHub PR review body, not an inline comment. */
 export interface ExportedSessionComment {
   scope: "session";
-  id: string; text: string; createdAt: number;
+  id: string;
+  text: string;
+  createdAt: number;
 }
 export type ExportedComment = ExportedNodeComment | ExportedSessionComment;
 
 async function fetchJson(url: string, init?: RequestInit) {
   const res = await fetch(url, {
-    ...init, headers: { "Content-Type": "application/json", ...init?.headers },
+    ...init,
+    headers: { "Content-Type": "application/json", ...init?.headers },
   });
   if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
   return res.json();
 }
 
-export async function createSession(base: string, branch: string, baseRef: string): Promise<{ session: Session; subgraph: ChangeSubgraph }> {
+export async function createSession(
+  base: string,
+  branch: string,
+  baseRef: string,
+): Promise<{ session: Session; subgraph: ChangeSubgraph }> {
   return fetchJson(`${base}/api/sessions`, { method: "POST", body: JSON.stringify({ branch, baseRef }) });
 }
 
@@ -299,7 +407,8 @@ export async function getFlows(base: string, sessionId: string): Promise<{ flows
 }
 
 export async function getChanges(
-  base: string, sessionId: string
+  base: string,
+  sessionId: string,
 ): Promise<{ changes: ChangeSummary[]; commitSubjects?: string[] }> {
   return fetchJson(`${base}/api/sessions/${sessionId}/changes`);
 }
@@ -313,8 +422,16 @@ export async function getNodeDiff(base: string, sessionId: string, nodeId: strin
 }
 
 export async function writePlan(
-  base: string, sessionId: string, units: UnitInput[], overview?: string
-): Promise<{ units: Unit[]; coverage: Coverage; overview: string; unassigned: { stableId: string; label: string; file: string }[] }> {
+  base: string,
+  sessionId: string,
+  units: UnitInput[],
+  overview?: string,
+): Promise<{
+  units: Unit[];
+  coverage: Coverage;
+  overview: string;
+  unassigned: { stableId: string; label: string; file: string }[];
+}> {
   return fetchJson(`${base}/api/sessions/${sessionId}/plan`, {
     method: "PUT",
     body: JSON.stringify(overview === undefined ? { units } : { units, overview }),
@@ -322,7 +439,8 @@ export async function writePlan(
 }
 
 export async function exportComments(
-  base: string, sessionId: string
+  base: string,
+  sessionId: string,
 ): Promise<{ branch: string; baseRef: string; headSha: string; overview: string; comments: ExportedComment[] }> {
   return fetchJson(`${base}/api/sessions/${sessionId}/export`);
 }

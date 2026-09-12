@@ -8,10 +8,11 @@ import type { IndexerJob } from "../src/graph/roots.js";
 
 describe("resolveScipJavaCommand", () => {
   it("honors the SCIP_JAVA_CMD override verbatim", () => {
-    expect(resolveScipJavaCommand({ SCIP_JAVA_CMD: "scip-java" }))
-      .toEqual({ argv0: "scip-java", args: [] });
-    expect(resolveScipJavaCommand({ SCIP_JAVA_CMD: "cs launch foo --" }))
-      .toEqual({ argv0: "cs", args: ["launch", "foo", "--"] });
+    expect(resolveScipJavaCommand({ SCIP_JAVA_CMD: "scip-java" })).toEqual({ argv0: "scip-java", args: [] });
+    expect(resolveScipJavaCommand({ SCIP_JAVA_CMD: "cs launch foo --" })).toEqual({
+      argv0: "cs",
+      args: ["launch", "foo", "--"],
+    });
   });
 
   it("finds a scip-java executable on PATH", () => {
@@ -63,15 +64,15 @@ describe("scip-java integration", () => {
   <groupId>demo</groupId><artifactId>svc</artifactId><version>0.1.0</version>
   <properties><maven.compiler.source>17</maven.compiler.source><maven.compiler.target>17</maven.compiler.target></properties>
 </project>
-`
+`,
         );
         writeFileSync(
           join(dir, "svc", "src", "main", "java", "demo", "Svc.java"),
-          "package demo;\npublic class Svc {\n  public String greet(String name) { return \"hello \" + name; }\n}\n"
+          'package demo;\npublic class Svc {\n  public String greet(String name) { return "hello " + name; }\n}\n',
         );
         writeFileSync(
           join(dir, "svc", "src", "main", "java", "demo", "App.java"),
-          "package demo;\npublic class App {\n  public String run() { return new Svc().greet(\"world\"); }\n  public static void main(String[] args) { System.out.println(new App().run()); }\n}\n"
+          'package demo;\npublic class App {\n  public String run() { return new Svc().greet("world"); }\n  public static void main(String[] args) { System.out.println(new App().run()); }\n}\n',
         );
         git("add", ".");
         git("commit", "-m", "init");
@@ -94,7 +95,7 @@ describe("scip-java integration", () => {
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
-    }
+    },
   );
 });
 
@@ -106,9 +107,15 @@ describe("java degradation (planJobs)", () => {
   ];
   class Probe extends ScipGraphProvider {
     java: ScipJavaCommand | null = null;
-    protected override discoverJobs(): IndexerJob[] { return JOBS; }
-    protected override resolveJavaCommand(): ScipJavaCommand | null { return this.java; }
-    plan() { return this.planJobs(); }
+    protected override discoverJobs(): IndexerJob[] {
+      return JOBS;
+    }
+    protected override resolveJavaCommand(): ScipJavaCommand | null {
+      return this.java;
+    }
+    plan() {
+      return this.planJobs();
+    }
   }
 
   it("drops java jobs with a visible warning when the toolchain is missing", () => {
@@ -132,7 +139,9 @@ describe("java degradation (planJobs)", () => {
 
   it("emits no warning when no java roots exist", () => {
     class NoJava extends Probe {
-      protected override discoverJobs(): IndexerJob[] { return JOBS.filter((j) => j.language !== "java"); }
+      protected override discoverJobs(): IndexerJob[] {
+        return JOBS.filter((j) => j.language !== "java");
+      }
     }
     const p = new NoJava({ repoRoot: "/tmp" });
     expect(p.plan().warnings).toEqual([]);
@@ -143,8 +152,12 @@ describe("java degradation (planJobs)", () => {
       protected override discoverJobs(): IndexerJob[] {
         return [{ language: "java", root: "introspector", hasSources: true }];
       }
-      protected override resolveJavaCommand(): ScipJavaCommand | null { return null; }
-      protected override repoStateKey(): string { return "k1"; }
+      protected override resolveJavaCommand(): ScipJavaCommand | null {
+        return null;
+      }
+      protected override repoStateKey(): string {
+        return "k1";
+      }
     }
     const p = new JavaOnly({ repoRoot: "/tmp" });
     const warnings = await p.getIndexWarnings();

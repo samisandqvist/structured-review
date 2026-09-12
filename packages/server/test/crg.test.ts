@@ -11,19 +11,43 @@ vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
           json({
             status: "ok",
             changed_nodes: [
-              { id: 1, kind: "Function", name: "handler", qualified_name: "/repo/src/handler.ts::handler", file_path: "/repo/src/handler.ts", line_start: 10, line_end: 20 },
+              {
+                id: 1,
+                kind: "Function",
+                name: "handler",
+                qualified_name: "/repo/src/handler.ts::handler",
+                file_path: "/repo/src/handler.ts",
+                line_start: 10,
+                line_end: 20,
+              },
               // A File node — must be filtered out (too coarse for the call graph).
-              { id: 3, kind: "File", name: "/repo/src/handler.ts", qualified_name: "/repo/src/handler.ts", file_path: "/repo/src/handler.ts", line_start: 1, line_end: 30 },
+              {
+                id: 3,
+                kind: "File",
+                name: "/repo/src/handler.ts",
+                qualified_name: "/repo/src/handler.ts",
+                file_path: "/repo/src/handler.ts",
+                line_start: 1,
+                line_end: 30,
+              },
             ],
             impacted_nodes: [
-              { id: 2, kind: "Function", name: "helper", qualified_name: "/repo/src/helper.ts::helper", file_path: "/repo/src/helper.ts", line_start: 1, line_end: 5 },
+              {
+                id: 2,
+                kind: "Function",
+                name: "helper",
+                qualified_name: "/repo/src/helper.ts::helper",
+                file_path: "/repo/src/helper.ts",
+                line_start: 1,
+                line_end: 5,
+              },
             ],
             edges: [
               { kind: "CALLS", source: "/repo/src/handler.ts::handler", target: "/repo/src/helper.ts::helper" },
               // Non-CALLS edge — must be dropped.
               { kind: "CONTAINS", source: "/repo/src/handler.ts", target: "/repo/src/handler.ts::handler" },
             ],
-          })
+          }),
         );
       }
       if (req.name === "query_graph_tool") {
@@ -33,11 +57,19 @@ vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
           json({
             status: "ok",
             results: [
-              { id: 2, kind: "Function", name: "helper", qualified_name: "/repo/src/helper.ts::helper", file_path: "/repo/src/helper.ts", line_start: 1, line_end: 5 },
+              {
+                id: 2,
+                kind: "Function",
+                name: "helper",
+                qualified_name: "/repo/src/helper.ts::helper",
+                file_path: "/repo/src/helper.ts",
+                line_start: 1,
+                line_end: 5,
+              },
               // Unresolved built-in (no file/id) — must be skipped.
               { kind: "Function", name: "filter", qualified_name: "filter" },
             ],
-          })
+          }),
         );
       }
       return Promise.resolve(json({ status: "ok" }));
@@ -50,8 +82,7 @@ vi.mock("@modelcontextprotocol/sdk/client/stdio.js", () => ({
 
 import { CrgGraphProvider } from "../src/graph/crg.js";
 
-const provider = () =>
-  new CrgGraphProvider(["code-review-graph", "serve"], { repoRoot: "/repo", build: false });
+const provider = () => new CrgGraphProvider(["code-review-graph", "serve"], { repoRoot: "/repo", build: false });
 
 describe("CrgGraphProvider", () => {
   it("maps get_impact_radius into a change subgraph", async () => {
@@ -67,7 +98,11 @@ describe("CrgGraphProvider", () => {
     expect(helper.changeStatus).toBe("unchanged");
     // Only the CALLS edge survives.
     expect(subgraph.edges).toEqual([
-      { sourceStableId: "/repo/src/handler.ts::handler", targetStableId: "/repo/src/helper.ts::helper", edgeType: "call" },
+      {
+        sourceStableId: "/repo/src/handler.ts::handler",
+        targetStableId: "/repo/src/helper.ts::helper",
+        edgeType: "call",
+      },
     ]);
   });
 

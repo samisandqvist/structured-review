@@ -94,3 +94,20 @@ See [CLI and configuration](docs/cli-and-configuration.md) for setup and tuning.
 - Apply-fix / re-review loop (external — separate Claude Code run consumes comments)
 - Message-flow edge provider (named extension point only)
 - Nested units
+
+## Quality checks
+
+Use [docs/harness.md](docs/harness.md) for the verification commands, strict targets,
+source boundaries, and explicit transitional debt. `pnpm verify` is the local CI
+entrypoint; `pnpm verify:strict` reports full strict debt, and `pnpm verify:full`
+also runs selected mutation tests. Keep both plugin packages fresh with
+`pnpm build && pnpm build:plugin` after runtime changes.
+
+Use Semble for discovery, then read source and use exact references for impact.
+Read current repository design/configuration docs for product and GraphProvider
+contracts; designated QMD notes can provide context but may be historical.
+Use version-matched official documentation for library behavior.
+
+Keep functions at a consistent level of abstraction (Q-ABSTRACTION; details in
+`docs/harness.md`). The harness does not add a product-spec/history maintenance
+contract or the five deferred workflow practices.

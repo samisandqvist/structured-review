@@ -64,7 +64,8 @@ function fileChangedRanges(baseRef, file2, root = repoRoot(), options = {}) {
       ...QUIET
     });
   } catch (error51) {
-    if (options.strict) throw new GitError("read-diff", `Cannot collect changed lines for ${file2}: ${error51.message}`);
+    if (options.strict)
+      throw new GitError("read-diff", `Cannot collect changed lines for ${file2}: ${error51.message}`);
     return null;
   }
   if (!raw2.trim()) return null;
@@ -89,7 +90,11 @@ function repoFingerprint(root = repoRoot()) {
     const h = createHash("sha256");
     h.update(execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8", ...QUIET }));
     h.update(execFileSync("git", ["diff", "HEAD"], { cwd: root, maxBuffer: 256 * 1024 * 1024, ...QUIET }));
-    const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard", "-z"], { cwd: root, encoding: "utf8", ...QUIET }).split("\0").filter(Boolean);
+    const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard", "-z"], {
+      cwd: root,
+      encoding: "utf8",
+      ...QUIET
+    }).split("\0").filter(Boolean);
     for (const f of untracked) {
       h.update(f);
       try {
@@ -113,8 +118,14 @@ function subtreeFingerprint(subdir, root = repoRoot(), pathspecs) {
     } catch {
       h.update("<no-tree>");
     }
-    h.update(execFileSync("git", ["diff", "HEAD", "--", ...specs], { cwd: root, maxBuffer: 256 * 1024 * 1024, ...QUIET }));
-    const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard", "-z", "--", ...specs], { cwd: root, encoding: "utf8", ...QUIET }).split("\0").filter(Boolean);
+    h.update(
+      execFileSync("git", ["diff", "HEAD", "--", ...specs], { cwd: root, maxBuffer: 256 * 1024 * 1024, ...QUIET })
+    );
+    const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard", "-z", "--", ...specs], {
+      cwd: root,
+      encoding: "utf8",
+      ...QUIET
+    }).split("\0").filter(Boolean);
     for (const f of untracked) {
       h.update(f);
       try {
@@ -129,7 +140,11 @@ function subtreeFingerprint(subdir, root = repoRoot(), pathspecs) {
   }
 }
 function commitSubjects(baseRef, root = repoRoot(), limit = 50) {
-  const log = (range) => execFileSync("git", ["log", "--format=%s", `--max-count=${limit}`, range], { cwd: root, encoding: "utf8", ...QUIET }).split("\n").filter(Boolean);
+  const log = (range) => execFileSync("git", ["log", "--format=%s", `--max-count=${limit}`, range], {
+    cwd: root,
+    encoding: "utf8",
+    ...QUIET
+  }).split("\n").filter(Boolean);
   try {
     return log(`${baseRef}..HEAD`);
   } catch {
@@ -150,7 +165,11 @@ function currentBranch(root = repoRoot()) {
 function resolveRef(ref, root = repoRoot()) {
   for (const peel of ["commit", "tree"]) {
     try {
-      return execFileSync("git", ["rev-parse", "--verify", `${ref}^{${peel}}`], { cwd: root, encoding: "utf8", ...QUIET }).trim();
+      return execFileSync("git", ["rev-parse", "--verify", `${ref}^{${peel}}`], {
+        cwd: root,
+        encoding: "utf8",
+        ...QUIET
+      }).trim();
     } catch {
     }
   }
@@ -424,7 +443,12 @@ function parseHunks(diff) {
   for (const line of diff.split("\n")) {
     const header = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
     if (header) {
-      current = { oldStart: Number(header[1]), newStart: Number(header[2]), newCount: Number(header[3] ?? "1"), lines: [] };
+      current = {
+        oldStart: Number(header[1]),
+        newStart: Number(header[2]),
+        newCount: Number(header[3] ?? "1"),
+        lines: []
+      };
       hunks.push(current);
       continue;
     }
@@ -10541,15 +10565,33 @@ var require_data = __commonJS({
   }
 });
 
-// node_modules/.pnpm/fast-uri@3.1.2/node_modules/fast-uri/lib/utils.js
+// node_modules/.pnpm/fast-uri@3.1.6/node_modules/fast-uri/lib/utils.js
 var require_utils = __commonJS({
-  "node_modules/.pnpm/fast-uri@3.1.2/node_modules/fast-uri/lib/utils.js"(exports, module) {
+  "node_modules/.pnpm/fast-uri@3.1.6/node_modules/fast-uri/lib/utils.js"(exports, module) {
     "use strict";
     var isUUID = RegExp.prototype.test.bind(/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/iu);
     var isIPv4 = RegExp.prototype.test.bind(/^(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)$/u);
     var isHexPair = RegExp.prototype.test.bind(/^[\da-f]{2}$/iu);
     var isUnreserved = RegExp.prototype.test.bind(/^[\da-z\-._~]$/iu);
-    var isPathCharacter = RegExp.prototype.test.bind(/^[\da-z\-._~!$&'()*+,;=:@/]$/iu);
+    var isPathCharacter = RegExp.prototype.test.bind(/^[A-Za-z0-9\-._~!$&'()*+,;=:@/]$/u);
+    var isQueryFragmentCharacter = RegExp.prototype.test.bind(/^[A-Za-z0-9\-._~!$&'()*+,;=:@/?]$/u);
+    var isUserinfoCharacter = RegExp.prototype.test.bind(/^[A-Za-z0-9\-._~!$&'()*+,;=:]$/u);
+    var BYTE_HEX = new Array(256);
+    {
+      const HEX_DIGITS = "0123456789ABCDEF";
+      for (let i = 0; i < 256; i++) {
+        BYTE_HEX[i] = "%" + HEX_DIGITS[i >> 4] + HEX_DIGITS[i & 15];
+      }
+    }
+    function percentEncodeNonAscii(cp) {
+      if (cp < 2048) {
+        return BYTE_HEX[192 | cp >> 6] + BYTE_HEX[128 | cp & 63];
+      }
+      if (cp < 65536) {
+        return BYTE_HEX[224 | cp >> 12] + BYTE_HEX[128 | cp >> 6 & 63] + BYTE_HEX[128 | cp & 63];
+      }
+      return BYTE_HEX[240 | cp >> 18] + BYTE_HEX[128 | cp >> 12 & 63] + BYTE_HEX[128 | cp >> 6 & 63] + BYTE_HEX[128 | cp & 63];
+    }
     function stringArrayToHexStripped(input) {
       let acc = "";
       let code = 0;
@@ -10574,91 +10616,105 @@ var require_utils = __commonJS({
       }
       return acc;
     }
+    var isHextet = RegExp.prototype.test.bind(/^[\dA-Fa-f]{1,4}$/);
+    var isIPvFuture = RegExp.prototype.test.bind(/^[vV][\dA-Fa-f]+\.[A-Za-z\d\-._~!$&'()*+,;=:]+$/);
+    var isZoneCharacter = RegExp.prototype.test.bind(/^[A-Za-z\d\-._~]$/);
     var nonSimpleDomain = RegExp.prototype.test.bind(/[^!"$&'()*+,\-.;=_`a-z{}~]/u);
-    function consumeIsZone(buffer) {
-      buffer.length = 0;
-      return true;
-    }
-    function consumeHextets(buffer, address, output) {
-      if (buffer.length) {
-        const hex3 = stringArrayToHexStripped(buffer);
-        if (hex3 !== "") {
-          address.push(hex3);
-        } else {
-          output.error = true;
-          return false;
+    function isZoneIdentifier(zone) {
+      if (zone.length === 0) return false;
+      for (let i = 0; i < zone.length; i++) {
+        if (isZoneCharacter(zone[i])) continue;
+        if (zone[i] === "%" && i + 2 < zone.length && isHexPair(zone.slice(i + 1, i + 3))) {
+          i += 2;
+          continue;
         }
-        buffer.length = 0;
+        return false;
       }
       return true;
     }
-    function getIPV6(input) {
-      let tokenCount = 0;
-      const output = { error: false, address: "", zone: "" };
-      const address = [];
-      const buffer = [];
-      let endipv6Encountered = false;
-      let endIpv6 = false;
-      let consume = consumeHextets;
-      for (let i = 0; i < input.length; i++) {
-        const cursor = input[i];
-        if (cursor === "[" || cursor === "]") {
-          continue;
-        }
-        if (cursor === ":") {
-          if (endipv6Encountered === true) {
-            endIpv6 = true;
+    function compressIPv6ZeroRun(hextets) {
+      let bestStart = -1;
+      let bestLength = 0;
+      let runStart = -1;
+      let runLength = 0;
+      for (let i = 0; i < hextets.length; i++) {
+        if (hextets[i] === "0") {
+          if (runStart === -1) runStart = i;
+          runLength++;
+          if (runLength > bestLength) {
+            bestLength = runLength;
+            bestStart = runStart;
           }
-          if (!consume(buffer, address, output)) {
-            break;
-          }
-          if (++tokenCount > 7) {
-            output.error = true;
-            break;
-          }
-          if (i > 0 && input[i - 1] === ":") {
-            endipv6Encountered = true;
-          }
-          address.push(":");
-          continue;
-        } else if (cursor === "%") {
-          if (!consume(buffer, address, output)) {
-            break;
-          }
-          consume = consumeIsZone;
         } else {
-          buffer.push(cursor);
-          continue;
+          runStart = -1;
+          runLength = 0;
         }
       }
-      if (buffer.length) {
-        if (consume === consumeIsZone) {
-          output.zone = buffer.join("");
-        } else if (endIpv6) {
-          address.push(buffer.join(""));
-        } else {
-          address.push(stringArrayToHexStripped(buffer));
-        }
+      if (bestLength < 2) return hextets.join(":");
+      const head = hextets.slice(0, bestStart).join(":");
+      const tail = hextets.slice(bestStart + bestLength).join(":");
+      return head + "::" + tail;
+    }
+    function normalizeIPv6Address(input) {
+      const compression = input.indexOf("::");
+      if (compression !== -1 && input.indexOf("::", compression + 1) !== -1) return void 0;
+      const left = compression === -1 ? input.split(":") : input.slice(0, compression).split(":");
+      const right = compression === -1 ? [] : input.slice(compression + 2).split(":");
+      if (compression !== -1) {
+        if (left.length === 1 && left[0] === "") left.length = 0;
+        if (right.length === 1 && right[0] === "") right.length = 0;
       }
-      output.address = address.join("");
-      return output;
+      const parts = left.concat(right);
+      let hextetCount = 0;
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        if (part === "") return void 0;
+        if (part.indexOf(".") !== -1) {
+          if (i !== parts.length - 1 || compression !== -1 && right.length === 0 || !isIPv4(part)) return void 0;
+          hextetCount += 2;
+          continue;
+        }
+        if (!isHextet(part)) return void 0;
+        parts[i] = parseInt(part, 16).toString(16);
+        hextetCount++;
+      }
+      if (compression === -1) {
+        if (hextetCount !== 8) return void 0;
+        return compressIPv6ZeroRun(parts);
+      }
+      if (hextetCount >= 8) return void 0;
+      const expanded = parts.slice(0, left.length);
+      for (let i = hextetCount; i < 8; i++) expanded.push("0");
+      for (let i = left.length; i < parts.length; i++) expanded.push(parts[i]);
+      return compressIPv6ZeroRun(expanded);
     }
     function normalizeIPv6(host) {
-      if (findToken(host, ":") < 2) {
-        return { host, isIPV6: false };
+      const bracketed = host[0] === "[" && host[host.length - 1] === "]";
+      const hasBracket = host[0] === "[" || host[host.length - 1] === "]";
+      if (hasBracket && !bracketed) return { host, isIPV6: false, error: true };
+      let input = bracketed ? host.slice(1, -1) : host;
+      if (bracketed && isIPvFuture(input)) {
+        input = input.toLowerCase();
+        return { host: `[${input}]`, escapedHost: input, isIPV6: false, isIPVFuture: true };
       }
-      const ipv63 = getIPV6(host);
-      if (!ipv63.error) {
-        let newHost = ipv63.address;
-        let escapedHost = ipv63.address;
-        if (ipv63.zone) {
-          newHost += "%" + ipv63.zone;
-          escapedHost += "%25" + ipv63.zone;
-        }
-        return { host: newHost, isIPV6: true, escapedHost };
-      } else {
-        return { host, isIPV6: false };
+      if (findToken(input, ":") < 2) {
+        return { host, isIPV6: false, error: bracketed };
       }
+      let zoneIdentifier = "";
+      const zoneSeparator = input.indexOf("%");
+      if (zoneSeparator !== -1) {
+        const separatorLength = input.slice(zoneSeparator, zoneSeparator + 3).toLowerCase() === "%25" ? 3 : 1;
+        zoneIdentifier = input.slice(zoneSeparator + separatorLength);
+        if (!isZoneIdentifier(zoneIdentifier)) return { host, isIPV6: false, error: true };
+        input = input.slice(0, zoneSeparator);
+      }
+      const address = normalizeIPv6Address(input);
+      if (address === void 0) return { host, isIPV6: false, error: true };
+      return {
+        host: address + (zoneIdentifier ? "%" + zoneIdentifier : ""),
+        escapedHost: address + (zoneIdentifier ? "%25" + zoneIdentifier : ""),
+        isIPV6: true
+      };
     }
     function findToken(str, token) {
       let ind = 0;
@@ -10777,7 +10833,8 @@ var require_utils = __commonJS({
     function normalizePathEncoding(input) {
       let output = "";
       for (let i = 0; i < input.length; i++) {
-        if (input[i] === "%" && i + 2 < input.length) {
+        const ch = input[i];
+        if (ch === "%" && i + 2 < input.length) {
           const hex3 = input.slice(i + 1, i + 3);
           if (isHexPair(hex3)) {
             const normalizedHex = hex3.toUpperCase();
@@ -10791,10 +10848,152 @@ var require_utils = __commonJS({
             continue;
           }
         }
-        if (isPathCharacter(input[i])) {
-          output += input[i];
+        if (isPathCharacter(ch)) {
+          output += ch;
         } else {
-          output += escape(input[i]);
+          const code = input.charCodeAt(i);
+          if (code < 128) {
+            output += isEscapeSafe(code) ? ch : BYTE_HEX[code];
+          } else if (code < 55296 || code > 57343) {
+            output += percentEncodeNonAscii(code);
+          } else if (code <= 56319 && i + 1 < input.length) {
+            const low = input.charCodeAt(i + 1);
+            if (low >= 56320 && low <= 57343) {
+              output += percentEncodeNonAscii(65536 + (code - 55296 << 10) + (low - 56320));
+              i++;
+            } else {
+              output += percentEncodeNonAscii(65533);
+            }
+          } else {
+            output += percentEncodeNonAscii(65533);
+          }
+        }
+      }
+      return output;
+    }
+    function serializePathEncoding(input, pathNoScheme = false) {
+      let output = "";
+      let firstSegment = pathNoScheme && input[0] !== "/";
+      for (let i = 0; i < input.length; i++) {
+        const ch = input[i];
+        if (ch === "%" && i + 2 < input.length) {
+          const hex3 = input.slice(i + 1, i + 3);
+          if (isHexPair(hex3)) {
+            output += "%" + hex3.toUpperCase();
+            i += 2;
+            continue;
+          }
+        }
+        if (ch === "/") {
+          firstSegment = false;
+        }
+        if (isPathCharacter(ch) && (ch !== ":" || !firstSegment)) {
+          output += ch;
+        } else {
+          const code = input.charCodeAt(i);
+          if (code < 128) {
+            output += BYTE_HEX[code];
+          } else if (code < 55296 || code > 57343) {
+            output += percentEncodeNonAscii(code);
+          } else if (code <= 56319 && i + 1 < input.length) {
+            const low = input.charCodeAt(i + 1);
+            if (low >= 56320 && low <= 57343) {
+              output += percentEncodeNonAscii(65536 + (code - 55296 << 10) + (low - 56320));
+              i++;
+            } else {
+              output += percentEncodeNonAscii(65533);
+            }
+          } else {
+            output += percentEncodeNonAscii(65533);
+          }
+        }
+      }
+      return output;
+    }
+    function encodeComponent(input, isAllowed) {
+      let output = "";
+      for (let i = 0; i < input.length; i++) {
+        const ch = input[i];
+        if (ch === "%" && i + 2 < input.length) {
+          const hex3 = input.slice(i + 1, i + 3);
+          if (isHexPair(hex3)) {
+            output += "%" + hex3.toUpperCase();
+            i += 2;
+            continue;
+          }
+        }
+        if (isAllowed(ch)) {
+          output += ch;
+        } else {
+          const code = input.charCodeAt(i);
+          if (code < 128) {
+            output += BYTE_HEX[code];
+          } else if (code < 55296 || code > 57343) {
+            output += percentEncodeNonAscii(code);
+          } else if (code <= 56319 && i + 1 < input.length) {
+            const low = input.charCodeAt(i + 1);
+            if (low >= 56320 && low <= 57343) {
+              output += percentEncodeNonAscii(65536 + (code - 55296 << 10) + (low - 56320));
+              i++;
+            } else {
+              output += percentEncodeNonAscii(65533);
+            }
+          } else {
+            output += percentEncodeNonAscii(65533);
+          }
+        }
+      }
+      return output;
+    }
+    function encodeUserinfo(input) {
+      return encodeComponent(input, isUserinfoCharacter);
+    }
+    function encodeQuery(input) {
+      return encodeComponent(input, isQueryFragmentCharacter);
+    }
+    function encodeFragment(input) {
+      return encodeComponent(input, isQueryFragmentCharacter);
+    }
+    function isEscapeSafe(cp) {
+      return cp >= 48 && cp <= 57 || cp >= 65 && cp <= 90 || cp >= 97 && cp <= 122 || cp === 42 || cp === 43 || cp === 45 || cp === 46 || cp === 47 || cp === 64 || cp === 95;
+    }
+    function normalizeQueryFragmentEncoding(input) {
+      let output = "";
+      for (let i = 0; i < input.length; i++) {
+        const ch = input[i];
+        if (ch === "%" && i + 2 < input.length) {
+          const hex3 = input.slice(i + 1, i + 3);
+          if (isHexPair(hex3)) {
+            const normalizedHex = hex3.toUpperCase();
+            const decoded = String.fromCharCode(parseInt(normalizedHex, 16));
+            if (isUnreserved(decoded)) {
+              output += decoded;
+            } else {
+              output += "%" + normalizedHex;
+            }
+            i += 2;
+            continue;
+          }
+        }
+        if (isQueryFragmentCharacter(ch)) {
+          output += ch;
+        } else {
+          const code = input.charCodeAt(i);
+          if (code < 128) {
+            output += isEscapeSafe(code) ? ch : BYTE_HEX[code];
+          } else if (code < 55296 || code > 57343) {
+            output += percentEncodeNonAscii(code);
+          } else if (code <= 56319 && i + 1 < input.length) {
+            const low = input.charCodeAt(i + 1);
+            if (low >= 56320 && low <= 57343) {
+              output += percentEncodeNonAscii(65536 + (code - 55296 << 10) + (low - 56320));
+              i++;
+            } else {
+              output += percentEncodeNonAscii(65533);
+            }
+          } else {
+            output += percentEncodeNonAscii(65533);
+          }
         }
       }
       return output;
@@ -10817,14 +11016,18 @@ var require_utils = __commonJS({
     function recomposeAuthority(component) {
       const uriTokens = [];
       if (component.userinfo !== void 0) {
-        uriTokens.push(component.userinfo);
+        uriTokens.push(encodeUserinfo(component.userinfo));
         uriTokens.push("@");
       }
       if (component.host !== void 0) {
-        let host = unescape(component.host);
+        let host = component.host;
         if (!isIPv4(host)) {
-          const ipV6res = normalizeIPv6(host);
-          if (ipV6res.isIPV6 === true) {
+          let ipV6res = normalizeIPv6(host);
+          if (ipV6res.isIPV6 !== true && ipV6res.isIPVFuture !== true) {
+            host = normalizePercentEncoding(host, true);
+            ipV6res = normalizeIPv6(host);
+          }
+          if (ipV6res.isIPV6 === true || ipV6res.isIPVFuture === true) {
             host = `[${ipV6res.escapedHost}]`;
           } else {
             host = reescapeHostDelimiters(host, false);
@@ -10844,6 +11047,11 @@ var require_utils = __commonJS({
       reescapeHostDelimiters,
       normalizePercentEncoding,
       normalizePathEncoding,
+      serializePathEncoding,
+      normalizeQueryFragmentEncoding,
+      encodeUserinfo,
+      encodeQuery,
+      encodeFragment,
       escapePreservingEscapes,
       removeDotSegments,
       isIPv4,
@@ -10854,12 +11062,12 @@ var require_utils = __commonJS({
   }
 });
 
-// node_modules/.pnpm/fast-uri@3.1.2/node_modules/fast-uri/lib/schemes.js
+// node_modules/.pnpm/fast-uri@3.1.6/node_modules/fast-uri/lib/schemes.js
 var require_schemes = __commonJS({
-  "node_modules/.pnpm/fast-uri@3.1.2/node_modules/fast-uri/lib/schemes.js"(exports, module) {
+  "node_modules/.pnpm/fast-uri@3.1.6/node_modules/fast-uri/lib/schemes.js"(exports, module) {
     "use strict";
     var { isUUID } = require_utils();
-    var URN_REG = /([\da-z][\d\-a-z]{0,31}):((?:[\w!$'()*+,\-.:;=@]|%[\da-f]{2})+)/iu;
+    var URN_REG = /^([\da-z][\d\-a-z]{0,31}):((?:[\w!$'()*+,\-./:;=@]|%[\da-f]{2})+)$/iu;
     var supportedSchemeNames = (
       /** @type {const} */
       [
@@ -10920,9 +11128,10 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path, query] = wsComponent.resourceName.split("?");
+        const queryIndex = wsComponent.resourceName.indexOf("?");
+        const path = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
         wsComponent.path = path && path !== "/" ? path : void 0;
-        wsComponent.query = query;
+        wsComponent.query = queryIndex === -1 ? void 0 : wsComponent.resourceName.slice(queryIndex + 1);
         wsComponent.resourceName = void 0;
       }
       wsComponent.fragment = void 0;
@@ -10934,7 +11143,7 @@ var require_schemes = __commonJS({
         return urnComponent;
       }
       const matches = urnComponent.path.match(URN_REG);
-      if (matches) {
+      if (matches && matches[0] === urnComponent.path) {
         const scheme = options.scheme || urnComponent.scheme || "urn";
         urnComponent.nid = matches[1].toLowerCase();
         urnComponent.nss = matches[2];
@@ -11064,12 +11273,21 @@ var require_schemes = __commonJS({
   }
 });
 
-// node_modules/.pnpm/fast-uri@3.1.2/node_modules/fast-uri/index.js
+// node_modules/.pnpm/fast-uri@3.1.6/node_modules/fast-uri/index.js
 var require_fast_uri = __commonJS({
-  "node_modules/.pnpm/fast-uri@3.1.2/node_modules/fast-uri/index.js"(exports, module) {
+  "node_modules/.pnpm/fast-uri@3.1.6/node_modules/fast-uri/index.js"(exports, module) {
     "use strict";
-    var { normalizeIPv6, removeDotSegments, recomposeAuthority, normalizePercentEncoding, normalizePathEncoding, escapePreservingEscapes, reescapeHostDelimiters, isIPv4, nonSimpleDomain } = require_utils();
+    var { normalizeIPv6, removeDotSegments, recomposeAuthority, normalizePercentEncoding, normalizePathEncoding, serializePathEncoding, normalizeQueryFragmentEncoding, encodeQuery, encodeFragment, reescapeHostDelimiters, isIPv4, nonSimpleDomain } = require_utils();
     var { SCHEMES, getSchemeHandler } = require_schemes();
+    var VALID_SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*$/u;
+    var MALFORMED_SCHEME_ERROR = "URI scheme is malformed.";
+    function decodeValidScheme(scheme) {
+      const decodedScheme = unescape(String(scheme));
+      if (!VALID_SCHEME.test(decodedScheme)) {
+        throw new TypeError(MALFORMED_SCHEME_ERROR);
+      }
+      return decodedScheme;
+    }
     function normalize2(uri, options) {
       if (typeof uri === "string") {
         uri = /** @type {T} */
@@ -11082,7 +11300,34 @@ var require_fast_uri = __commonJS({
     }
     function resolve(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
-      const resolved = resolveComponent(parse3(baseURI, schemelessOptions), parse3(relativeURI, schemelessOptions), schemelessOptions, true);
+      const {
+        parsed: baseParsed,
+        malformedAuthorityOrPort: baseMalformed,
+        malformedPercentEncoding: baseMalformedPercentEncoding,
+        malformedSchemeSpecific: baseMalformedSchemeSpecific,
+        malformedHost: baseMalformedHost,
+        malformedScheme: baseMalformedScheme
+      } = parseWithStatus(baseURI, schemelessOptions);
+      const {
+        parsed: relativeParsed,
+        malformedAuthorityOrPort: relativeMalformed,
+        malformedPercentEncoding: relativeMalformedPercentEncoding,
+        malformedSchemeSpecific: relativeMalformedSchemeSpecific,
+        malformedHost: relativeMalformedHost,
+        malformedScheme: relativeMalformedScheme
+      } = parseWithStatus(relativeURI, schemelessOptions);
+      if (baseMalformed || relativeMalformed || baseMalformedPercentEncoding || relativeMalformedPercentEncoding || baseMalformedSchemeSpecific || relativeMalformedSchemeSpecific || baseMalformedHost || relativeMalformedHost || baseMalformedScheme || relativeMalformedScheme) {
+        throw new Error(baseParsed.error || relativeParsed.error || "URI is malformed.");
+      }
+      const resolved = resolveComponent(baseParsed, relativeParsed, schemelessOptions, true);
+      const resolvedSchemeHandler = getSchemeHandler(options && options.scheme || resolved.scheme);
+      const resolvedHost = resolved.host;
+      const resolvedHostIsIP = resolvedHost !== void 0 && resolvedHost !== "" && (isIPv4(resolvedHost) || normalizeIPv6(resolvedHost).isIPV6);
+      canonicalizeHost(resolved, options || {}, resolvedSchemeHandler, resolvedHostIsIP);
+      const encodedASCIIHost = resolvedHost && resolvedHost.indexOf("%") !== -1 && !new RegExp("\\P{ASCII}", "u").test(resolvedHost);
+      if (resolved.error && !encodedASCIIHost) {
+        throw new Error(resolved.error);
+      }
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
@@ -11142,7 +11387,7 @@ var require_fast_uri = __commonJS({
     function equal(uriA, uriB, options) {
       const normalizedA = normalizeComparableURI(uriA, options);
       const normalizedB = normalizeComparableURI(uriB, options);
-      return normalizedA !== void 0 && normalizedB !== void 0 && normalizedA.toLowerCase() === normalizedB.toLowerCase();
+      return normalizedA !== void 0 && normalizedB !== void 0 && normalizedA === normalizedB;
     }
     function serialize(cmpts, opts) {
       const component = {
@@ -11163,19 +11408,22 @@ var require_fast_uri = __commonJS({
       };
       const options = Object.assign({}, opts);
       const uriTokens = [];
+      if (component.scheme) {
+        component.scheme = decodeValidScheme(component.scheme);
+      }
       const schemeHandler = getSchemeHandler(options.scheme || component.scheme);
       if (schemeHandler && schemeHandler.serialize) schemeHandler.serialize(component, options);
+      const hasAuthority = component.userinfo !== void 0 || component.host !== void 0 || component.port !== void 0;
+      const pathNoScheme = !options.skipEscape && component.scheme === void 0 && !hasAuthority;
       if (component.path !== void 0) {
         if (!options.skipEscape) {
-          component.path = escapePreservingEscapes(component.path);
-          if (component.scheme !== void 0) {
-            component.path = component.path.split("%3A").join(":");
-          }
+          component.path = serializePathEncoding(component.path, pathNoScheme);
         } else {
           component.path = normalizePercentEncoding(component.path);
         }
       }
       if (options.reference !== "suffix" && component.scheme) {
+        component.scheme = decodeValidScheme(component.scheme);
         uriTokens.push(component.scheme, ":");
       }
       const authority = recomposeAuthority(component);
@@ -11193,20 +11441,25 @@ var require_fast_uri = __commonJS({
         if (!options.absolutePath && (!schemeHandler || !schemeHandler.absolutePath)) {
           s = removeDotSegments(s);
         }
+        if (pathNoScheme) {
+          s = serializePathEncoding(s, true);
+        }
         if (authority === void 0 && s[0] === "/" && s[1] === "/") {
           s = "/%2F" + s.slice(2);
         }
         uriTokens.push(s);
       }
       if (component.query !== void 0) {
-        uriTokens.push("?", component.query);
+        uriTokens.push("?", encodeQuery(component.query));
       }
       if (component.fragment !== void 0) {
-        uriTokens.push("#", component.fragment);
+        uriTokens.push("#", encodeFragment(component.fragment));
       }
       return uriTokens.join("");
     }
     var URI_PARSE = /^(?:([^#/:?]+):)?(?:\/\/((?:([^#/?@]*)@)?(\[[^#/?\]]+\]|[^#/:?]*)(?::(\d*))?))?([^#?]*)(?:\?([^#]*))?(?:#((?:.|[\n\r])*))?/u;
+    var AUTHORITY_PREFIX = /^(?:[^#/:?]+:)?\/\/([^/?#]*)/;
+    var AUTHORITY_INTRODUCER_REGION = /^(?:[^#/:?]+:)?([/\\\t\n\r]*)/;
     function getParseError(parsed, matches) {
       if (matches[2] !== void 0 && parsed.path && parsed.path[0] !== "/") {
         return 'URI path must start with "/" when authority is present.';
@@ -11215,6 +11468,32 @@ var require_fast_uri = __commonJS({
         return "URI port is malformed.";
       }
       return void 0;
+    }
+    function hasMalformedPercentEncoding(component) {
+      if (component === void 0) return false;
+      let percent = component.indexOf("%");
+      while (percent !== -1) {
+        if (percent + 2 >= component.length || !/^[\da-f]{2}$/iu.test(component.slice(percent + 1, percent + 3))) {
+          return true;
+        }
+        percent = component.indexOf("%", percent + 3);
+      }
+      return false;
+    }
+    function hasMalformedComponentPercentEncoding(matches) {
+      const host = matches[4];
+      return hasMalformedPercentEncoding(matches[3]) || host !== void 0 && !(host[0] === "[" && host[host.length - 1] === "]") && hasMalformedPercentEncoding(host) || hasMalformedPercentEncoding(matches[6]) || hasMalformedPercentEncoding(matches[7]) || hasMalformedPercentEncoding(matches[8]);
+    }
+    function canonicalizeHost(parsed, options, schemeHandler, isIP) {
+      if (!options.unicodeSupport && (!schemeHandler || !schemeHandler.unicodeSupport) && parsed.host && parsed.host[0] !== "[" && (options.domainHost || schemeHandler && schemeHandler.domainHost) && isIP === false && nonSimpleDomain(parsed.host)) {
+        try {
+          parsed.host = new URL("http://" + parsed.host).hostname;
+        } catch (e) {
+          parsed.error = parsed.error || "Host's domain name can not be converted to ASCII: " + e;
+          return true;
+        }
+      }
+      return false;
     }
     function parseWithStatus(uri, opts) {
       const options = Object.assign({}, opts);
@@ -11228,12 +11507,36 @@ var require_fast_uri = __commonJS({
         fragment: void 0
       };
       let malformedAuthorityOrPort = false;
+      let malformedPercentEncoding = false;
+      let malformedSchemeSpecific = false;
+      let malformedHost = false;
+      let malformedIPLiteral = false;
+      let malformedScheme = false;
       let isIP = false;
       if (options.reference === "suffix") {
         if (options.scheme) {
           uri = options.scheme + ":" + uri;
         } else {
           uri = "//" + uri;
+        }
+      }
+      const authorityMatch = uri.match(AUTHORITY_PREFIX);
+      if (authorityMatch !== null && authorityMatch[1].indexOf("\\") !== -1) {
+        parsed.error = "URI authority must not contain a literal backslash.";
+        malformedAuthorityOrPort = true;
+      }
+      const introducerMatch = uri.match(AUTHORITY_INTRODUCER_REGION);
+      if (introducerMatch !== null) {
+        const region = introducerMatch[1];
+        const normalizedRegion = region.replace(/[\t\n\r]/g, "");
+        if (normalizedRegion.length >= 2) {
+          if (normalizedRegion.slice(0, 2) !== "//") {
+            parsed.error = parsed.error || "URI authority must not contain a literal backslash.";
+            malformedAuthorityOrPort = true;
+          } else if (region.length !== normalizedRegion.length) {
+            parsed.error = parsed.error || "URI authority introducer must not contain whitespace.";
+            malformedAuthorityOrPort = true;
+          }
         }
       }
       const matches = uri.match(URI_PARSE);
@@ -11245,6 +11548,19 @@ var require_fast_uri = __commonJS({
         parsed.path = matches[6] || "";
         parsed.query = matches[7];
         parsed.fragment = matches[8];
+        if (parsed.scheme !== void 0) {
+          const decodedScheme = unescape(parsed.scheme);
+          if (VALID_SCHEME.test(decodedScheme)) {
+            parsed.scheme = decodedScheme.toLowerCase();
+          } else {
+            parsed.error = parsed.error || MALFORMED_SCHEME_ERROR;
+            malformedScheme = true;
+          }
+        }
+        malformedPercentEncoding = hasMalformedComponentPercentEncoding(matches);
+        if (malformedPercentEncoding) {
+          parsed.error = parsed.error || "URI contains malformed percent-encoding.";
+        }
         if (isNaN(parsed.port)) {
           parsed.port = matches[5];
         }
@@ -11256,9 +11572,15 @@ var require_fast_uri = __commonJS({
         if (parsed.host) {
           const ipv4result = isIPv4(parsed.host);
           if (ipv4result === false) {
+            const bracketedIPLiteral = parsed.host[0] === "[" && parsed.host[parsed.host.length - 1] === "]";
             const ipv6result = normalizeIPv6(parsed.host);
-            parsed.host = ipv6result.host.toLowerCase();
-            isIP = ipv6result.isIPV6;
+            isIP = ipv6result.isIPV6 || ipv6result.isIPVFuture === true;
+            malformedIPLiteral = bracketedIPLiteral && ipv6result.error === true;
+            parsed.host = isIP ? ipv6result.host : ipv6result.host.toLowerCase();
+            if (malformedIPLiteral) {
+              parsed.error = parsed.error || "URI host is malformed.";
+              malformedAuthorityOrPort = true;
+            }
           } else {
             isIP = true;
           }
@@ -11276,42 +11598,34 @@ var require_fast_uri = __commonJS({
           parsed.error = parsed.error || "URI is not a " + options.reference + " reference.";
         }
         const schemeHandler = getSchemeHandler(options.scheme || parsed.scheme);
-        if (!options.unicodeSupport && (!schemeHandler || !schemeHandler.unicodeSupport)) {
-          if (parsed.host && (options.domainHost || schemeHandler && schemeHandler.domainHost) && isIP === false && nonSimpleDomain(parsed.host)) {
-            try {
-              parsed.host = URL.domainToASCII(parsed.host.toLowerCase());
-            } catch (e) {
-              parsed.error = parsed.error || "Host's domain name can not be converted to ASCII: " + e;
-            }
-          }
-        }
+        malformedHost = canonicalizeHost(parsed, options, schemeHandler, isIP);
         if (!schemeHandler || schemeHandler && !schemeHandler.skipNormalize) {
           if (uri.indexOf("%") !== -1) {
-            if (parsed.scheme !== void 0) {
-              parsed.scheme = unescape(parsed.scheme);
-            }
-            if (parsed.host !== void 0) {
-              parsed.host = reescapeHostDelimiters(unescape(parsed.host), isIP);
+            if (parsed.host !== void 0 && !malformedIPLiteral) {
+              const host = isIP ? parsed.host : normalizePercentEncoding(parsed.host, true);
+              parsed.host = reescapeHostDelimiters(host, isIP);
             }
           }
           if (parsed.path) {
             parsed.path = normalizePathEncoding(parsed.path);
           }
+          if (parsed.query) {
+            parsed.query = normalizeQueryFragmentEncoding(parsed.query);
+          }
           if (parsed.fragment) {
-            try {
-              parsed.fragment = encodeURI(decodeURIComponent(parsed.fragment));
-            } catch {
-              parsed.error = parsed.error || "URI malformed";
-            }
+            parsed.fragment = normalizeQueryFragmentEncoding(parsed.fragment);
           }
         }
         if (schemeHandler && schemeHandler.parse) {
           schemeHandler.parse(parsed, options);
+          if (schemeHandler === SCHEMES.urn && parsed.nid === void 0) {
+            malformedSchemeSpecific = true;
+          }
         }
       } else {
         parsed.error = parsed.error || "URI can not be parsed.";
       }
-      return { parsed, malformedAuthorityOrPort };
+      return { parsed, malformedAuthorityOrPort, malformedPercentEncoding, malformedSchemeSpecific, malformedHost, malformedScheme };
     }
     function parse3(uri, opts) {
       return parseWithStatus(uri, opts).parsed;
@@ -11320,20 +11634,28 @@ var require_fast_uri = __commonJS({
       return normalizeStringWithStatus(uri, opts).normalized;
     }
     function normalizeStringWithStatus(uri, opts) {
-      const { parsed, malformedAuthorityOrPort } = parseWithStatus(uri, opts);
+      const { parsed, malformedAuthorityOrPort, malformedPercentEncoding, malformedSchemeSpecific, malformedHost, malformedScheme } = parseWithStatus(uri, opts);
       return {
-        normalized: malformedAuthorityOrPort ? uri : serialize(parsed, opts),
-        malformedAuthorityOrPort
+        normalized: malformedAuthorityOrPort || malformedPercentEncoding || malformedSchemeSpecific || malformedHost || malformedScheme ? uri : serialize(parsed, opts),
+        malformedAuthorityOrPort,
+        malformedPercentEncoding,
+        malformedSchemeSpecific,
+        malformedHost,
+        malformedScheme
       };
     }
     function normalizeComparableURI(uri, opts) {
-      if (typeof uri === "string") {
-        const { normalized, malformedAuthorityOrPort } = normalizeStringWithStatus(uri, opts);
-        return malformedAuthorityOrPort ? void 0 : normalized;
+      if (typeof uri !== "string" && typeof uri !== "object") {
+        return void 0;
       }
-      if (typeof uri === "object") {
-        return serialize(uri, opts);
+      let value;
+      try {
+        value = typeof uri === "string" ? uri : serialize(uri, opts);
+      } catch {
+        return void 0;
       }
+      const { normalized, malformedAuthorityOrPort, malformedPercentEncoding, malformedSchemeSpecific, malformedHost, malformedScheme } = normalizeStringWithStatus(value, opts);
+      return malformedAuthorityOrPort || malformedPercentEncoding || malformedSchemeSpecific || malformedHost || malformedScheme ? void 0 : normalized;
     }
     var fastUri = {
       SCHEMES,
@@ -14859,7 +15181,13 @@ function readFlows(root = repoRoot(), changedStableIds) {
     const rel = (p) => p.startsWith(rootSlash) ? p.slice(rootSlash.length) : p;
     const resolve = (qn) => {
       const n = nodeByQn.get(qn);
-      return n ? { label: n.name, file: rel(n.file_path), startLine: n.line_start, endLine: n.line_end, isTest: n.is_test === 1 } : void 0;
+      return n ? {
+        label: n.name,
+        file: rel(n.file_path),
+        startLine: n.line_start,
+        endLine: n.line_end,
+        isTest: n.is_test === 1
+      } : void 0;
     };
     const relevant = changedStableIds ? reachesChanged(changedStableIds, callAdj) : void 0;
     return flows.map((f) => {
@@ -17628,7 +17956,9 @@ function createStaticRoute(webDistPath2) {
     const rel = normalize(decodeURIComponent(new URL(c.req.url).pathname)).replace(/^([/\\]|\.\.)+/, "");
     const file2 = join2(webDistPath2, rel);
     if (rel && file2.startsWith(webDistPath2) && existsSync(file2) && statSync(file2).isFile()) {
-      return c.body(new Uint8Array(readFileSync2(file2)), 200, { "Content-Type": TYPES[extname(file2)] ?? "application/octet-stream" });
+      return c.body(new Uint8Array(readFileSync2(file2)), 200, {
+        "Content-Type": TYPES[extname(file2)] ?? "application/octet-stream"
+      });
     }
     if (rel === "api" || rel.startsWith("api/") || rel.startsWith("api\\")) {
       return c.json({ error: "not found" }, 404);
@@ -17701,7 +18031,17 @@ function createUnit(db2, sessionId, position, label, rationale, kind, memberStab
   const id = randomId("unit");
   db2.prepare(
     "INSERT INTO units (id, session_id, position, label, rationale, kind, member_stable_ids, auto, attached) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-  ).run(id, sessionId, position, label, rationale, kind, JSON.stringify(memberStableIds), auto ? 1 : 0, JSON.stringify(attached));
+  ).run(
+    id,
+    sessionId,
+    position,
+    label,
+    rationale,
+    kind,
+    JSON.stringify(memberStableIds),
+    auto ? 1 : 0,
+    JSON.stringify(attached)
+  );
   return { id, sessionId, position, label, rationale, kind, memberStableIds, auto, attached };
 }
 function getUnitsBySession(db2, sessionId) {
@@ -17769,16 +18109,16 @@ function getNode(db2, id) {
   return row ? rowToNode(row) : void 0;
 }
 function getNodeNeighbors(db2, nodeId) {
-  const callers = db2.prepare(
-    `SELECT n.* FROM nodes n JOIN edges e ON e.source_node_id = n.id WHERE e.target_node_id = ?`
-  ).all(nodeId).map(rowToNode);
-  const callees = db2.prepare(
-    `SELECT n.* FROM nodes n JOIN edges e ON e.target_node_id = n.id WHERE e.source_node_id = ?`
-  ).all(nodeId).map(rowToNode);
+  const callers = db2.prepare(`SELECT n.* FROM nodes n JOIN edges e ON e.source_node_id = n.id WHERE e.target_node_id = ?`).all(nodeId).map(rowToNode);
+  const callees = db2.prepare(`SELECT n.* FROM nodes n JOIN edges e ON e.target_node_id = n.id WHERE e.source_node_id = ?`).all(nodeId).map(rowToNode);
   return { callers, callees };
 }
 function updateNodeReviewStatus(db2, id, status, reviewedInUnit) {
-  db2.prepare("UPDATE nodes SET review_status = ?, reviewed_in_unit = ? WHERE id = ?").run(status, reviewedInUnit ?? null, id);
+  db2.prepare("UPDATE nodes SET review_status = ?, reviewed_in_unit = ? WHERE id = ?").run(
+    status,
+    reviewedInUnit ?? null,
+    id
+  );
 }
 
 // packages/server/src/routes/sessions.ts
@@ -17834,7 +18174,9 @@ function discoverLanguageRoots(repoRoot2) {
   const kept = candidates.filter(
     (c) => !candidates.some((o) => o.language === c.language && o.root !== c.root && isInside(c.root, o.root))
   );
-  return kept.map((c) => ({ ...c, hasSources: rootHasSources(c.root ? join3(repoRoot2, c.root) : repoRoot2, c.language) })).sort((a, b) => a.root < b.root ? -1 : a.root > b.root ? 1 : a.language < b.language ? -1 : a.language > b.language ? 1 : 0);
+  return kept.map((c) => ({ ...c, hasSources: rootHasSources(c.root ? join3(repoRoot2, c.root) : repoRoot2, c.language) })).sort(
+    (a, b) => a.root < b.root ? -1 : a.root > b.root ? 1 : a.language < b.language ? -1 : a.language > b.language ? 1 : 0
+  );
 }
 function isInside(child, parent) {
   return parent === "" ? child !== "" : child.startsWith(parent + "/");
@@ -17941,6 +18283,7 @@ function pythonEntryReasons(root, file2, node, cache) {
     const callRe = new RegExp(`\\b${node.label}\\s*\\(`);
     for (let i = guard + 1; i < lines.length; i++) {
       const l = lines[i];
+      if (l === void 0) break;
       if (l.trim() !== "" && !/^\s/.test(l)) break;
       if (callRe.test(l)) {
         reasons.add("cli");
@@ -18076,7 +18419,9 @@ var ScipGraphProvider = class {
     const configured = loadConfiguredEntries(this.repoRoot);
     const configuredSyms = new Set(
       [...g.nodes.entries()].filter(
-        ([, n]) => configured.some((c) => c.label === n.label && (!c.file || n.file === c.file || n.file.endsWith("/" + c.file)))
+        ([, n]) => configured.some(
+          (c) => c.label === n.label && (!c.file || n.file === c.file || n.file.endsWith("/" + c.file))
+        )
       ).filter(([sym]) => (g.callAdj.get(sym)?.length ?? 0) > 0).map(([sym]) => sym)
     );
     const entrySyms = [.../* @__PURE__ */ new Set([...rootSyms, ...configuredSyms])];
@@ -18236,10 +18581,15 @@ ${String(err.stderr).slice(-2e3)}` : "";
       }
       this.proto ??= await import_protobufjs.default.load(SCIP_PROTO);
       const Index = this.proto.lookupType("scip.Index");
-      const idx = Index.toObject(Index.decode(readFileSync4(indexPath)), { longs: Number, defaults: false });
+      const idx = Index.toObject(Index.decode(readFileSync4(indexPath)), {
+        longs: Number,
+        defaults: false
+      });
       const docs = rerootDocuments(idx.documents ?? [], job.root, absRoot);
       assertIndexNotEmpty(docs, job);
-      console.log(`scip: ${job.language} root '${job.root || "."}' \u2014 ${docs.length} documents in ${Date.now() - started}ms`);
+      console.log(
+        `scip: ${job.language} root '${job.root || "."}' \u2014 ${docs.length} documents in ${Date.now() - started}ms`
+      );
       return docs;
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -18252,6 +18602,7 @@ function resolveIndexerBin(pkgName, binName) {
   const pkgPath = require2.resolve(`${pkgName}/package.json`, home ? { paths: [home] } : void 0);
   const pkg = JSON.parse(readFileSync4(pkgPath, "utf8"));
   const rel = typeof pkg.bin === "string" ? pkg.bin : pkg.bin[binName];
+  if (!rel) throw new Error(`package '${pkgName}' does not expose the '${binName}' executable`);
   return join5(dirname(pkgPath), rel);
 }
 var SCIP_JAVA_DEFAULT_VERSION = "0.12.3";
@@ -18259,6 +18610,7 @@ function resolveScipJavaCommand(env = process.env) {
   const override = env.SCIP_JAVA_CMD?.trim();
   if (override) {
     const [argv0, ...args] = override.split(/\s+/);
+    if (!argv0) return null;
     return { argv0, args };
   }
   if (findOnPath("scip-java", env)) return { argv0: "scip-java", args: [] };
@@ -18310,13 +18662,16 @@ var ROLE_IMPORT = 2;
 function labelOf(symbol2) {
   const s = symbol2.replace(/\([^)]*\)\.$/, "").replace(/[.#/]+$/, "");
   const ctor = s.match(/([A-Za-z0-9_$]+)#`<init>`$/);
-  if (ctor) return ctor[1];
+  if (ctor) return ctor[1] ?? null;
   const m = s.match(/([A-Za-z0-9_$]+)`?$/);
-  return m ? m[1] : null;
+  return m?.[1] ?? null;
 }
 function span1(arr) {
-  if (!arr || !arr.length) return null;
-  return arr.length === 4 ? [arr[0] + 1, arr[2] + 1] : [arr[0] + 1, arr[0] + 1];
+  if (!arr) return null;
+  const start = arr[0];
+  if (start === void 0) return null;
+  const end = arr.length === 4 ? arr[2] : start;
+  return [start + 1, (end ?? start) + 1];
 }
 function buildGraphFromIndex(idx, root) {
   const rootSlash = root.endsWith("/") ? root : `${root}/`;
@@ -18375,7 +18730,7 @@ function buildGraphFromIndex(idx, root) {
       const roles = o.symbolRoles ?? 0;
       if (roles & ROLE_DEFINITION || roles & ROLE_IMPORT) continue;
       if (!o.symbol || !nodes.has(o.symbol)) continue;
-      const line = o.range ? o.range[0] + 1 : null;
+      const line = o.range?.[0] === void 0 ? null : o.range[0] + 1;
       if (line == null) continue;
       const caller = localDefs.find((c) => line >= c.sl && line <= c.el && c.symbol !== o.symbol);
       if (!caller) continue;
@@ -18424,10 +18779,7 @@ function computeResiduals(baseRef, nodeSpans, root) {
 // packages/server/src/coverage.ts
 function flowEntries(unit) {
   if (unit.kind !== "flow") return [];
-  const list = [
-    ...unit.flowEntryStableIds ?? [],
-    ...unit.flowEntryStableId ? [unit.flowEntryStableId] : []
-  ];
+  const list = [...unit.flowEntryStableIds ?? [], ...unit.flowEntryStableId ? [unit.flowEntryStableId] : []];
   return [...new Set(list)];
 }
 function unitCoverage(unit, flows, changed) {
@@ -18503,17 +18855,26 @@ function deriveAttachments(units, flows, nodes, testEdges, fileRequires) {
   const byWalk = (a, b) => walk2.get(a).pos - walk2.get(b).pos;
   const testsByTest = /* @__PURE__ */ new Map();
   for (const e of testEdges) {
-    (testsByTest.get(e.testStableId) ?? testsByTest.set(e.testStableId, []).get(e.testStableId)).push(e.productionStableId);
+    (testsByTest.get(e.testStableId) ?? testsByTest.set(e.testStableId, []).get(e.testStableId)).push(
+      e.productionStableId
+    );
   }
   const attached = units.map(() => []);
-  const attach = (m) => attached[walk2.get(m.parentStableId).unitIndex].push(m);
+  const attach = (m) => {
+    const position = walk2.get(m.parentStableId);
+    if (!position) throw new Error(`attachment parent '${m.parentStableId}' is outside the review walk`);
+    const members = attached[position.unitIndex];
+    if (!members) throw new Error(`review walk references missing unit ${position.unitIndex}`);
+    members.push(m);
+  };
   const unassigned = [...changed].filter((id) => !covered.has(id)).sort();
   for (const stableId of unassigned) {
     const node = byStable.get(stableId);
     if (node.isTest) {
       const exercised = [...new Set(testsByTest.get(stableId) ?? [])].filter((p) => covered.has(p)).sort(byWalk);
       if (exercised.length > 0) {
-        const parent = exercised[0];
+        const [parent] = exercised;
+        if (!parent) continue;
         attach({ stableId, parentStableId: parent, reason: "tested-by", counted: true });
         const refUnits = /* @__PURE__ */ new Set();
         for (const other of exercised.slice(1)) {
@@ -18527,12 +18888,16 @@ function deriveAttachments(units, flows, nodes, testEdges, fileRequires) {
     }
     const sameFile = [...covered].filter((c) => byStable.get(c)?.file === node.file).sort(byWalk);
     if (sameFile.length > 0) {
-      attach({ stableId, parentStableId: sameFile[0], reason: "same-file", counted: true });
+      const [parentStableId] = sameFile;
+      if (!parentStableId) continue;
+      attach({ stableId, parentStableId, reason: "same-file", counted: true });
       continue;
     }
     const consumers = [...covered].filter((c) => fileRequires.get(byStable.get(c)?.file ?? "")?.has(node.file)).sort(byWalk);
     if (consumers.length > 0) {
-      attach({ stableId, parentStableId: consumers[0], reason: "required-by", counted: true });
+      const [parentStableId] = consumers;
+      if (!parentStableId) continue;
+      attach({ stableId, parentStableId, reason: "required-by", counted: true });
       continue;
     }
     if (node.isTest) {
@@ -18545,7 +18910,8 @@ function deriveAttachments(units, flows, nodes, testEdges, fileRequires) {
         return edge != null && (edge.hasValueRef || nameMatch(c));
       }).sort((a, b) => rank(a) - rank(b) || byWalk(a, b));
       if (imported.length > 0) {
-        attach({ stableId, parentStableId: imported[0], reason: "tested-by", counted: true });
+        const [parentStableId] = imported;
+        if (parentStableId) attach({ stableId, parentStableId, reason: "tested-by", counted: true });
       }
     }
   }
@@ -18568,7 +18934,9 @@ function testNameStems(file2) {
   return out;
 }
 function countedAttachmentIds(attached) {
-  return new Set(attached.flat().filter((m) => m.counted).map((m) => m.stableId));
+  return new Set(
+    attached.flat().filter((m) => m.counted).map((m) => m.stableId)
+  );
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/external.js
@@ -33125,7 +33493,11 @@ var planSchema = external_exports.object({
     }
     for (const id of ids) {
       if (seen.has(id)) {
-        ctx.addIssue({ code: "custom", path: ["units", i], message: `stableId '${id}' appears in more than one unit` });
+        ctx.addIssue({
+          code: "custom",
+          path: ["units", i],
+          message: `stableId '${id}' appears in more than one unit`
+        });
       }
       seen.add(id);
     }
@@ -33171,10 +33543,13 @@ async function parseBody2(c, schema) {
   if (!result.success) {
     return {
       ok: false,
-      res: c.json({
-        error: "validation failed",
-        issues: result.error.issues.map((i) => ({ path: i.path.join("."), message: i.message }))
-      }, 400)
+      res: c.json(
+        {
+          error: "validation failed",
+          issues: result.error.issues.map((i) => ({ path: i.path.join("."), message: i.message }))
+        },
+        400
+      )
     };
   }
   return { ok: true, data: result.data };
@@ -33190,9 +33565,7 @@ function matchGlob(path, glob) {
   return posix.matchesGlob(hideLeadingDots(path), hideLeadingDots(glob));
 }
 function resolveOrphanFiles(units, orphanNodes) {
-  const claimed = new Set(
-    units.flatMap((u) => u.kind === "orphans" ? u.orphanStableIds ?? [] : [])
-  );
+  const claimed = new Set(units.flatMap((u) => u.kind === "orphans" ? u.orphanStableIds ?? [] : []));
   const emptyUnits = [];
   const resolved = units.map((u) => {
     if (u.kind !== "orphans" || !u.orphanFiles?.length) return u;
@@ -33219,18 +33592,14 @@ function reconcileSubgraph(subgraph, baseRef, root) {
     status.set(n.stableId, cs);
   }
   const isTest = new Map(subgraph.nodes.map((n) => [n.stableId, n.isTest]));
-  const anchors = new Set(
-    [...status].filter(([id, s]) => s === "changed" && !isTest.get(id)).map(([id]) => id)
-  );
+  const anchors = new Set([...status].filter(([id, s]) => s === "changed" && !isTest.get(id)).map(([id]) => id));
   const adj = /* @__PURE__ */ new Set();
   for (const e of subgraph.edges) {
     if (e.edgeType !== "call") continue;
     if (anchors.has(e.sourceStableId)) adj.add(e.targetStableId);
     if (anchors.has(e.targetStableId)) adj.add(e.sourceStableId);
   }
-  const nodes = subgraph.nodes.filter(
-    (n) => status.get(n.stableId) === "changed" || n.isTest || adj.has(n.stableId)
-  );
+  const nodes = subgraph.nodes.filter((n) => status.get(n.stableId) === "changed" || n.isTest || adj.has(n.stableId));
   return { nodes, status };
 }
 function createSessionsRoute(ctx) {
@@ -33246,10 +33615,13 @@ function createSessionsRoute(ctx) {
     }
     const checkedOut = currentBranch(ctx.repoRoot);
     if (body.branch !== "HEAD" && body.branch !== checkedOut) {
-      return c.json({
-        error: `session branch '${body.branch}' is not checked out (current: '${checkedOut ?? "unknown"}'); this tool reviews the current working tree \u2014 check the branch out or pass HEAD`,
-        phase: "resolve-ref"
-      }, 400);
+      return c.json(
+        {
+          error: `session branch '${body.branch}' is not checked out (current: '${checkedOut ?? "unknown"}'); this tool reviews the current working tree \u2014 check the branch out or pass HEAD`,
+          phase: "resolve-ref"
+        },
+        400
+      );
     }
     let subgraph;
     let keptNodes;
@@ -33273,7 +33645,14 @@ function createSessionsRoute(ctx) {
       throw e;
     }
     const session = ctx.db.transaction(() => {
-      const session2 = createSession(ctx.db, body.branch, body.baseRef, headSha, repoFingerprint(ctx.repoRoot) ?? "", indexWarnings);
+      const session2 = createSession(
+        ctx.db,
+        body.branch,
+        body.baseRef,
+        headSha,
+        repoFingerprint(ctx.repoRoot) ?? "",
+        indexWarnings
+      );
       for (const gnode of keptNodes) {
         createNode(ctx.db, {
           sessionId: session2.id,
@@ -33363,10 +33742,23 @@ function createSessionsRoute(ctx) {
     const changedStableIds = sessionNodes.filter((n) => n.changeStatus === "changed").map((n) => n.stableId);
     const flows = await ctx.graphProvider.getFlows(new Set(changedStableIds));
     const inAnyFlow = new Set(flows.flatMap((f) => f.steps.map((s) => s.stableId)));
-    const orphanNodes = sessionNodes.filter(
-      (n) => n.changeStatus === "changed" && !inAnyFlow.has(n.stableId)
+    const orphanNodes = sessionNodes.filter((n) => n.changeStatus === "changed" && !inAnyFlow.has(n.stableId));
+    const planUnits = body.units.map(
+      (unit) => unit.kind === "flow" ? {
+        kind: unit.kind,
+        label: unit.label,
+        ...unit.rationale === void 0 ? {} : { rationale: unit.rationale },
+        ...unit.flowEntryStableId === void 0 ? {} : { flowEntryStableId: unit.flowEntryStableId },
+        ...unit.flowEntryStableIds === void 0 ? {} : { flowEntryStableIds: unit.flowEntryStableIds }
+      } : {
+        kind: unit.kind,
+        label: unit.label,
+        ...unit.rationale === void 0 ? {} : { rationale: unit.rationale },
+        ...unit.orphanStableIds === void 0 ? {} : { orphanStableIds: unit.orphanStableIds },
+        ...unit.orphanFiles === void 0 ? {} : { orphanFiles: unit.orphanFiles }
+      }
     );
-    const { units, emptyUnits } = resolveOrphanFiles(body.units, orphanNodes);
+    const { units, emptyUnits } = resolveOrphanFiles(planUnits, orphanNodes);
     if (emptyUnits.length > 0) {
       return c.json({ error: `orphanFiles matched no unassigned changes for unit(s): ${emptyUnits.join(", ")}` }, 400);
     }
@@ -33546,7 +33938,11 @@ function createNodesRoute(ctx) {
     const edges = ctx.db.prepare("SELECT source_node_id, target_node_id, edge_type FROM edges WHERE session_id = ?").all(sessionId);
     return c.json({
       nodes,
-      edges: edges.map((e) => ({ sourceNodeId: e.source_node_id, targetNodeId: e.target_node_id, edgeType: e.edge_type }))
+      edges: edges.map((e) => ({
+        sourceNodeId: e.source_node_id,
+        targetNodeId: e.target_node_id,
+        edgeType: e.edge_type
+      }))
     });
   });
   router.get("/:id/nodes/:nodeId", (c) => {
@@ -33638,7 +34034,15 @@ function createCommentsRoute(ctx) {
       anchor = body.anchor;
       snippetLines = diff.lines.slice(range.startIdx, range.endIdx + 1);
     }
-    const comment = createComment(ctx.db, sessionId, body.nodeId, formatHunkSnippet(snippetLines), body.text, "", anchor);
+    const comment = createComment(
+      ctx.db,
+      sessionId,
+      body.nodeId,
+      formatHunkSnippet(snippetLines),
+      body.text,
+      "",
+      anchor
+    );
     return c.json({ comment });
   });
   router.patch("/:id/comments/:commentId", async (c) => {
@@ -34097,9 +34501,36 @@ function createDatabase(path) {
 
 // packages/server/src/graph/stub.ts
 var STUB_NODES = [
-  { stableId: "fn:handleOrder", label: "handleOrder", file: "src/orders.ts", startLine: 10, endLine: 30, isEntryPoint: true, changeStatus: "changed", isTest: false },
-  { stableId: "fn:validateOrder", label: "validateOrder", file: "src/orders.ts", startLine: 35, endLine: 50, isEntryPoint: false, changeStatus: "changed", isTest: false },
-  { stableId: "fn:saveOrder", label: "saveOrder", file: "src/db.ts", startLine: 100, endLine: 120, isEntryPoint: false, changeStatus: "unchanged", isTest: false }
+  {
+    stableId: "fn:handleOrder",
+    label: "handleOrder",
+    file: "src/orders.ts",
+    startLine: 10,
+    endLine: 30,
+    isEntryPoint: true,
+    changeStatus: "changed",
+    isTest: false
+  },
+  {
+    stableId: "fn:validateOrder",
+    label: "validateOrder",
+    file: "src/orders.ts",
+    startLine: 35,
+    endLine: 50,
+    isEntryPoint: false,
+    changeStatus: "changed",
+    isTest: false
+  },
+  {
+    stableId: "fn:saveOrder",
+    label: "saveOrder",
+    file: "src/db.ts",
+    startLine: 100,
+    endLine: 120,
+    isEntryPoint: false,
+    changeStatus: "unchanged",
+    isTest: false
+  }
 ];
 var STUB_EDGES = [
   { sourceStableId: "fn:handleOrder", targetStableId: "fn:validateOrder", edgeType: "call" },
@@ -34113,8 +34544,12 @@ var StubGraphProvider = class {
     return [];
   }
   async getNeighbors(stableId) {
-    const callees = STUB_EDGES.filter((e) => e.sourceStableId === stableId).map((e) => STUB_NODES.find((n) => n.stableId === e.targetStableId));
-    const callers = STUB_EDGES.filter((e) => e.targetStableId === stableId).map((e) => STUB_NODES.find((n) => n.stableId === e.sourceStableId));
+    const callees = STUB_EDGES.filter((e) => e.sourceStableId === stableId).map(
+      (e) => STUB_NODES.find((n) => n.stableId === e.targetStableId)
+    );
+    const callers = STUB_EDGES.filter((e) => e.targetStableId === stableId).map(
+      (e) => STUB_NODES.find((n) => n.stableId === e.sourceStableId)
+    );
     return { callers, callees };
   }
 };
@@ -37681,9 +38116,11 @@ var CrgGraphProvider = class {
   build;
   async getClient() {
     if (this.client) return this.client;
+    const [command, ...args] = this.command;
+    if (!command) throw new Error("CRG command must contain an executable");
     this.transport = new StdioClientTransport({
-      command: this.command[0],
-      args: this.command.slice(1)
+      command,
+      args
     });
     this.client = new Client({ name: "crw-server", version: "1.0.0" }, { capabilities: {} });
     try {
@@ -37834,26 +38271,28 @@ switch (which) {
     graphProvider = new StubGraphProvider();
 }
 var here = dirname2(fileURLToPath2(import.meta.url));
-var webDistPath = [
-  process.env.CRW_WEB_DIST,
-  join8(here, "..", "..", "web", "dist"),
-  join8(here, "..", "web")
-].find((p) => p && existsSync4(join8(p, "index.html")));
+var webDistPath = [process.env.CRW_WEB_DIST, join8(here, "..", "..", "web", "dist"), join8(here, "..", "web")].find(
+  (p) => p && existsSync4(join8(p, "index.html"))
+);
 var webBuilt = webDistPath !== void 0;
 var hostname3 = process.env.CRW_HOST || "127.0.0.1";
 if (hostname3 !== "127.0.0.1" && hostname3 !== "localhost") {
-  console.warn(`WARNING: binding to ${hostname3} \u2014 the review API is unauthenticated; keep it loopback-only unless you know why`);
+  console.warn(
+    `WARNING: binding to ${hostname3} \u2014 the review API is unauthenticated; keep it loopback-only unless you know why`
+  );
 }
 var app = createApp({
   db,
   graphProvider,
-  webDistPath: webBuilt ? webDistPath : void 0,
+  ...webBuilt ? { webDistPath } : {},
   providerName: which,
   onShutdown: () => process.exit(0)
 });
 var port = Number(process.env.PORT) || 3456;
 serve({ fetch: app.fetch, port, hostname: hostname3 }, (info) => {
-  console.log(`review hub on http://localhost:${info.port} (graph provider: ${which}${webBuilt ? "" : "; web UI not built \u2014 run pnpm build"})`);
+  console.log(
+    `review hub on http://localhost:${info.port} (graph provider: ${which}${webBuilt ? "" : "; web UI not built \u2014 run pnpm build"})`
+  );
 });
 /*! Bundled license information:
 

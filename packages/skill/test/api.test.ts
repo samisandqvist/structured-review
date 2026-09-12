@@ -3,33 +3,78 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("node:child_process", () => ({ spawn: vi.fn(() => ({ unref: vi.fn() })), execFileSync: vi.fn() }));
 
-import { briefContext, compactContext, createSession, writePlan, exportComments, defaultPartition, uiUrl, parsePlanFile, resolveBaseAlias, resolvePlanRefs, suggestMerges, EMPTY_TREE_SHA } from "../src/api.js";
+import {
+  briefContext,
+  compactContext,
+  createSession,
+  writePlan,
+  exportComments,
+  defaultPartition,
+  uiUrl,
+  parsePlanFile,
+  resolveBaseAlias,
+  resolvePlanRefs,
+  suggestMerges,
+  EMPTY_TREE_SHA,
+} from "../src/api.js";
 
 const BASE = "http://localhost:3456";
 const mockFetch = vi.fn();
 global.fetch = mockFetch as unknown as typeof fetch;
 
 function mockResponse(body: unknown, ok = true) {
-  return { ok, status: ok ? 200 : 404, json: () => Promise.resolve(body), text: () => Promise.resolve(JSON.stringify(body)) };
+  return {
+    ok,
+    status: ok ? 200 : 404,
+    json: () => Promise.resolve(body),
+    text: () => Promise.resolve(JSON.stringify(body)),
+  };
 }
 
-beforeEach(() => { mockFetch.mockClear(); });
+beforeEach(() => {
+  mockFetch.mockClear();
+});
 
 describe("api client", () => {
   it("creates a session via the server API", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse({
-      session: { id: "s1", branch: "feat", baseRef: "main", status: "planning", createdAt: 0 },
-      subgraph: { nodes: [], edges: [] },
-    }));
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        session: { id: "s1", branch: "feat", baseRef: "main", status: "planning", createdAt: 0 },
+        subgraph: { nodes: [], edges: [] },
+      }),
+    );
     const result = await createSession(BASE, "feat", "main");
     expect(result.session.id).toBe("s1");
-    expect(mockFetch).toHaveBeenCalledWith("http://localhost:3456/api/sessions", expect.objectContaining({ method: "POST" }));
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://localhost:3456/api/sessions",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 
   it("exports comments as an ordered array envelope", async () => {
     const comments = [
-      { id: "cmt1", nodeId: "node1", stableId: "fn:handleOrder", label: "handleOrder", file: "src/orders.ts", hunkSnippet: "s1", text: "first", structuralContext: "ctxA", createdAt: 1 },
-      { id: "cmt2", nodeId: "node1", stableId: "fn:handleOrder", label: "handleOrder", file: "src/orders.ts", hunkSnippet: "s2", text: "second", structuralContext: "ctxB", createdAt: 2 },
+      {
+        id: "cmt1",
+        nodeId: "node1",
+        stableId: "fn:handleOrder",
+        label: "handleOrder",
+        file: "src/orders.ts",
+        hunkSnippet: "s1",
+        text: "first",
+        structuralContext: "ctxA",
+        createdAt: 1,
+      },
+      {
+        id: "cmt2",
+        nodeId: "node1",
+        stableId: "fn:handleOrder",
+        label: "handleOrder",
+        file: "src/orders.ts",
+        hunkSnippet: "s2",
+        text: "second",
+        structuralContext: "ctxB",
+        createdAt: 2,
+      },
     ];
     mockFetch.mockResolvedValueOnce(mockResponse({ comments }));
     const result = await exportComments(BASE, "s1");
@@ -90,18 +135,12 @@ describe("resolvePlanRefs", () => {
   ];
 
   it("expands flowIds to entry stableIds (issue #7)", () => {
-    const units = resolvePlanRefs(
-      [{ kind: "flow", flowIds: [127], label: "Orders" }],
-      flows, suggestions
-    );
+    const units = resolvePlanRefs([{ kind: "flow", flowIds: [127], label: "Orders" }], flows, suggestions);
     expect(units).toEqual([{ kind: "flow", flowEntryStableIds: ["scip:long-entry-a"], label: "Orders" }]);
   });
 
   it("expands mergeGroup to the suggestion's entry set", () => {
-    const units = resolvePlanRefs(
-      [{ kind: "flow", mergeGroup: 0, label: "Order validation" }],
-      flows, suggestions
-    );
+    const units = resolvePlanRefs([{ kind: "flow", mergeGroup: 0, label: "Order validation" }], flows, suggestions);
     expect(units[0]).toEqual({
       kind: "flow",
       flowEntryStableIds: ["scip:long-entry-a", "scip:long-entry-b"],
@@ -112,7 +151,8 @@ describe("resolvePlanRefs", () => {
   it("merges numeric refs with explicit entries, deduped, singular field folded in", () => {
     const units = resolvePlanRefs(
       [{ kind: "flow", flowEntryStableId: "scip:long-entry-a", flowIds: [127, 142], label: "mix" }],
-      flows, suggestions
+      flows,
+      suggestions,
     );
     expect(units[0]).toEqual({
       kind: "flow",
@@ -130,10 +170,12 @@ describe("resolvePlanRefs", () => {
   });
 
   it("throws a named error on unknown flowId or out-of-range mergeGroup", () => {
-    expect(() => resolvePlanRefs([{ kind: "flow", flowIds: [999], label: "bad" }], flows, suggestions))
-      .toThrow(/unit 'bad': unknown flowId 999.*127, 142/);
-    expect(() => resolvePlanRefs([{ kind: "flow", mergeGroup: 3, label: "bad" }], flows, suggestions))
-      .toThrow(/unit 'bad': mergeGroup 3 out of range \(1 suggestion/);
+    expect(() => resolvePlanRefs([{ kind: "flow", flowIds: [999], label: "bad" }], flows, suggestions)).toThrow(
+      /unit 'bad': unknown flowId 999.*127, 142/,
+    );
+    expect(() => resolvePlanRefs([{ kind: "flow", mergeGroup: 3, label: "bad" }], flows, suggestions)).toThrow(
+      /unit 'bad': mergeGroup 3 out of range \(1 suggestion/,
+    );
   });
 });
 
@@ -147,18 +189,21 @@ describe("defaultPartition", () => {
     const units = defaultPartition(flows as any, orphans as any);
     // No explicit orphan unit: explicit membership would block plan-time
     // attachment; leftovers get swept into the auto Unassigned unit instead.
-    expect(units).toEqual([
-      { kind: "flow", flowEntryStableId: "fn:handleOrder", label: "handleOrder" },
-    ]);
+    expect(units).toEqual([{ kind: "flow", flowEntryStableId: "fn:handleOrder", label: "handleOrder" }]);
   });
 });
 
 describe("writePlan", () => {
   it("PUTs kind-tagged units and returns coverage", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse({ units: [], coverage: { changedTotal: 1, covered: 1, unassigned: 0 }, overview: "" }));
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ units: [], coverage: { changedTotal: 1, covered: 1, unassigned: 0 }, overview: "" }),
+    );
     const r = await writePlan(BASE, "s1", [{ kind: "flow", flowEntryStableId: "fn:a", label: "A" }]);
     expect(r.coverage.unassigned).toBe(0);
-    expect(mockFetch).toHaveBeenCalledWith("http://localhost:3456/api/sessions/s1/plan", expect.objectContaining({ method: "PUT" }));
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://localhost:3456/api/sessions/s1/plan",
+      expect.objectContaining({ method: "PUT" }),
+    );
   });
 });
 
@@ -170,10 +215,12 @@ describe("parsePlanFile", () => {
   });
 
   it("accepts { overview, units }", () => {
-    const parsed = parsePlanFile(JSON.stringify({
-      overview: "The change does X.",
-      units: [{ kind: "orphans", orphanStableIds: ["fn:b"], label: "B" }],
-    }));
+    const parsed = parsePlanFile(
+      JSON.stringify({
+        overview: "The change does X.",
+        units: [{ kind: "orphans", orphanStableIds: ["fn:b"], label: "B" }],
+      }),
+    );
     expect(parsed.units).toHaveLength(1);
     expect(parsed.overview).toBe("The change does X.");
   });
@@ -187,24 +234,57 @@ describe("parsePlanFile", () => {
 describe("compactContext", () => {
   const flows = [
     {
-      id: 1, name: "handleOrder", affected: true, entryStableId: "fn:handleOrder",
+      id: 1,
+      name: "handleOrder",
+      affected: true,
+      entryStableId: "fn:handleOrder",
       changedStableIds: ["fn:handleOrder", "fn:processOrder"],
-      steps: [{ stableId: "fn:handleOrder", label: "handleOrder", file: "o.ts", startLine: 1, endLine: 2, isTest: false, depth: 0, nodeId: "n1", changeStatus: "changed", reviewStatus: "unreviewed" }],
+      steps: [
+        {
+          stableId: "fn:handleOrder",
+          label: "handleOrder",
+          file: "o.ts",
+          startLine: 1,
+          endLine: 2,
+          isTest: false,
+          depth: 0,
+          nodeId: "n1",
+          changeStatus: "changed",
+          reviewStatus: "unreviewed",
+        },
+      ],
     },
     {
-      id: 2, name: "unrelated", affected: false, entryStableId: "fn:unrelated",
+      id: 2,
+      name: "unrelated",
+      affected: false,
+      entryStableId: "fn:unrelated",
       changedStableIds: [],
       steps: [],
     },
   ];
   const orphans = [
-    { stableId: "file-residual:docs/x.md", label: "x.md", file: "docs/x.md", residualKind: "whole-file", id: "n9", sessionId: "s1", startLine: 1, endLine: 5 },
+    {
+      stableId: "file-residual:docs/x.md",
+      label: "x.md",
+      file: "docs/x.md",
+      residualKind: "whole-file",
+      id: "n9",
+      sessionId: "s1",
+      startLine: 1,
+      endLine: 5,
+    },
   ];
 
   it("keeps only affected flows, without step arrays", () => {
     const compact = compactContext(flows as never, orphans as never);
     expect(compact.flows).toEqual([
-      { id: 1, name: "handleOrder", entryStableId: "fn:handleOrder", changedStableIds: ["fn:handleOrder", "fn:processOrder"] },
+      {
+        id: 1,
+        name: "handleOrder",
+        entryStableId: "fn:handleOrder",
+        changedStableIds: ["fn:handleOrder", "fn:processOrder"],
+      },
     ]);
     expect("steps" in compact.flows[0]).toBe(false);
   });
@@ -214,7 +294,9 @@ describe("compactContext", () => {
     expect(compact.orphanGroups).toEqual([
       {
         dir: "docs",
-        orphans: [{ stableId: "file-residual:docs/x.md", label: "x.md", file: "docs/x.md", residualKind: "whole-file" }],
+        orphans: [
+          { stableId: "file-residual:docs/x.md", label: "x.md", file: "docs/x.md", residualKind: "whole-file" },
+        ],
       },
     ]);
   });
@@ -233,17 +315,31 @@ describe("compactContext", () => {
 
 describe("briefContext", () => {
   const step = (stableId: string, label: string, file: string) => ({
-    stableId, label, file, startLine: 1, endLine: 9, isTest: false, depth: 0,
-    nodeId: null, changeStatus: "changed", reviewStatus: null,
+    stableId,
+    label,
+    file,
+    startLine: 1,
+    endLine: 9,
+    isTest: false,
+    depth: 0,
+    nodeId: null,
+    changeStatus: "changed",
+    reviewStatus: null,
   });
   const flows = [
     {
-      id: 127, name: "handleOrder", affected: true, entryStableId: "scip:long-a",
+      id: 127,
+      name: "handleOrder",
+      affected: true,
+      entryStableId: "scip:long-a",
       changedStableIds: ["scip:long-a", "scip:shared"],
       steps: [step("scip:long-a", "handleOrder", "src/orders.ts")],
     },
     {
-      id: 142, name: "processOrder", affected: true, entryStableId: "scip:long-b",
+      id: 142,
+      name: "processOrder",
+      affected: true,
+      entryStableId: "scip:long-b",
       changedStableIds: ["scip:long-b", "scip:shared"],
       steps: [step("scip:long-b", "processOrder", "src/process.ts")],
     },
@@ -253,10 +349,20 @@ describe("briefContext", () => {
     { stableId: "file-residual:docs/x.md", label: "x.md", file: "docs/x.md" },
     { stableId: "file-residual:.gitignore", label: ".gitignore", file: ".gitignore" },
   ];
-  const changes = [{
-    stableId: "scip:long-a", label: "handleOrder", kind: "function", file: "src/orders.ts",
-    startLine: 10, endLine: 42, status: "modified", added: 12, removed: 3, signature: "export function handleOrder()",
-  }];
+  const changes = [
+    {
+      stableId: "scip:long-a",
+      label: "handleOrder",
+      kind: "function",
+      file: "src/orders.ts",
+      startLine: 10,
+      endLine: 42,
+      status: "modified",
+      added: 12,
+      removed: 3,
+      signature: "export function handleOrder()",
+    },
+  ];
 
   it("contains no stableIds anywhere (issue #8)", () => {
     const brief = briefContext(flows as never, orphans as never, changes);
@@ -274,9 +380,7 @@ describe("briefContext", () => {
 
   it("numbers merge suggestions and refers to flows by id — the refs resolvePlanRefs accepts", () => {
     const brief = briefContext(flows as never, orphans as never, changes);
-    expect(brief.mergeSuggestions).toEqual([
-      { group: 0, flowIds: [127, 142], names: ["handleOrder", "processOrder"] },
-    ]);
+    expect(brief.mergeSuggestions).toEqual([{ group: 0, flowIds: [127, 142], names: ["handleOrder", "processOrder"] }]);
   });
 
   it("reduces orphan groups to directory + file list and changes to file/lines summaries", () => {
@@ -286,7 +390,15 @@ describe("briefContext", () => {
       { dir: "docs", files: ["docs/x.md"] },
     ]);
     expect(brief.changes).toEqual([
-      { file: "src/orders.ts", lines: "10-42", label: "handleOrder", kind: "function", status: "modified", added: 12, removed: 3 },
+      {
+        file: "src/orders.ts",
+        lines: "10-42",
+        label: "handleOrder",
+        kind: "function",
+        status: "modified",
+        added: 12,
+        removed: 3,
+      },
     ]);
   });
 });

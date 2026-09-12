@@ -29,23 +29,28 @@ switch (which) {
 const here = dirname(fileURLToPath(import.meta.url));
 // Candidates: env override; monorepo layout (dist/index.js -> ../../web/dist,
 // same from src in dev); plugin bundle layout (plugin/dist/server.js -> ../web).
-const webDistPath = [
-  process.env.CRW_WEB_DIST,
-  join(here, "..", "..", "web", "dist"),
-  join(here, "..", "web"),
-].find((p) => p && existsSync(join(p, "index.html")));
+const webDistPath = [process.env.CRW_WEB_DIST, join(here, "..", "..", "web", "dist"), join(here, "..", "web")].find(
+  (p) => p && existsSync(join(p, "index.html")),
+);
 const webBuilt = webDistPath !== undefined;
 
 const hostname = process.env.CRW_HOST || "127.0.0.1";
 if (hostname !== "127.0.0.1" && hostname !== "localhost") {
-  console.warn(`WARNING: binding to ${hostname} — the review API is unauthenticated; keep it loopback-only unless you know why`);
+  console.warn(
+    `WARNING: binding to ${hostname} — the review API is unauthenticated; keep it loopback-only unless you know why`,
+  );
 }
 
 const app = createApp({
-  db, graphProvider, webDistPath: webBuilt ? webDistPath : undefined, providerName: which,
+  db,
+  graphProvider,
+  ...(webBuilt ? { webDistPath } : {}),
+  providerName: which,
   onShutdown: () => process.exit(0),
 });
 const port = Number(process.env.PORT) || 3456;
 serve({ fetch: app.fetch, port, hostname }, (info) => {
-  console.log(`review hub on http://localhost:${info.port} (graph provider: ${which}${webBuilt ? "" : "; web UI not built — run pnpm build"})`);
+  console.log(
+    `review hub on http://localhost:${info.port} (graph provider: ${which}${webBuilt ? "" : "; web UI not built — run pnpm build"})`,
+  );
 });

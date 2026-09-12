@@ -1,9 +1,5 @@
 import { useState } from "react";
-import {
-  useComments,
-  useCreateComment,
-  useUpdateNodeStatus,
-} from "../api/hooks.js";
+import { useComments, useCreateComment, useUpdateNodeStatus } from "../api/hooks.js";
 import { useUIStore } from "../store/ui.js";
 import { selectionLabel } from "./DiffView.js";
 import { CommentCard } from "./CommentCard.js";
@@ -11,16 +7,12 @@ import { CommentCard } from "./CommentCard.js";
 // Both Meta+Enter and Ctrl+Enter submit; the hint names the key the viewer's
 // platform actually has (⌘ means nothing on a Linux/Windows keyboard).
 const SEND_KEY = /Mac|iP(hone|ad|od)/.test(
-  typeof navigator === "undefined" ? "" : navigator.platform || navigator.userAgent
-) ? "⌘↵" : "Ctrl+↵";
+  typeof navigator === "undefined" ? "" : navigator.platform || navigator.userAgent,
+)
+  ? "⌘↵"
+  : "Ctrl+↵";
 
-export function CommentBox({
-  sessionId,
-  nodeId,
-}: {
-  sessionId: string;
-  nodeId: string;
-}) {
+export function CommentBox({ sessionId, nodeId }: { sessionId: string; nodeId: string }) {
   const { data } = useComments(sessionId);
   const createComment = useCreateComment(sessionId);
   const updateStatus = useUpdateNodeStatus(sessionId);
@@ -33,9 +25,7 @@ export function CommentBox({
   const handleSubmit = () => {
     if (!text.trim()) return;
     createComment.mutate(
-      lineSelection
-        ? { nodeId, text: text.trim(), anchor: lineSelection.anchor }
-        : { nodeId, text: text.trim() },
+      lineSelection ? { nodeId, text: text.trim(), anchor: lineSelection.anchor } : { nodeId, text: text.trim() },
       {
         onSuccess: () => {
           setText("");
@@ -44,7 +34,7 @@ export function CommentBox({
           // is no separate button for it.
           updateStatus.mutate({ nodeId, reviewStatus: "reviewed-commented" });
         },
-      }
+      },
     );
   };
 
@@ -64,21 +54,21 @@ export function CommentBox({
           marginBottom: 11,
         }}
       >
-        <h3 style={{ fontSize: 19, color: "var(--text)", letterSpacing: "0.02em" }}>
-          Comments
-        </h3>
-        <span style={{ color: "var(--dim)", fontSize: 17 }}>
-          {comments.length}
-        </span>
+        <h3 style={{ fontSize: 19, color: "var(--text)", letterSpacing: "0.02em" }}>Comments</h3>
+        <span style={{ color: "var(--dim)", fontSize: 17 }}>{comments.length}</span>
       </div>
 
       {lineSelection && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
           <span
             style={{
-              fontSize: 15, fontFamily: "var(--mono)", color: "var(--text)",
-              background: "var(--surface)", border: "1px solid var(--line-bright)",
-              borderRadius: 4, padding: "2px 8px",
+              fontSize: 15,
+              fontFamily: "var(--mono)",
+              color: "var(--text)",
+              background: "var(--surface)",
+              border: "1px solid var(--line-bright)",
+              borderRadius: 4,
+              padding: "2px 8px",
             }}
           >
             commenting on {lineSelection.label}
@@ -107,10 +97,16 @@ export function CommentBox({
                   <button
                     onClick={() => requestAnchorHighlight(c.anchor!)}
                     style={{
-                      display: "inline-block", marginRight: 8, fontSize: 14,
-                      fontFamily: "var(--mono)", color: "var(--dim)",
-                      background: "transparent", border: "1px solid var(--line)",
-                      borderRadius: 4, padding: "0 6px", cursor: "pointer",
+                      display: "inline-block",
+                      marginRight: 8,
+                      fontSize: 14,
+                      fontFamily: "var(--mono)",
+                      color: "var(--dim)",
+                      background: "transparent",
+                      border: "1px solid var(--line)",
+                      borderRadius: 4,
+                      padding: "0 6px",
+                      cursor: "pointer",
                     }}
                   >
                     {selectionLabel(c.anchor)}

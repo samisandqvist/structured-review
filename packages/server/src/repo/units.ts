@@ -3,29 +3,56 @@ import type { AttachedMember, Unit, UnitKind } from "../types.js";
 import { randomId } from "../util.js";
 
 interface UnitRow {
-  id: string; session_id: string; position: number; label: string;
-  rationale: string; kind: UnitKind; member_stable_ids: string; auto: number;
+  id: string;
+  session_id: string;
+  position: number;
+  label: string;
+  rationale: string;
+  kind: UnitKind;
+  member_stable_ids: string;
+  auto: number;
   attached: string;
 }
 
 function rowToUnit(row: UnitRow): Unit {
   return {
-    id: row.id, sessionId: row.session_id, position: row.position,
-    label: row.label, rationale: row.rationale, kind: row.kind,
-    memberStableIds: JSON.parse(row.member_stable_ids), auto: row.auto === 1,
+    id: row.id,
+    sessionId: row.session_id,
+    position: row.position,
+    label: row.label,
+    rationale: row.rationale,
+    kind: row.kind,
+    memberStableIds: JSON.parse(row.member_stable_ids),
+    auto: row.auto === 1,
     attached: JSON.parse(row.attached ?? "[]"),
   };
 }
 
 export function createUnit(
-  db: DB, sessionId: string, position: number, label: string,
-  rationale: string, kind: UnitKind, memberStableIds: string[], auto: boolean,
-  attached: AttachedMember[] = []
+  db: DB,
+  sessionId: string,
+  position: number,
+  label: string,
+  rationale: string,
+  kind: UnitKind,
+  memberStableIds: string[],
+  auto: boolean,
+  attached: AttachedMember[] = [],
 ): Unit {
   const id = randomId("unit");
   db.prepare(
-    "INSERT INTO units (id, session_id, position, label, rationale, kind, member_stable_ids, auto, attached) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-  ).run(id, sessionId, position, label, rationale, kind, JSON.stringify(memberStableIds), auto ? 1 : 0, JSON.stringify(attached));
+    "INSERT INTO units (id, session_id, position, label, rationale, kind, member_stable_ids, auto, attached) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  ).run(
+    id,
+    sessionId,
+    position,
+    label,
+    rationale,
+    kind,
+    JSON.stringify(memberStableIds),
+    auto ? 1 : 0,
+    JSON.stringify(attached),
+  );
   return { id, sessionId, position, label, rationale, kind, memberStableIds, auto, attached };
 }
 

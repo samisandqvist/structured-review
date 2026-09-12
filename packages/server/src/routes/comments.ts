@@ -1,6 +1,14 @@
 import { Hono } from "hono";
-import type { AppContext } from "../app.js";
-import { createComment, getComment, updateCommentText, deleteComment, nodeHasComments, getCommentsBySession, exportComments } from "../repo/comments.js";
+import type { AppContext } from "../context.js";
+import {
+  createComment,
+  getComment,
+  updateCommentText,
+  deleteComment,
+  nodeHasComments,
+  getCommentsBySession,
+  exportComments,
+} from "../repo/comments.js";
 import { getSession } from "../repo/sessions.js";
 import { getNode, updateNodeReviewStatus } from "../repo/nodes.js";
 import { getNodeDiff, getNodeDiffForRanges, formatHunkSnippet, anchorRowRange } from "../diff.js";
@@ -34,7 +42,8 @@ export function createCommentsRoute(ctx: AppContext) {
     const diff =
       (node.residualRanges && node.residualRanges.length > 0
         ? getNodeDiffForRanges(session.baseRef, node.file, node.residualRanges, ctx.repoRoot)
-        : null) ?? getNodeDiff(session.baseRef, node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot);
+        : null) ??
+      getNodeDiff(session.baseRef, node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot);
 
     let snippetLines = diff.lines;
     let anchor: CommentAnchor | null = null;
@@ -46,7 +55,15 @@ export function createCommentsRoute(ctx: AppContext) {
       anchor = body.anchor;
       snippetLines = diff.lines.slice(range.startIdx, range.endIdx + 1);
     }
-    const comment = createComment(ctx.db, sessionId, body.nodeId, formatHunkSnippet(snippetLines), body.text, "", anchor);
+    const comment = createComment(
+      ctx.db,
+      sessionId,
+      body.nodeId,
+      formatHunkSnippet(snippetLines),
+      body.text,
+      "",
+      anchor,
+    );
     return c.json({ comment });
   });
 

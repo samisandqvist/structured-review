@@ -17,12 +17,12 @@ describe("scip-python integration", () => {
       mkdirSync(join(dir, "svc"));
       writeFileSync(
         join(dir, "svc", "pyproject.toml"),
-        '[project]\nname = "svc"\nversion = "0.0.1"\n\n[tool.pyright]\n'
+        '[project]\nname = "svc"\nversion = "0.0.1"\n\n[tool.pyright]\n',
       );
       writeFileSync(join(dir, "svc", "helper.py"), 'def greet(name: str) -> str:\n    return "hello " + name\n');
       writeFileSync(
         join(dir, "svc", "app.py"),
-        'from helper import greet\n\n\ndef main() -> None:\n    print(greet("world"))\n\n\nif __name__ == "__main__":\n    main()\n'
+        'from helper import greet\n\n\ndef main() -> None:\n    print(greet("world"))\n\n\nif __name__ == "__main__":\n    main()\n',
       );
       git("add", ".");
       git("commit", "-m", "init");

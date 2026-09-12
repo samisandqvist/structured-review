@@ -22,3 +22,11 @@ dist/
 opencode.log
 opencode.json
 .codex/
+
+# Local harness tools and generated evidence
+.tools/
+coverage/
+reports/
+test-results/
+playwright-report/
+.stryker-tmp/

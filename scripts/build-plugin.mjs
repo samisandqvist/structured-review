@@ -7,14 +7,15 @@
 // Run after `pnpm build`:  node scripts/build-plugin.mjs
 import { build } from "esbuild";
 import { cpSync, copyFileSync, mkdirSync, rmSync, existsSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const out = join(root, "plugin");
-const codexOut = join(root, "plugins/code-review-walkthrough");
+const outputRoot = process.env.CRW_PLUGIN_OUTPUT_ROOT || root;
+const out = join(outputRoot, "plugin");
+const codexOut = join(outputRoot, "plugins/code-review-walkthrough");
 
-const webDist = join(root, "packages/web/dist");
+const webDist = process.env.CRW_WEB_DIST ? resolve(root, process.env.CRW_WEB_DIST) : join(root, "packages/web/dist");
 if (!existsSync(join(webDist, "index.html"))) {
   console.error("web UI not built — run `pnpm build` first");
   process.exit(1);
@@ -42,7 +43,11 @@ rmSync(join(out, "dist"), { recursive: true, force: true });
 rmSync(join(out, "web"), { recursive: true, force: true });
 mkdirSync(join(out, "dist"), { recursive: true });
 
-await build({ ...common, entryPoints: [join(root, "packages/server/src/index.ts")], outfile: join(out, "dist/server.js") });
+await build({
+  ...common,
+  entryPoints: [join(root, "packages/server/src/index.ts")],
+  outfile: join(out, "dist/server.js"),
+});
 await build({ ...common, entryPoints: [join(root, "packages/skill/src/cli.ts")], outfile: join(out, "dist/crw.js") });
 copyFileSync(join(root, "packages/server/src/graph/scip.proto"), join(out, "dist/scip.proto"));
 cpSync(webDist, join(out, "web"), { recursive: true });
@@ -95,10 +100,7 @@ Use this CLI for orchestration; never touch SQLite or hand-roll \`curl\`.`;
 const skillSrc = readFileSync(join(root, "packages/skill/skill.md"), "utf8");
 const generated = skillSrc
   .replace(/^<!--[\s\S]*?-->\n/, "") // source-of-truth header comment
-  .replace(
-    /<!-- crw-invocation:start[\s\S]*?crw-invocation:end -->/,
-    PLUGIN_INVOCATION
-  )
+  .replace(/<!-- crw-invocation:start[\s\S]*?crw-invocation:end -->/, PLUGIN_INVOCATION)
   .replace(/<!-- plugin:language-support[^>]*-->\n/, `${LANGUAGE_SUPPORT}\n`);
 for (const marker of ["crw-invocation", "plugin:language-support"]) {
   if (!generated.includes("scripts/crw.mjs") || generated.includes(marker)) {
@@ -106,7 +108,10 @@ for (const marker of ["crw-invocation", "plugin:language-support"]) {
     process.exit(1);
   }
 }
-writeFileSync(join(out, "skills/code-review-walkthrough/SKILL.md"), generated.replace(PLUGIN_INVOCATION, CLAUDE_INVOCATION));
+writeFileSync(
+  join(out, "skills/code-review-walkthrough/SKILL.md"),
+  generated.replace(PLUGIN_INVOCATION, CLAUDE_INVOCATION),
+);
 
 // Codex has its own manifest and marketplace; executable payloads and skill
 // instructions are identical. No symlinks outside either installed package.
@@ -123,24 +128,33 @@ writeFileSync(join(codexOut, "skills/code-review-walkthrough/SKILL.md"), generat
 // Codex marketplace behind (the CI freshness guard now covers this file).
 const claudeManifest = JSON.parse(readFileSync(join(out, ".claude-plugin/plugin.json"), "utf8"));
 mkdirSync(join(codexOut, ".codex-plugin"), { recursive: true });
-writeFileSync(join(codexOut, ".codex-plugin/plugin.json"), JSON.stringify({
-  name: claudeManifest.name,
-  version: claudeManifest.version,
-  description: "Walk through code changes with related code and tests together, saved review progress, and a local web UI.",
-  author: claudeManifest.author,
-  repository: claudeManifest.repository,
-  license: claudeManifest.license,
-  skills: "./skills/",
-  interface: {
-    displayName: claudeManifest.displayName,
-    shortDescription: "A guided review of your code changes.",
-    longDescription: "Create a review plan from inferred call relationships, walk the changes in a local browser, and export line-anchored comments. Requires local Node 22.13 or newer, npm, and Git. Experimental alpha.",
-    developerName: claudeManifest.author.name,
-    category: "Productivity",
-    capabilities: ["Read", "Write"],
-    defaultPrompt: "Use code-review-walkthrough to review my current changes against main.",
-  },
-}, null, 2) + "\n");
+writeFileSync(
+  join(codexOut, ".codex-plugin/plugin.json"),
+  JSON.stringify(
+    {
+      name: claudeManifest.name,
+      version: claudeManifest.version,
+      description:
+        "Walk through code changes with related code and tests together, saved review progress, and a local web UI.",
+      author: claudeManifest.author,
+      repository: claudeManifest.repository,
+      license: claudeManifest.license,
+      skills: "./skills/",
+      interface: {
+        displayName: claudeManifest.displayName,
+        shortDescription: "A guided review of your code changes.",
+        longDescription:
+          "Create a review plan from inferred call relationships, walk the changes in a local browser, and export line-anchored comments. Requires local Node 22.13 or newer, npm, and Git. Experimental alpha.",
+        developerName: claudeManifest.author.name,
+        category: "Productivity",
+        capabilities: ["Read", "Write"],
+        defaultPrompt: "Use code-review-walkthrough to review my current changes against main.",
+      },
+    },
+    null,
+    2,
+  ) + "\n",
+);
 for (const target of [out, codexOut]) {
   mkdirSync(join(target, "scripts"), { recursive: true });
   copyFileSync(join(root, "scripts/plugin-launcher.mjs"), join(target, "scripts/crw.mjs"));

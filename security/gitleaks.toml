@@ -1,0 +1,24 @@
+title = "Code Review Walkthrough secret scanning"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Scanner installations and advisory databases are reproducible local cache data"
+paths = [
+  '''(^|/)\.tools/''',
+]
+
+[[allowlists]]
+description = "Local agent session state is ignored by Git and is outside the repository deliverable"
+paths = [
+  '''(^|/)\.superpowers/''',
+]
+
+[[allowlists]]
+description = "A full-length immutable GitHub Action revision is public integrity metadata, not a Sourcegraph token"
+targetRules = ["sourcegraph-access-token"]
+regexTarget = "line"
+regexes = [
+  '''^\s*uses:\s*[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}\s*(#.*)?$''',
+]

@@ -66,10 +66,22 @@ export function CommentCard({
         </div>
         {!editing && (
           <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-            <button aria-label="edit comment" title="Edit" className="btn" style={iconBtn} onClick={() => setDraft(comment.text)}>
+            <button
+              aria-label="edit comment"
+              title="Edit"
+              className="btn"
+              style={iconBtn}
+              onClick={() => setDraft(comment.text)}
+            >
               ✎
             </button>
-            <button aria-label="delete comment" title="Delete" className="btn" style={iconBtn} onClick={() => deleteComment.mutate(comment.id)}>
+            <button
+              aria-label="delete comment"
+              title="Delete"
+              className="btn"
+              style={iconBtn}
+              onClick={() => deleteComment.mutate(comment.id)}
+            >
               ✕
             </button>
           </div>
@@ -77,7 +89,11 @@ export function CommentCard({
       </div>
       {editing && (
         <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", marginTop: 6 }}>
-          <button className="btn" style={{ fontSize: fontSize - 2, padding: "2px 10px" }} onClick={() => setDraft(null)}>
+          <button
+            className="btn"
+            style={{ fontSize: fontSize - 2, padding: "2px 10px" }}
+            onClick={() => setDraft(null)}
+          >
             Cancel
           </button>
           <button

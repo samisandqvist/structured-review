@@ -6,17 +6,63 @@ import { useUIStore } from "../src/store/ui.js";
 const mockMutate = vi.fn();
 
 const nodes = [
-  { id: "n-a", stableId: "fn:a", label: "a", file: "f.ts", startLine: 1, endLine: 2, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false },
-  { id: "n-b", stableId: "fn:b", label: "b", file: "f.ts", startLine: 5, endLine: 6, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false },
+  {
+    id: "n-a",
+    stableId: "fn:a",
+    label: "a",
+    file: "f.ts",
+    startLine: 1,
+    endLine: 2,
+    changeStatus: "changed",
+    reviewStatus: "unreviewed",
+    reviewedInUnit: null,
+    isTest: false,
+  },
+  {
+    id: "n-b",
+    stableId: "fn:b",
+    label: "b",
+    file: "f.ts",
+    startLine: 5,
+    endLine: 6,
+    changeStatus: "changed",
+    reviewStatus: "unreviewed",
+    reviewedInUnit: null,
+    isTest: false,
+  },
 ];
 
-const callerNode = { id: "n-c", stableId: "fn:c", label: "c", file: "g.ts", startLine: 1, endLine: 3, changeStatus: "unchanged", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false };
+const callerNode = {
+  id: "n-c",
+  stableId: "fn:c",
+  label: "c",
+  file: "g.ts",
+  startLine: 1,
+  endLine: 3,
+  changeStatus: "unchanged",
+  reviewStatus: "unreviewed",
+  reviewedInUnit: null,
+  isTest: false,
+};
 const allNodes = [...nodes, callerNode];
 
 vi.mock("../src/api/hooks.js", () => ({
-  useSession: () => ({ data: { units: [
-    { id: "u1", position: 0, kind: "orphans", label: "All", rationale: "", memberStableIds: ["fn:a", "fn:b"], auto: false },
-  ], coverage: { changedTotal: 2, covered: 2, unassigned: 0 } } }),
+  useSession: () => ({
+    data: {
+      units: [
+        {
+          id: "u1",
+          position: 0,
+          kind: "orphans",
+          label: "All",
+          rationale: "",
+          memberStableIds: ["fn:a", "fn:b"],
+          auto: false,
+        },
+      ],
+      coverage: { changedTotal: 2, covered: 2, unassigned: 0 },
+    },
+  }),
   useFlows: () => ({ data: { flows: [], orphans: [] } }),
   useNodes: () => ({ data: { nodes, edges: [] } }),
   useNode: (_s: string, nodeId: string | null) => ({
@@ -86,10 +132,7 @@ describe("SplitLayout walk navigation", () => {
     useUIStore.setState({ currentNodeId: "n-a" });
     render(<SplitLayout sessionId="s1" currentNodeId="n-a" />);
     fireEvent.keyDown(window, { key: "r" });
-    expect(mockMutate).toHaveBeenCalledWith(
-      { nodeId: "n-a", reviewStatus: "reviewed-clean" },
-      expect.anything()
-    );
+    expect(mockMutate).toHaveBeenCalledWith({ nodeId: "n-a", reviewStatus: "reviewed-clean" }, expect.anything());
   });
 
   it("ignores keys while typing in the comment box", () => {

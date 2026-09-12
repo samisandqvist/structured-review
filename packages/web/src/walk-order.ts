@@ -56,8 +56,8 @@ export function buildWalkOrder(units: Unit[], flows: Flow[], nodes: Node[]): Wal
 export function nextInWalk(order: WalkEntry[], currentNodeId: string | null, dir: 1 | -1): string | null {
   if (order.length === 0) return null;
   const i = currentNodeId ? order.findIndex((w) => w.nodeId === currentNodeId) : -1;
-  if (i === -1) return order[dir === 1 ? 0 : order.length - 1].nodeId;
-  return order[(i + dir + order.length) % order.length].nodeId;
+  if (i === -1) return order[dir === 1 ? 0 : order.length - 1]?.nodeId ?? null;
+  return order[(i + dir + order.length) % order.length]?.nodeId ?? null;
 }
 
 /** First unreviewed nodeId after the current one (wrapping), or null when done. */
@@ -66,6 +66,7 @@ export function nextUnreviewed(order: WalkEntry[], nodes: Node[], currentNodeId:
   const start = currentNodeId ? order.findIndex((w) => w.nodeId === currentNodeId) : -1;
   for (let k = 1; k <= order.length; k++) {
     const w = order[(start + k) % order.length];
+    if (!w) continue;
     if (statusById.get(w.nodeId) === "unreviewed") return w.nodeId;
   }
   return null;

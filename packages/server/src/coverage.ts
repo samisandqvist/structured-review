@@ -1,24 +1,30 @@
 import type { Flow } from "./graph/provider.js";
 
-export interface PlanUnitInput {
-  kind: "flow" | "orphans";
-  flowEntryStableId?: string;
-  flowEntryStableIds?: string[];
-  orphanStableIds?: string[];
-  /** File globs resolved to orphan stableIds at plan submit (globs.ts). */
-  orphanFiles?: string[];
+interface PlanUnitBase {
   label: string;
   rationale?: string;
 }
+
+export type PlanUnitInput = PlanUnitBase &
+  (
+    | {
+        kind: "flow";
+        flowEntryStableId?: string;
+        flowEntryStableIds?: string[];
+      }
+    | {
+        kind: "orphans";
+        orphanStableIds?: string[];
+        /** File globs resolved to orphan stableIds at plan submit (globs.ts). */
+        orphanFiles?: string[];
+      }
+  );
 
 /** Normalized, deduped entry list for a flow-unit ([] for orphan-units).
  *  Accepts the legacy singular field, the plural one, or both. */
 export function flowEntries(unit: PlanUnitInput): string[] {
   if (unit.kind !== "flow") return [];
-  const list = [
-    ...(unit.flowEntryStableIds ?? []),
-    ...(unit.flowEntryStableId ? [unit.flowEntryStableId] : []),
-  ];
+  const list = [...(unit.flowEntryStableIds ?? []), ...(unit.flowEntryStableId ? [unit.flowEntryStableId] : [])];
   return [...new Set(list)];
 }
 
@@ -40,7 +46,7 @@ export function unitCoverage(unit: PlanUnitInput, flows: Flow[], changed: Set<st
 export function computeCoverage(
   units: PlanUnitInput[],
   flows: Flow[],
-  changedStableIds: string[]
+  changedStableIds: string[],
 ): { covered: string[]; unassigned: string[] } {
   const changed = new Set(changedStableIds);
   const covered = new Set<string>();

@@ -1,14 +1,30 @@
 import { Hono } from "hono";
-import type { AppContext } from "../app.js";
-import { createSession, getSession, listSessions, deleteSession, updateSessionStatus, updateSessionOverview } from "../repo/sessions.js";
+import type { AppContext } from "../context.js";
+import {
+  createSession,
+  getSession,
+  listSessions,
+  deleteSession,
+  updateSessionStatus,
+  updateSessionOverview,
+} from "../repo/sessions.js";
 import { createUnit, getUnitsBySession, deleteUnit, updateUnitLabel, setUnitPositions } from "../repo/units.js";
 import { createNode, getNodesBySession } from "../repo/nodes.js";
-import { fileChangedRanges, gitHeadSha, repoFingerprint, resolveRef, rangesOverlap, currentBranch, GitError, type LineRange } from "../diff.js";
+import {
+  fileChangedRanges,
+  gitHeadSha,
+  repoFingerprint,
+  resolveRef,
+  rangesOverlap,
+  currentBranch,
+  GitError,
+  type LineRange,
+} from "../diff.js";
 import { IndexError } from "../graph/scip.js";
 import { computeResiduals } from "../residuals.js";
 import type { ChangeSubgraph, GraphNode } from "../graph/provider.js";
 import type { ChangeStatus } from "../types.js";
-import { computeCoverage, flowEntries } from "../coverage.js";
+import { computeCoverage, flowEntries, type PlanUnitInput } from "../coverage.js";
 import { deriveAttachments, countedAttachmentIds } from "../attach.js";
 import { randomId } from "../util.js";
 import { parseBody, sessionCreateSchema, planSchema, unitPatchSchema } from "../validate.js";
@@ -25,7 +41,7 @@ import { resolveOrphanFiles } from "../globs.js";
 function reconcileSubgraph(
   subgraph: ChangeSubgraph,
   baseRef: string,
-  root: string
+  root: string,
 ): { nodes: GraphNode[]; status: Map<string, ChangeStatus> } {
   const rangesByFile = new Map<string, LineRange[] | null>();
   const status = new Map<string, ChangeStatus>();
@@ -43,18 +59,14 @@ function reconcileSubgraph(
   // drag unchanged production code it happens to exercise into the graph (that
   // would also orphan such a node whenever tests are hidden).
   const isTest = new Map(subgraph.nodes.map((n) => [n.stableId, n.isTest]));
-  const anchors = new Set(
-    [...status].filter(([id, s]) => s === "changed" && !isTest.get(id)).map(([id]) => id)
-  );
+  const anchors = new Set([...status].filter(([id, s]) => s === "changed" && !isTest.get(id)).map(([id]) => id));
   const adj = new Set<string>();
   for (const e of subgraph.edges) {
     if (e.edgeType !== "call") continue;
     if (anchors.has(e.sourceStableId)) adj.add(e.targetStableId);
     if (anchors.has(e.targetStableId)) adj.add(e.sourceStableId);
   }
-  const nodes = subgraph.nodes.filter(
-    (n) => status.get(n.stableId) === "changed" || n.isTest || adj.has(n.stableId)
-  );
+  const nodes = subgraph.nodes.filter((n) => status.get(n.stableId) === "changed" || n.isTest || adj.has(n.stableId));
   return { nodes, status };
 }
 
@@ -79,11 +91,15 @@ export function createSessionsRoute(ctx: AppContext) {
     // session would silently review the wrong tree.
     const checkedOut = currentBranch(ctx.repoRoot);
     if (body.branch !== "HEAD" && body.branch !== checkedOut) {
-      return c.json({
-        error: `session branch '${body.branch}' is not checked out (current: '${checkedOut ?? "unknown"}'); ` +
-          `this tool reviews the current working tree — check the branch out or pass HEAD`,
-        phase: "resolve-ref",
-      }, 400);
+      return c.json(
+        {
+          error:
+            `session branch '${body.branch}' is not checked out (current: '${checkedOut ?? "unknown"}'); ` +
+            `this tool reviews the current working tree — check the branch out or pass HEAD`,
+          phase: "resolve-ref",
+        },
+        400,
+      );
     }
 
     // All git-dependent work happens before any row is written, so a GitError
@@ -114,26 +130,47 @@ export function createSessionsRoute(ctx: AppContext) {
     }
 
     const session = ctx.db.transaction(() => {
-      const session = createSession(ctx.db, body.branch, body.baseRef, headSha, repoFingerprint(ctx.repoRoot) ?? "", indexWarnings);
+      const session = createSession(
+        ctx.db,
+        body.branch,
+        body.baseRef,
+        headSha,
+        repoFingerprint(ctx.repoRoot) ?? "",
+        indexWarnings,
+      );
       for (const gnode of keptNodes) {
         createNode(ctx.db, {
-          sessionId: session.id, stableId: gnode.stableId,
-          label: gnode.label, file: gnode.file, startLine: gnode.startLine, endLine: gnode.endLine,
-          changeStatus: status.get(gnode.stableId)!, reviewStatus: "unreviewed", reviewedInUnit: null,
+          sessionId: session.id,
+          stableId: gnode.stableId,
+          label: gnode.label,
+          file: gnode.file,
+          startLine: gnode.startLine,
+          endLine: gnode.endLine,
+          changeStatus: status.get(gnode.stableId)!,
+          reviewStatus: "unreviewed",
+          reviewedInUnit: null,
           isTest: gnode.isTest,
         });
       }
       for (const r of residuals) {
         createNode(ctx.db, {
-          sessionId: session.id, stableId: r.stableId,
-          label: r.label, file: r.file, startLine: r.startLine, endLine: r.endLine,
-          changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null,
-          isTest: r.isTest, residualRanges: r.ranges, residualKind: r.kind,
+          sessionId: session.id,
+          stableId: r.stableId,
+          label: r.label,
+          file: r.file,
+          startLine: r.startLine,
+          endLine: r.endLine,
+          changeStatus: "changed",
+          reviewStatus: "unreviewed",
+          reviewedInUnit: null,
+          isTest: r.isTest,
+          residualRanges: r.ranges,
+          residualKind: r.kind,
         });
       }
       const idByStable = new Map(getNodesBySession(ctx.db, session.id).map((n) => [n.stableId, n.id]));
       const insertEdge = ctx.db.prepare(
-        "INSERT INTO edges (id, session_id, source_node_id, target_node_id, edge_type) VALUES (?, ?, ?, ?, ?)"
+        "INSERT INTO edges (id, session_id, source_node_id, target_node_id, edge_type) VALUES (?, ?, ?, ?, ?)",
       );
       for (const gedge of subgraph.edges) {
         const source = idByStable.get(gedge.sourceStableId);
@@ -169,8 +206,10 @@ export function createSessionsRoute(ctx: AppContext) {
     let stale: boolean | undefined;
     let staleReason: "head-moved" | "working-tree-changed" | undefined;
     if (currentHead && session.headSha) {
-      if (currentHead !== session.headSha) { stale = true; staleReason = "head-moved"; }
-      else if (currentFp && session.repoFingerprint) {
+      if (currentHead !== session.headSha) {
+        stale = true;
+        staleReason = "head-moved";
+      } else if (currentFp && session.repoFingerprint) {
         stale = currentFp !== session.repoFingerprint;
         if (stale) staleReason = "working-tree-changed";
       }
@@ -195,19 +234,34 @@ export function createSessionsRoute(ctx: AppContext) {
     const overview = (body.overview ?? "").trim();
 
     const sessionNodes = getNodesBySession(ctx.db, sessionId);
-    const changedStableIds = sessionNodes
-      .filter((n) => n.changeStatus === "changed")
-      .map((n) => n.stableId);
+    const changedStableIds = sessionNodes.filter((n) => n.changeStatus === "changed").map((n) => n.stableId);
     const flows = await ctx.graphProvider.getFlows(new Set(changedStableIds));
 
     // Expand orphanFiles globs against the orphan set (changed nodes in no
     // flow — same universe the planner saw in context) before any coverage
     // math, so globs and explicit ids are indistinguishable downstream.
     const inAnyFlow = new Set(flows.flatMap((f) => f.steps.map((s) => s.stableId)));
-    const orphanNodes = sessionNodes.filter(
-      (n) => n.changeStatus === "changed" && !inAnyFlow.has(n.stableId)
+    const orphanNodes = sessionNodes.filter((n) => n.changeStatus === "changed" && !inAnyFlow.has(n.stableId));
+    // Zod's inferred optional fields include explicit `undefined`; normalize
+    // that transport shape into the exact internal plan contract.
+    const planUnits: PlanUnitInput[] = body.units.map((unit) =>
+      unit.kind === "flow"
+        ? {
+            kind: unit.kind,
+            label: unit.label,
+            ...(unit.rationale === undefined ? {} : { rationale: unit.rationale }),
+            ...(unit.flowEntryStableId === undefined ? {} : { flowEntryStableId: unit.flowEntryStableId }),
+            ...(unit.flowEntryStableIds === undefined ? {} : { flowEntryStableIds: unit.flowEntryStableIds }),
+          }
+        : {
+            kind: unit.kind,
+            label: unit.label,
+            ...(unit.rationale === undefined ? {} : { rationale: unit.rationale }),
+            ...(unit.orphanStableIds === undefined ? {} : { orphanStableIds: unit.orphanStableIds }),
+            ...(unit.orphanFiles === undefined ? {} : { orphanFiles: unit.orphanFiles }),
+          },
     );
-    const { units, emptyUnits } = resolveOrphanFiles(body.units, orphanNodes);
+    const { units, emptyUnits } = resolveOrphanFiles(planUnits, orphanNodes);
     if (emptyUnits.length > 0) {
       return c.json({ error: `orphanFiles matched no unassigned changes for unit(s): ${emptyUnits.join(", ")}` }, 400);
     }
@@ -217,12 +271,15 @@ export function createSessionsRoute(ctx: AppContext) {
     // Attachment derivation (spec 2026-07-17): nest unassigned tests, DTOs and
     // module-scope residuals under the covered node that gives them context.
     // Derived here (not on read) so web, CLI and coverage share one truth.
-    const testEdges = (ctx.db.prepare(
-      `SELECT sn.stable_id AS prod, tn.stable_id AS test
+    const testEdges = (
+      ctx.db
+        .prepare(
+          `SELECT sn.stable_id AS prod, tn.stable_id AS test
        FROM edges e JOIN nodes sn ON e.source_node_id = sn.id JOIN nodes tn ON e.target_node_id = tn.id
-       WHERE e.session_id = ? AND e.edge_type = 'test'`
-    ).all(sessionId) as { prod: string; test: string }[])
-      .map((r) => ({ productionStableId: r.prod, testStableId: r.test }));
+       WHERE e.session_id = ? AND e.edge_type = 'test'`,
+        )
+        .all(sessionId) as { prod: string; test: string }[]
+    ).map((r) => ({ productionStableId: r.prod, testStableId: r.test }));
     const fileRequires = (await ctx.graphProvider.getFileRequires?.()) ?? new Map();
     const attachedPerUnit = deriveAttachments(units, flows, sessionNodes, testEdges, fileRequires);
     const attachedIds = countedAttachmentIds(attachedPerUnit);
@@ -236,8 +293,16 @@ export function createSessionsRoute(ctx: AppContext) {
         createUnit(ctx.db, sessionId, pos++, u.label, u.rationale ?? "", u.kind, members, false, attachedPerUnit[i]);
       });
       if (leftovers.length > 0) {
-        createUnit(ctx.db, sessionId, pos++, "Unassigned changes",
-          "Changes not covered by any chosen unit.", "orphans", leftovers, true);
+        createUnit(
+          ctx.db,
+          sessionId,
+          pos++,
+          "Unassigned changes",
+          "Changes not covered by any chosen unit.",
+          "orphans",
+          leftovers,
+          true,
+        );
       }
       updateSessionStatus(ctx.db, sessionId, "walking");
       updateSessionOverview(ctx.db, sessionId, overview);

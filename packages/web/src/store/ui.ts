@@ -69,7 +69,7 @@ export const useUIStore = create<UIState>()(
             : {
                 collapsedUnits: [...new Set([...s.collapsedUnits, unitId])],
                 expandedUnits: s.expandedUnits.filter((id) => id !== unitId),
-              }
+              },
         ),
       setLineSelection: (sel) => set({ lineSelection: sel }),
       requestAnchorHighlight: (anchor) => set({ pendingAnchorHighlight: anchor }),
@@ -83,6 +83,6 @@ export const useUIStore = create<UIState>()(
         collapsedUnits: s.collapsedUnits,
         expandedUnits: s.expandedUnits,
       }),
-    }
-  )
+    },
+  ),
 );

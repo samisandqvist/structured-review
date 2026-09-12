@@ -2,10 +2,22 @@ import { computeCoverage, flowEntries, unitCoverage, type PlanUnitInput } from "
 import type { Flow } from "../src/graph/provider.js";
 
 const step = (stableId: string, depth = 0) => ({
-  stableId, label: stableId, file: "f.ts", startLine: 1, endLine: 2, isTest: false, depth,
+  stableId,
+  label: stableId,
+  file: "f.ts",
+  startLine: 1,
+  endLine: 2,
+  isTest: false,
+  depth,
 });
 const flows: Flow[] = [
-  { id: 1, name: "handleOrder", criticality: 1, depth: 1, steps: [step("fn:handleOrder"), step("fn:validateOrder", 1)] },
+  {
+    id: 1,
+    name: "handleOrder",
+    criticality: 1,
+    depth: 1,
+    steps: [step("fn:handleOrder"), step("fn:validateOrder", 1)],
+  },
 ];
 
 describe("computeCoverage", () => {
@@ -29,6 +41,13 @@ describe("computeCoverage", () => {
     expect(r.covered).toEqual([]);
     expect(r.unassigned).toEqual(["fn:handleOrder"]);
   });
+
+  it("an orphan unit with no members covers no changed nodes", () => {
+    const units: PlanUnitInput[] = [{ kind: "orphans", label: "Empty" }];
+    const r = computeCoverage(units, flows, ["fn:unclaimed"]);
+    expect(r.covered).toEqual([]);
+    expect(r.unassigned).toEqual(["fn:unclaimed"]);
+  });
 });
 
 describe("flowEntries", () => {
@@ -42,7 +61,10 @@ describe("flowEntries", () => {
 
 describe("multi-entry unitCoverage", () => {
   const mkFlow = (id: number, entry: string, rest: string[]): Flow => ({
-    id, name: entry, criticality: 0, depth: 1,
+    id,
+    name: entry,
+    criticality: 0,
+    depth: 1,
     steps: [step(entry), ...rest.map((s) => step(s, 1))],
   });
   it("unions changed steps across entries, counting shared nodes once", () => {
@@ -55,5 +77,12 @@ describe("multi-entry unitCoverage", () => {
     const fs = [mkFlow(1, "e1", ["c1"])];
     const unit: PlanUnitInput = { kind: "flow", flowEntryStableIds: ["e1", "missing"], label: "m" };
     expect(unitCoverage(unit, fs, new Set(["c1"]))).toEqual(["c1"]);
+  });
+
+  it("skips a malformed empty flow while finding a later valid entry", () => {
+    const empty: Flow = { id: 1, name: "empty", criticality: 0, depth: 0, steps: [] };
+    const valid = mkFlow(2, "e1", ["c1"]);
+    const unit: PlanUnitInput = { kind: "flow", flowEntryStableIds: ["e1"], label: "m" };
+    expect(unitCoverage(unit, [empty, valid], new Set(["c1"]))).toEqual(["c1"]);
   });
 });

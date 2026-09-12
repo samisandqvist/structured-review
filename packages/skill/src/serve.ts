@@ -6,9 +6,19 @@ import { closeSync, existsSync, mkdirSync, openSync, writeFileSync } from "node:
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export interface Health { ok: boolean; repoRoot?: string; pid?: number; provider?: string; }
+export interface Health {
+  ok: boolean;
+  repoRoot?: string;
+  pid?: number;
+  provider?: string;
+}
 export interface ServeResult {
-  baseUrl: string; repoRoot: string; pid: number; provider: string; reused: boolean; logFile?: string;
+  baseUrl: string;
+  repoRoot: string;
+  pid: number;
+  provider: string;
+  reused: boolean;
+  logFile?: string;
 }
 
 export function resolveGitRoot(dir: string): string {
@@ -35,8 +45,13 @@ export type ServeAction = { action: "reuse" } | { action: "spawn" } | { action: 
 export function decideServe(health: Health | null, wantRoot: string): ServeAction {
   if (health === null) return { action: "spawn" };
   if (health.ok && health.repoRoot === wantRoot) return { action: "reuse" };
-  const serving = health.repoRoot ? `a hub serving ${health.repoRoot}` : "something that answers /health without a repoRoot";
-  return { action: "conflict", reason: `port is occupied by ${serving} — pick another --port or stop it (pid ${health.pid ?? "unknown"})` };
+  const serving = health.repoRoot
+    ? `a hub serving ${health.repoRoot}`
+    : "something that answers /health without a repoRoot";
+  return {
+    action: "conflict",
+    reason: `port is occupied by ${serving} — pick another --port or stop it (pid ${health.pid ?? "unknown"})`,
+  };
 }
 
 /** Server entry: a bundled sibling (plugin layout: crw.js next to server.js)
@@ -112,7 +127,14 @@ export async function ensureServer(opts: { repo: string; port: number }): Promis
       if (h.repoRoot !== repoRoot) {
         throw new Error(`hub came up serving ${h.repoRoot ?? "unknown"}, expected ${repoRoot} — see ${logFile}`);
       }
-      return { baseUrl, repoRoot, pid: h.pid ?? child.pid ?? -1, provider: h.provider ?? "unknown", reused: false, logFile };
+      return {
+        baseUrl,
+        repoRoot,
+        pid: h.pid ?? child.pid ?? -1,
+        provider: h.provider ?? "unknown",
+        reused: false,
+        logFile,
+      };
     }
     await new Promise((r) => setTimeout(r, 300));
   }

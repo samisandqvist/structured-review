@@ -4,8 +4,18 @@
 // flows didn't resolve) count their changed member nodes directly.
 import type { Coverage, FlowDTO, SessionInfo, SessionNode, Unit } from "./api.js";
 
-export interface UnitStatus { label: string; kind: "flow" | "orphans"; auto: boolean; reviewed: number; total: number; }
-export interface UnreviewedNode { stableId: string; label: string; file: string; }
+export interface UnitStatus {
+  label: string;
+  kind: "flow" | "orphans";
+  auto: boolean;
+  reviewed: number;
+  total: number;
+}
+export interface UnreviewedNode {
+  stableId: string;
+  label: string;
+  file: string;
+}
 export interface SessionStatus {
   sessionId: string;
   sessionStatus: string;
@@ -17,7 +27,11 @@ export interface SessionStatus {
   unreviewed: UnreviewedNode[];
 }
 
-function unitProgress(unit: Unit, flows: FlowDTO[], byStable: Map<string, SessionNode>): { reviewed: number; total: number } {
+function unitProgress(
+  unit: Unit,
+  flows: FlowDTO[],
+  byStable: Map<string, SessionNode>,
+): { reviewed: number; total: number } {
   // Counted attachments (tests/DTOs/residuals nested by the server at plan
   // time) join the unit's ledger; counted=false references never do.
   const attachedNodes = (unit.attached ?? [])
@@ -51,7 +65,9 @@ function unitProgress(unit: Unit, flows: FlowDTO[], byStable: Map<string, Sessio
 export function computeStatus(info: SessionInfo, nodes: SessionNode[], flows: FlowDTO[]): SessionStatus {
   const byStable = new Map(nodes.map((n) => [n.stableId, n]));
   const units = info.units.map((u) => ({
-    label: u.label, kind: u.kind, auto: u.auto,
+    label: u.label,
+    kind: u.kind,
+    auto: u.auto,
     ...unitProgress(u, flows, byStable),
   }));
   const unreviewed = nodes
@@ -73,7 +89,7 @@ export function computeStatus(info: SessionInfo, nodes: SessionNode[], flows: Fl
 export function waitConditionMet(
   until: "reviewed" | "commented",
   status: SessionStatus,
-  commentCount: number
+  commentCount: number,
 ): boolean {
   if (until === "commented") return commentCount > 0;
   return status.unreviewed.length === 0;

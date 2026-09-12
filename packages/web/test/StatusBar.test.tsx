@@ -7,7 +7,14 @@ const sessionList = [
 ];
 
 vi.mock("../src/api/hooks.js", () => ({
-  useSession: () => ({ data: { session: { branch: "feat" }, units: [{}, {}], coverage: { changedTotal: 5, covered: 4, unassigned: 1 }, stale: true } }),
+  useSession: () => ({
+    data: {
+      session: { branch: "feat" },
+      units: [{}, {}],
+      coverage: { changedTotal: 5, covered: 4, unassigned: 1 },
+      stale: true,
+    },
+  }),
   useNodes: () => ({ data: { nodes: [] } }),
   useSessions: () => ({ data: { sessions: sessionList } }),
 }));

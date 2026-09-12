@@ -15,7 +15,9 @@ export function SessionPicker({ sessions }: { sessions: ReviewSession[] }) {
             <button className="session-picker__row" onClick={() => navigateToSession(s.id)}>
               <span className="session-picker__branch">{s.branch}</span>
               <span className="session-picker__base">← {s.baseRef}</span>
-              <span className="session-picker__status" data-status={s.status}>{s.status}</span>
+              <span className="session-picker__status" data-status={s.status}>
+                {s.status}
+              </span>
               <span className="session-picker__date">
                 {new Date(s.createdAt).toLocaleString(undefined, {
                   dateStyle: "medium",

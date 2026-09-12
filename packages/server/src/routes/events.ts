@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { stream } from "hono/streaming";
-import type { AppContext } from "../app.js";
+import type { AppContext } from "../context.js";
 
 type EventCallback = (data: string) => void;
 const subscribers = new Map<string, Set<EventCallback>>();
@@ -22,7 +22,9 @@ export function createEventsRoute(_ctx: AppContext) {
     c.header("Cache-Control", "no-cache");
     c.header("Connection", "keep-alive");
     return stream(c, async (s) => {
-      const cb: EventCallback = (data) => { s.write(data); };
+      const cb: EventCallback = (data) => {
+        s.write(data);
+      };
       if (!subscribers.has(sessionId)) subscribers.set(sessionId, new Set());
       subscribers.get(sessionId)!.add(cb);
       await new Promise<void>((resolve) => {

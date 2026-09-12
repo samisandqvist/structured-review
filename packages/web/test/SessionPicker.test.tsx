@@ -10,8 +10,20 @@ import { navigateToSession } from "../src/navigation.js";
 import type { ReviewSession } from "../src/api/client.js";
 
 const sessions: ReviewSession[] = [
-  { id: "ses_a", branch: "delegation-grants", baseRef: "main", status: "walking", createdAt: Date.UTC(2026, 7, 19, 12, 0) },
-  { id: "ses_b", branch: "introspector-fusion", baseRef: "develop", status: "planning", createdAt: Date.UTC(2026, 7, 20, 8, 30) },
+  {
+    id: "ses_a",
+    branch: "delegation-grants",
+    baseRef: "main",
+    status: "walking",
+    createdAt: Date.UTC(2026, 7, 19, 12, 0),
+  },
+  {
+    id: "ses_b",
+    branch: "introspector-fusion",
+    baseRef: "develop",
+    status: "planning",
+    createdAt: Date.UTC(2026, 7, 20, 8, 30),
+  },
 ];
 
 beforeEach(() => {

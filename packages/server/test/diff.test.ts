@@ -3,7 +3,25 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { extractHunkDiff, extractLinesForRanges, expandedContextSlice, getNodeDiff, getNodeDiffForRanges, nodeChangeStats, subtractRanges, resolveRef, changedFilesStrict, currentBranch, repoFingerprint, subtreeFingerprint, formatHunkSnippet, anchorRowRange, GitError, EMPTY_TREE_SHA, commitSubjects } from "../src/diff.js";
+import {
+  extractHunkDiff,
+  extractLinesForRanges,
+  expandedContextSlice,
+  getNodeDiff,
+  getNodeDiffForRanges,
+  nodeChangeStats,
+  subtractRanges,
+  resolveRef,
+  changedFilesStrict,
+  currentBranch,
+  repoFingerprint,
+  subtreeFingerprint,
+  formatHunkSnippet,
+  anchorRowRange,
+  GitError,
+  EMPTY_TREE_SHA,
+  commitSubjects,
+} from "../src/diff.js";
 import type { DiffLine } from "../src/diff.js";
 import type { CommentAnchor } from "../src/types.js";
 import { languagePathspecs } from "../src/graph/roots.js";
@@ -153,7 +171,7 @@ describe("extractHunkDiff", () => {
     expect(diff).not.toBeNull();
     expect(diff.oldText).toBe(["const a = 1;", "const b = 2;", "const c = 3;", "const e = 5;"].join("\n"));
     expect(diff.newText).toBe(
-      ["const a = 1;", "const b = 2;", "const c = 30;", "const d = 4;", "const e = 5;"].join("\n")
+      ["const a = 1;", "const b = 2;", "const c = 30;", "const d = 4;", "const e = 5;"].join("\n"),
     );
   });
 
@@ -175,10 +193,10 @@ describe("nodeChangeStats", () => {
     "--- a/x.ts",
     "+++ b/x.ts",
     "@@ -10,2 +10,3 @@",
-    " const a = 1;",   // context, new line 10
-    "-const b = 2;",   // removed, attributed to new line 11
-    "+const b = 3;",   // added, new line 11
-    "+const c = 4;",   // added, new line 12
+    " const a = 1;", // context, new line 10
+    "-const b = 2;", // removed, attributed to new line 11
+    "+const b = 3;", // added, new line 11
+    "+const c = 4;", // added, new line 12
   ].join("\n");
 
   it("counts +/- lines within the node span", () => {
@@ -350,7 +368,10 @@ describe("formatHunkSnippet", () => {
 
   it("caps line count", () => {
     const many = Array.from({ length: 100 }, (_, i) => ({
-      type: "added" as const, oldLine: null, newLine: i + 1, text: `l${i}`,
+      type: "added" as const,
+      oldLine: null,
+      newLine: i + 1,
+      text: `l${i}`,
     }));
     expect(formatHunkSnippet(many, 10).split("\n")).toHaveLength(10);
   });
@@ -390,7 +411,10 @@ describe("getNodeDiffForRanges", () => {
   it("includes only the given ranges, excluding covered function hunks", () => {
     // NOTE: this test calls the git-free core; see implementation step — the
     // exported helper extractLinesForRanges is pure, getNodeDiffForRanges shells git.
-    const d = extractLinesForRanges(raw, [{ start: 2, end: 3 }, { start: 40, end: 41 }])!;
+    const d = extractLinesForRanges(raw, [
+      { start: 2, end: 3 },
+      { start: 40, end: 41 },
+    ])!;
     const texts = d.lines.map((l) => l.text);
     expect(texts).toContain("new two");
     expect(texts).toContain("new fortyone");
@@ -399,7 +423,10 @@ describe("getNodeDiffForRanges", () => {
   });
 
   it("keeps real coordinates so the renderer shows a gap between fragments", () => {
-    const d = extractLinesForRanges(raw, [{ start: 2, end: 3 }, { start: 40, end: 41 }])!;
+    const d = extractLinesForRanges(raw, [
+      { start: 2, end: 3 },
+      { start: 40, end: 41 },
+    ])!;
     const newLines = d.lines.map((l) => l.newLine).filter((n): n is number => n !== null);
     expect(Math.max(...newLines) - Math.min(...newLines)).toBeGreaterThan(30);
   });
@@ -469,14 +496,18 @@ describe("expandedContextSlice", () => {
 
 describe("anchorRowRange", () => {
   const lines: DiffLine[] = [
-    { type: "context", oldLine: 10, newLine: 10, text: "ctx" },     // idx 0
-    { type: "removed", oldLine: 11, newLine: null, text: "gone" },  // idx 1
-    { type: "added", oldLine: null, newLine: 11, text: "new1" },    // idx 2
-    { type: "context", oldLine: 12, newLine: 12, text: "ctx" },     // idx 3
-    { type: "added", oldLine: null, newLine: 13, text: "new2" },    // idx 4
+    { type: "context", oldLine: 10, newLine: 10, text: "ctx" }, // idx 0
+    { type: "removed", oldLine: 11, newLine: null, text: "gone" }, // idx 1
+    { type: "added", oldLine: null, newLine: 11, text: "new1" }, // idx 2
+    { type: "context", oldLine: 12, newLine: 12, text: "ctx" }, // idx 3
+    { type: "added", oldLine: null, newLine: 13, text: "new2" }, // idx 4
   ];
-  const a = (startLine: number, startSide: "old" | "new", endLine: number, endSide: "old" | "new"): CommentAnchor =>
-    ({ startLine, startSide, endLine, endSide });
+  const a = (startLine: number, startSide: "old" | "new", endLine: number, endSide: "old" | "new"): CommentAnchor => ({
+    startLine,
+    startSide,
+    endLine,
+    endSide,
+  });
 
   it("resolves a single added line", () => {
     expect(anchorRowRange(lines, a(11, "new", 11, "new"))).toEqual({ startIdx: 2, endIdx: 2 });

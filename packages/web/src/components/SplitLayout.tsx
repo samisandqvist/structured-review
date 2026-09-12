@@ -7,13 +7,7 @@ import { DiffView } from "./DiffView.js";
 import { CommentBox } from "./CommentBox.js";
 import { RelationsPanel } from "./RelationsPanel.js";
 
-export function SplitLayout({
-  sessionId,
-  currentNodeId,
-}: {
-  sessionId: string;
-  currentNodeId: string | null;
-}) {
+export function SplitLayout({ sessionId, currentNodeId }: { sessionId: string; currentNodeId: string | null }) {
   const splitRatio = useUIStore((s) => s.splitRatio);
   const setSplitRatio = useUIStore((s) => s.setSplitRatio);
   const setCurrentNode = useUIStore((s) => s.setCurrentNode);
@@ -28,37 +22,45 @@ export function SplitLayout({
   const nodes = useMemo(() => nodesData?.nodes ?? [], [nodesData]);
   const order = useMemo(
     () => buildWalkOrder(sessionData?.units ?? [], flowsData?.flows ?? [], nodes),
-    [sessionData, flowsData, nodes]
+    [sessionData, flowsData, nodes],
   );
   const walkStableIds = useMemo(() => new Set(order.map((e) => e.stableId)), [order]);
-  const nodeLabel = useCallback(
-    (id: string) => nodes.find((n) => n.id === id)?.label ?? id,
-    [nodes]
-  );
+  const nodeLabel = useCallback((id: string) => nodes.find((n) => n.id === id)?.label ?? id, [nodes]);
 
   const walkPath = useUIStore((s) => s.walkPath);
   const pushToWalkPath = useUIStore((s) => s.pushToWalkPath);
   const truncateWalkPath = useUIStore((s) => s.truncateWalkPath);
 
   // A walk move (plan click, j/k/n/r) ends any detour.
-  const walkTo = useCallback((nodeId: string | null) => {
-    truncateWalkPath(0);
-    setCurrentNode(nodeId);
-  }, [truncateWalkPath, setCurrentNode]);
+  const walkTo = useCallback(
+    (nodeId: string | null) => {
+      truncateWalkPath(0);
+      setCurrentNode(nodeId);
+    },
+    [truncateWalkPath, setCurrentNode],
+  );
 
   // A relation click is a detour: remember where we came from.
-  const selectRelation = useCallback((nodeId: string) => {
-    const cur = useUIStore.getState().currentNodeId;
-    if (cur) pushToWalkPath(cur);
-    setCurrentNode(nodeId);
-  }, [pushToWalkPath, setCurrentNode]);
+  const selectRelation = useCallback(
+    (nodeId: string) => {
+      const cur = useUIStore.getState().currentNodeId;
+      if (cur) pushToWalkPath(cur);
+      setCurrentNode(nodeId);
+    },
+    [pushToWalkPath, setCurrentNode],
+  );
 
-  const jumpToBreadcrumb = useCallback((index: number) => {
-    const path = useUIStore.getState().walkPath;
-    if (index < 0 || index >= path.length) return;
-    setCurrentNode(path[index]);
-    truncateWalkPath(index);
-  }, [setCurrentNode, truncateWalkPath]);
+  const jumpToBreadcrumb = useCallback(
+    (index: number) => {
+      const path = useUIStore.getState().walkPath;
+      if (index < 0 || index >= path.length) return;
+      const nodeId = path[index];
+      if (!nodeId) return;
+      setCurrentNode(nodeId);
+      truncateWalkPath(index);
+    },
+    [setCurrentNode, truncateWalkPath],
+  );
 
   const goNextUnreviewed = useCallback(() => {
     const id = nextUnreviewed(order, nodes, useUIStore.getState().currentNodeId);
@@ -71,8 +73,12 @@ export function SplitLayout({
       if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
       // Closing the overlay is safe regardless of focus, so Escape comes
       // before the typing guard — an editing field may sit behind the overlay.
-      if (e.key === "Escape") { setShowKeys(false); return; }
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+      if (e.key === "Escape") {
+        setShowKeys(false);
+        return;
+      }
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable))
+        return;
       const cur = useUIStore.getState().currentNodeId;
       if (e.key === "j") {
         const id = nextInWalk(order, cur, 1);
@@ -116,9 +122,7 @@ export function SplitLayout({
   const currentNode = nodeData?.node;
 
   return (
-    <div
-      style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}
-    >
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <div ref={containerRef} style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         <div style={{ flex: splitRatio, overflow: "hidden", height: "100%" }}>
           <PlanView sessionId={sessionId} currentNodeId={currentNodeId} onSelectNode={walkTo} />
@@ -142,19 +146,40 @@ export function SplitLayout({
                 {walkPath.length > 0 && (
                   <div
                     data-testid="breadcrumb"
-                    style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 10, fontSize: 15, color: "var(--dim)" }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      flexWrap: "wrap",
+                      marginBottom: 10,
+                      fontSize: 15,
+                      color: "var(--dim)",
+                    }}
                   >
                     {walkPath.map((id, i) => (
                       <button
                         key={`${id}-${i}`}
                         onClick={() => jumpToBreadcrumb(i)}
-                        style={{ background: "none", border: "none", color: "var(--accent, #4fd6ff)", cursor: "pointer", padding: 0, fontSize: 15, fontFamily: "var(--mono)" }}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "var(--accent, #4fd6ff)",
+                          cursor: "pointer",
+                          padding: 0,
+                          fontSize: 15,
+                          fontFamily: "var(--mono)",
+                        }}
                       >
                         {nodeLabel(id)} ›
                       </button>
                     ))}
                     <span style={{ fontFamily: "var(--mono)" }}>{currentNode.label}</span>
-                    <button data-testid="return-to-walk" className="btn" style={{ marginLeft: "auto" }} onClick={() => jumpToBreadcrumb(0)}>
+                    <button
+                      data-testid="return-to-walk"
+                      className="btn"
+                      style={{ marginLeft: "auto" }}
+                      onClick={() => jumpToBreadcrumb(0)}
+                    >
                       ⏎ Return to review walk
                     </button>
                   </div>
@@ -198,19 +223,30 @@ export function SplitLayout({
           )}
         </div>
       </div>
-      <div style={{ display: "flex", justifyContent: "flex-end", padding: "4px 12px", borderTop: "1px solid var(--line)" }}>
-        <button className="btn" onClick={() => setShowKeys((v) => !v)} aria-expanded={showKeys}>Keyboard shortcuts (?)</button>
+      <div
+        style={{ display: "flex", justifyContent: "flex-end", padding: "4px 12px", borderTop: "1px solid var(--line)" }}
+      >
+        <button className="btn" onClick={() => setShowKeys((v) => !v)} aria-expanded={showKeys}>
+          Keyboard shortcuts (?)
+        </button>
       </div>
       {showKeys && (
         <div className="keys-overlay" onClick={() => setShowKeys(false)}>
           <dl>
-            <dt>j / k</dt><dd>next / previous change</dd>
-            <dt>n</dt><dd>next unreviewed</dd>
-            <dt>r</dt><dd>mark reviewed &amp; advance</dd>
-            <dt>c</dt><dd>comment</dd>
-            <dt>?</dt><dd>toggle this overlay</dd>
-            <dt>Esc</dt><dd>close this overlay</dd>
-            <dt>Ctrl / ⌘ + Enter</dt><dd>send a comment or review note</dd>
+            <dt>j / k</dt>
+            <dd>next / previous change</dd>
+            <dt>n</dt>
+            <dd>next unreviewed</dd>
+            <dt>r</dt>
+            <dd>mark reviewed &amp; advance</dd>
+            <dt>c</dt>
+            <dd>comment</dd>
+            <dt>?</dt>
+            <dd>toggle this overlay</dd>
+            <dt>Esc</dt>
+            <dd>close this overlay</dd>
+            <dt>Ctrl / ⌘ + Enter</dt>
+            <dd>send a comment or review note</dd>
           </dl>
         </div>
       )}

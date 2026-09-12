@@ -1,0 +1,33 @@
+rules:
+  - id: javascript-dangerous-dynamic-evaluation
+    message: "Dynamic evaluation can execute attacker-controlled code."
+    severity: ERROR
+    languages: [javascript, typescript]
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+
+  - id: javascript-shell-command-execution
+    message: "Shell command strings are injection-prone; use argument-vector APIs such as execFile or spawn with shell disabled."
+    severity: ERROR
+    languages: [javascript, typescript]
+    pattern-either:
+      - patterns:
+          - pattern: exec($COMMAND, ...)
+          - pattern-not: exec("...", ...)
+          - pattern-not: exec('...', ...)
+      - patterns:
+          - pattern: execSync($COMMAND, ...)
+          - pattern-not: execSync("...", ...)
+          - pattern-not: execSync('...', ...)
+      - pattern: '$CP.spawn($CMD, $ARGS, { ..., shell: true, ... })'
+      - pattern: '$CP.spawnSync($CMD, $ARGS, { ..., shell: true, ... })'
+
+  - id: javascript-unsafe-html-assignment
+    message: "Assigning HTML strings directly can introduce cross-site scripting."
+    severity: ERROR
+    languages: [javascript, typescript]
+    pattern-either:
+      - pattern: $ELEMENT.innerHTML = $VALUE
+      - pattern: $ELEMENT.outerHTML = $VALUE
+      - pattern: <$TAG dangerouslySetInnerHTML={...} />

@@ -9,7 +9,10 @@ import { NodeBadge } from "./NodeBadge.js";
  * action without a graph view.
  */
 export function RelationsPanel({
-  callers, callees, walkStableIds, onSelect,
+  callers,
+  callees,
+  walkStableIds,
+  onSelect,
 }: {
   callers: Node[];
   callees: Node[];
@@ -28,33 +31,59 @@ export function RelationsPanel({
       <button
         data-testid="relations-toggle"
         onClick={() => setOpen((v) => !v)}
-        style={{ background: "none", border: "none", color: "var(--dim)", cursor: "pointer", padding: 0, fontSize: 15, letterSpacing: "0.05em" }}
+        style={{
+          background: "none",
+          border: "none",
+          color: "var(--dim)",
+          cursor: "pointer",
+          padding: 0,
+          fontSize: 15,
+          letterSpacing: "0.05em",
+        }}
       >
-        {open ? "▾" : "▸"} RELATIONS · {callers.length} caller{callers.length === 1 ? "" : "s"} · {callees.length} callee{callees.length === 1 ? "" : "s"}
+        {open ? "▾" : "▸"} RELATIONS · {callers.length} caller{callers.length === 1 ? "" : "s"} · {callees.length}{" "}
+        callee{callees.length === 1 ? "" : "s"}
       </button>
       {open && (
-        <ul style={{ listStyle: "none", margin: "8px 0 0", padding: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+        <ul
+          style={{ listStyle: "none", margin: "8px 0 0", padding: 0, display: "flex", flexDirection: "column", gap: 4 }}
+        >
           {rows.map(({ node, direction }) => (
             <li key={`${direction}-${node.id}`}>
               <button
                 data-testid={`relation-${node.id}`}
                 onClick={() => onSelect(node.id)}
                 style={{
-                  display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left",
-                  background: "var(--surface)", border: "1px solid var(--line)",
-                  borderRadius: "var(--radius-sm)", padding: "6px 10px", cursor: "pointer",
-                  color: "var(--text)", fontSize: 16,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  width: "100%",
+                  textAlign: "left",
+                  background: "var(--surface)",
+                  border: "1px solid var(--line)",
+                  borderRadius: "var(--radius-sm)",
+                  padding: "6px 10px",
+                  cursor: "pointer",
+                  color: "var(--text)",
+                  fontSize: 16,
                 }}
               >
-                <span title={direction === "caller" ? "called by" : "calls"} style={{ color: "var(--dim)", fontFamily: "var(--mono)" }}>
+                <span
+                  title={direction === "caller" ? "called by" : "calls"}
+                  style={{ color: "var(--dim)", fontFamily: "var(--mono)" }}
+                >
                   {direction === "caller" ? "←" : "→"}
                 </span>
                 <span style={{ fontFamily: "var(--mono)", fontWeight: 600 }}>{node.label}</span>
-                <span style={{ color: "var(--dim)", fontSize: 14 }}>{node.file}:{node.startLine}</span>
+                <span style={{ color: "var(--dim)", fontSize: 14 }}>
+                  {node.file}:{node.startLine}
+                </span>
                 {node.isTest && <Chip>test</Chip>}
                 <Chip>{node.changeStatus}</Chip>
                 {walkStableIds.has(node.stableId) && <Chip>in walk</Chip>}
-                <span style={{ marginLeft: "auto" }}><NodeBadge status={node.reviewStatus} /></span>
+                <span style={{ marginLeft: "auto" }}>
+                  <NodeBadge status={node.reviewStatus} />
+                </span>
               </button>
             </li>
           ))}
@@ -66,7 +95,17 @@ export function RelationsPanel({
 
 function Chip({ children }: { children: ReactNode }) {
   return (
-    <span style={{ fontSize: 13, color: "var(--dim)", border: "1px solid var(--line-bright)", borderRadius: 4, padding: "0 5px", letterSpacing: "0.04em", whiteSpace: "nowrap" }}>
+    <span
+      style={{
+        fontSize: 13,
+        color: "var(--dim)",
+        border: "1px solid var(--line-bright)",
+        borderRadius: 4,
+        padding: "0 5px",
+        letterSpacing: "0.04em",
+        whiteSpace: "nowrap",
+      }}
+    >
       {children}
     </span>
   );

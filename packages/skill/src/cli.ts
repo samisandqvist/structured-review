@@ -4,10 +4,29 @@
 // the HTTP API (api.ts) and server lifecycle (serve.ts) — never SQLite.
 import { readFileSync } from "node:fs";
 import {
-  DEFAULT_BASE_URL, briefContext, compactContext, createSession, defaultPartition, deleteSession, exportComments, getChanges,
-  getFlows, getNodeDiff, getNodes, getSessionInfo, launchUI, listSessions, parsePlanFile, resolveBaseAlias,
-  resolvePlanRefs, shutdownHub, suggestMerges, uiUrl, writePlan,
-  type Coverage, type UnitInput,
+  DEFAULT_BASE_URL,
+  briefContext,
+  compactContext,
+  createSession,
+  defaultPartition,
+  deleteSession,
+  exportComments,
+  getChanges,
+  getFlows,
+  getNodeDiff,
+  getNodes,
+  getSessionInfo,
+  launchUI,
+  listSessions,
+  parsePlanFile,
+  resolveBaseAlias,
+  resolvePlanRefs,
+  shutdownHub,
+  suggestMerges,
+  uiUrl,
+  writePlan,
+  type Coverage,
+  type UnitInput,
 } from "./api.js";
 import { computeStatus, waitConditionMet, type SessionStatus } from "./status.js";
 import { ensureServer } from "./serve.js";
@@ -30,17 +49,23 @@ global flags: --port N (hub port), --pretty (human-readable output)`;
 
 const BOOL_FLAGS = new Set(["auto", "open", "pretty", "all", "full", "brief"]);
 
-export interface CliArgs { command: string; flags: Record<string, string | boolean>; }
+export interface CliArgs {
+  command: string;
+  flags: Record<string, string | boolean>;
+}
 
 export function parseCliArgs(argv: string[]): CliArgs {
   const positionals: string[] = [];
   const flags: Record<string, string | boolean> = {};
   for (let i = 0; i < argv.length; i++) {
     const tok = argv[i];
+    if (tok === undefined) continue;
     if (tok.startsWith("--")) {
       const name = tok.slice(2);
       if (BOOL_FLAGS.has(name)) flags[name] = true;
-      else { flags[name] = argv[++i] ?? ""; }
+      else {
+        flags[name] = argv[++i] ?? "";
+      }
     } else {
       positionals.push(tok);
     }
@@ -125,11 +150,15 @@ async function cmdSessionList(base: string): Promise<CommandResult> {
   const { sessions } = await listSessions(base);
   return {
     json: { sessions },
-    pretty: sessions.length === 0
-      ? "no sessions"
-      : sessions
-          .map((s) => `${s.id} (${s.status}) — ${s.branch} vs ${s.baseRef}, created ${new Date(s.createdAt).toISOString()}`)
-          .join("\n"),
+    pretty:
+      sessions.length === 0
+        ? "no sessions"
+        : sessions
+            .map(
+              (s) =>
+                `${s.id} (${s.status}) — ${s.branch} vs ${s.baseRef}, created ${new Date(s.createdAt).toISOString()}`,
+            )
+            .join("\n"),
   };
 }
 
@@ -212,7 +241,16 @@ async function cmdContext(base: string, flags: Record<string, string | boolean>)
   const compact = compactContext(flows, orphans);
   // Precomputed merge guideline (shared changed ids >= half the smaller flow's
   // set) so the planner spends judgment on labels/order, not set arithmetic.
-  return { json: { sessionId, ...subjects, flows: compact.flows, mergeSuggestions: suggestMerges(compact.flows), orphanGroups: compact.orphanGroups, changes } };
+  return {
+    json: {
+      sessionId,
+      ...subjects,
+      flows: compact.flows,
+      mergeSuggestions: suggestMerges(compact.flows),
+      orphanGroups: compact.orphanGroups,
+      changes,
+    },
+  };
 }
 
 /** Shape the plan-submit response for output. `unassigned` is always present
@@ -230,7 +268,10 @@ export function planOutput(result: Awaited<ReturnType<typeof writePlan>>): {
     // re-submit without re-fetching the session.
     unassigned: result.unassigned ?? [],
     units: result.units.map((u) => ({
-      label: u.label, kind: u.kind, auto: u.auto, members: u.memberStableIds.length,
+      label: u.label,
+      kind: u.kind,
+      auto: u.auto,
+      members: u.memberStableIds.length,
       attached: (u.attached ?? []).filter((m) => m.counted).length,
     })),
   };
@@ -266,8 +307,10 @@ async function cmdPlan(base: string, flags: Record<string, string | boolean>): P
       `coverage: ${out.coverage.covered}/${out.coverage.changedTotal} assigned, ${out.coverage.unassigned} unassigned`,
       ...(out.overview ? [`overview: ${out.overview}`] : []),
       ...unassigned.map((n) => `  unassigned: ${n.label} — ${n.file} (${n.stableId})`),
-      ...out.units.map((u) =>
-        `  ${u.label}${u.auto ? " (auto)" : ""} — ${u.kind}, ${u.members} member(s)${u.attached ? `, ${u.attached} attached` : ""}`),
+      ...out.units.map(
+        (u) =>
+          `  ${u.label}${u.auto ? " (auto)" : ""} — ${u.kind}, ${u.members} member(s)${u.attached ? `, ${u.attached} attached` : ""}`,
+      ),
     ].join("\n"),
   };
 }
@@ -293,18 +336,23 @@ async function cmdComments(base: string, flags: Record<string, string | boolean>
   const out = {
     ...exported,
     comments: exported.comments.map((c) =>
-      c.scope === "session" ? c : { ...c, reviewStatus: statusByNode.get(c.nodeId) ?? "unknown" }
+      c.scope === "session" ? c : { ...c, reviewStatus: statusByNode.get(c.nodeId) ?? "unknown" },
     ),
   };
   return {
     json: out,
-    pretty: out.comments.length === 0
-      ? "no comments"
-      : out.comments.map((c) => {
-          if (c.scope === "session") return `[review-wide]\n  ${c.text.replace(/\n/g, "\n  ")}`;
-          const where = c.anchor ? `${c.file}:${c.anchor.startLine}-${c.anchor.endLine}` : `${c.file}:${c.startLine}-${c.endLine}`;
-          return `${where} (${c.label}, ${c.reviewStatus})\n  ${c.text.replace(/\n/g, "\n  ")}`;
-        }).join("\n"),
+    pretty:
+      out.comments.length === 0
+        ? "no comments"
+        : out.comments
+            .map((c) => {
+              if (c.scope === "session") return `[review-wide]\n  ${c.text.replace(/\n/g, "\n  ")}`;
+              const where = c.anchor
+                ? `${c.file}:${c.anchor.startLine}-${c.anchor.endLine}`
+                : `${c.file}:${c.startLine}-${c.endLine}`;
+              return `${where} (${c.label}, ${c.reviewStatus})\n  ${c.text.replace(/\n/g, "\n  ")}`;
+            })
+            .join("\n"),
   };
 }
 
@@ -318,7 +366,10 @@ async function cmdWait(base: string, flags: Record<string, string | boolean>): P
     const [status, exported] = await Promise.all([fetchStatus(base, sessionId), exportComments(base, sessionId)]);
     if (waitConditionMet(until, status, exported.comments.length)) {
       const json = { until, met: true, commentCount: exported.comments.length, status };
-      return { json, pretty: `condition '${until}' met (${exported.comments.length} comment(s))\n${prettyStatus(status)}` };
+      return {
+        json,
+        pretty: `condition '${until}' met (${exported.comments.length} comment(s))\n${prettyStatus(status)}`,
+      };
     }
     if (Date.now() >= deadline) {
       process.exitCode = 2;
@@ -332,7 +383,9 @@ async function cmdWait(base: string, flags: Record<string, string | boolean>): P
 /** The server needs node:sqlite (unflagged since 22.13) — fail with a clear
  *  message instead of a cryptic module error on the spawned server. */
 function checkNodeVersion(): void {
-  const [major, minor] = process.versions.node.split(".").map(Number);
+  const [majorText, minorText] = process.versions.node.split(".");
+  const major = Number(majorText);
+  const minor = Number(minorText);
   if (major > 22 || (major === 22 && minor >= 13)) return;
   throw new Error(`crw requires Node >= 22.13 (found ${process.versions.node})`);
 }
@@ -344,20 +397,46 @@ export async function runCli(argv: string[]): Promise<void> {
 
   let result: CommandResult;
   switch (command) {
-    case "serve": result = await cmdServe(flags); break;
-    case "session create": result = await cmdSessionCreate(base, flags); break;
-    case "session list": result = await cmdSessionList(base); break;
-    case "session delete": result = await cmdSessionDelete(base, flags); break;
-    case "gc": result = await cmdGc(base, flags); break;
-    case "shutdown": result = await cmdShutdown(base); break;
-    case "context": result = await cmdContext(base, flags); break;
-    case "plan": result = await cmdPlan(base, flags); break;
-    case "diff": result = await cmdDiff(base, flags); break;
-    case "status": result = await cmdStatus(base, flags); break;
-    case "comments": result = await cmdComments(base, flags); break;
-    case "wait": result = await cmdWait(base, flags); break;
-    case "": throw new Error(USAGE);
-    default: throw new Error(`unknown command: ${command}\n${USAGE}`);
+    case "serve":
+      result = await cmdServe(flags);
+      break;
+    case "session create":
+      result = await cmdSessionCreate(base, flags);
+      break;
+    case "session list":
+      result = await cmdSessionList(base);
+      break;
+    case "session delete":
+      result = await cmdSessionDelete(base, flags);
+      break;
+    case "gc":
+      result = await cmdGc(base, flags);
+      break;
+    case "shutdown":
+      result = await cmdShutdown(base);
+      break;
+    case "context":
+      result = await cmdContext(base, flags);
+      break;
+    case "plan":
+      result = await cmdPlan(base, flags);
+      break;
+    case "diff":
+      result = await cmdDiff(base, flags);
+      break;
+    case "status":
+      result = await cmdStatus(base, flags);
+      break;
+    case "comments":
+      result = await cmdComments(base, flags);
+      break;
+    case "wait":
+      result = await cmdWait(base, flags);
+      break;
+    case "":
+      throw new Error(USAGE);
+    default:
+      throw new Error(`unknown command: ${command}\n${USAGE}`);
   }
   console.log(flags.pretty && result.pretty ? result.pretty : JSON.stringify(result.json, null, 2));
 }
@@ -370,7 +449,10 @@ function isConnRefused(e: unknown): boolean {
 if (import.meta.url === `file://${process.argv[1]}`) {
   runCli(process.argv.slice(2)).catch((e: unknown) => {
     const err = isConnRefused(e)
-      ? { error: `review hub not running at ${baseUrlFor(parseCliArgs(process.argv.slice(2)).flags)}`, hint: "run: crw serve" }
+      ? {
+          error: `review hub not running at ${baseUrlFor(parseCliArgs(process.argv.slice(2)).flags)}`,
+          hint: "run: crw serve",
+        }
       : { error: e instanceof Error ? e.message : String(e) };
     console.error(JSON.stringify(err));
     process.exitCode = process.exitCode || 1;

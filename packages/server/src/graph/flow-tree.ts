@@ -50,7 +50,7 @@ export function buildFlowTree(
   entry: string,
   callAdj: Map<string, string[]>,
   resolve: (sym: string) => FlowNodeInfo | undefined,
-  relevant?: Set<string>
+  relevant?: Set<string>,
 ): FlowStep[] {
   const steps: FlowStep[] = [];
   let offPathCount = 0;

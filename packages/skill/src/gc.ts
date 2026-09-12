@@ -46,7 +46,8 @@ export async function stopHubIfServing(baseUrl: string, repoRoot: string): Promi
   try {
     await shutdownHub(baseUrl);
   } catch {
-    if (!health.pid) throw new Error(`hub at ${baseUrl} has no shutdown endpoint and /health reported no pid — stop it manually`);
+    if (!health.pid)
+      throw new Error(`hub at ${baseUrl} has no shutdown endpoint and /health reported no pid — stop it manually`);
     process.kill(health.pid, "SIGTERM");
   }
   const deadline = Date.now() + 5_000;
@@ -71,7 +72,9 @@ export function gcSweep(dataDir: string): GcSweepResult {
   const dbDir = join(dataDir, "db");
   const result: GcSweepResult = { swept: [], skipped: [] };
   const entries = existsSync(dbDir)
-    ? readdirSync(dbDir).filter((f) => f.endsWith(".db")).map((f) => f.slice(0, -3))
+    ? readdirSync(dbDir)
+        .filter((f) => f.endsWith(".db"))
+        .map((f) => f.slice(0, -3))
     : [];
   for (const key of entries) {
     const logDir = join(dataDir, "logs", key);

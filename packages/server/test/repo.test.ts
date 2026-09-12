@@ -8,8 +8,12 @@ import { createComment, getCommentsBySession, exportComments, structuralContextF
 import { bulkUpdateNodeReviewStatus, BulkNodeError } from "../src/repo/bulk.js";
 
 let db: DB;
-beforeEach(() => { db = createMemoryDatabase(); });
-afterEach(() => { db.close(); });
+beforeEach(() => {
+  db = createMemoryDatabase();
+});
+afterEach(() => {
+  db.close();
+});
 
 describe("sessions repo", () => {
   it("creates and retrieves a session", () => {
@@ -47,9 +51,16 @@ describe("nodes repo", () => {
   it("creates and retrieves nodes", () => {
     const session = createSession(db, "feat", "main");
     const node = createNode(db, {
-      sessionId: session.id, stableId: "fn:handleOrder",
-      label: "handleOrder", file: "src/orders.ts", startLine: 10, endLine: 30,
-      changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false,
+      sessionId: session.id,
+      stableId: "fn:handleOrder",
+      label: "handleOrder",
+      file: "src/orders.ts",
+      startLine: 10,
+      endLine: 30,
+      changeStatus: "changed",
+      reviewStatus: "unreviewed",
+      reviewedInUnit: null,
+      isTest: false,
     });
     expect(getNode(db, node.id)).toBeDefined();
     expect(getNodesBySession(db, session.id)).toHaveLength(1);
@@ -57,15 +68,31 @@ describe("nodes repo", () => {
   it("gets node neighbors via edges", () => {
     const session = createSession(db, "feat", "main");
     const caller = createNode(db, {
-      sessionId: session.id, stableId: "fn:caller", label: "caller",
-      file: "a.ts", startLine: 1, endLine: 5, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false,
+      sessionId: session.id,
+      stableId: "fn:caller",
+      label: "caller",
+      file: "a.ts",
+      startLine: 1,
+      endLine: 5,
+      changeStatus: "changed",
+      reviewStatus: "unreviewed",
+      reviewedInUnit: null,
+      isTest: false,
     });
     const callee = createNode(db, {
-      sessionId: session.id, stableId: "fn:callee", label: "callee",
-      file: "b.ts", startLine: 1, endLine: 5, changeStatus: "unchanged", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false,
+      sessionId: session.id,
+      stableId: "fn:callee",
+      label: "callee",
+      file: "b.ts",
+      startLine: 1,
+      endLine: 5,
+      changeStatus: "unchanged",
+      reviewStatus: "unreviewed",
+      reviewedInUnit: null,
+      isTest: false,
     });
     db.prepare(
-      "INSERT INTO edges (id, session_id, source_node_id, target_node_id, edge_type) VALUES (?, ?, ?, ?, 'call')"
+      "INSERT INTO edges (id, session_id, source_node_id, target_node_id, edge_type) VALUES (?, ?, ?, ?, 'call')",
     ).run("e1", session.id, caller.id, callee.id);
     expect(getNodeNeighbors(db, caller.id).callees).toHaveLength(1);
     expect(getNodeNeighbors(db, callee.id).callers).toHaveLength(1);
@@ -73,8 +100,16 @@ describe("nodes repo", () => {
   it("updates review status", () => {
     const session = createSession(db, "feat", "main");
     const node = createNode(db, {
-      sessionId: session.id, stableId: "fn:x", label: "x",
-      file: "x.ts", startLine: 1, endLine: 2, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false,
+      sessionId: session.id,
+      stableId: "fn:x",
+      label: "x",
+      file: "x.ts",
+      startLine: 1,
+      endLine: 2,
+      changeStatus: "changed",
+      reviewStatus: "unreviewed",
+      reviewedInUnit: null,
+      isTest: false,
     });
     updateNodeReviewStatus(db, node.id, "reviewed-clean", 0);
     expect(getNode(db, node.id)!.reviewStatus).toBe("reviewed-clean");
@@ -86,8 +121,16 @@ describe("comments repo", () => {
   it("creates and lists comments", () => {
     const session = createSession(db, "feat", "main");
     const node = createNode(db, {
-      sessionId: session.id, stableId: "fn:x", label: "x",
-      file: "x.ts", startLine: 1, endLine: 2, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false,
+      sessionId: session.id,
+      stableId: "fn:x",
+      label: "x",
+      file: "x.ts",
+      startLine: 1,
+      endLine: 2,
+      changeStatus: "changed",
+      reviewStatus: "unreviewed",
+      reviewedInUnit: null,
+      isTest: false,
     });
     createComment(db, session.id, node.id, "snippet", "needs fix", "callers: A");
     expect(getCommentsBySession(db, session.id)).toHaveLength(1);
@@ -95,15 +138,32 @@ describe("comments repo", () => {
   it("exports comments as an ordered array, with startLine/endLine and structural context derived from edges", () => {
     const session = createSession(db, "feat", "main");
     const node = createNode(db, {
-      sessionId: session.id, stableId: "fn:handleOrder", label: "handleOrder",
-      file: "src/orders.ts", startLine: 10, endLine: 30, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false,
+      sessionId: session.id,
+      stableId: "fn:handleOrder",
+      label: "handleOrder",
+      file: "src/orders.ts",
+      startLine: 10,
+      endLine: 30,
+      changeStatus: "changed",
+      reviewStatus: "unreviewed",
+      reviewedInUnit: null,
+      isTest: false,
     });
     const caller = createNode(db, {
-      sessionId: session.id, stableId: "fn:routeHandler", label: "routeHandler",
-      file: "src/routes.ts", startLine: 1, endLine: 5, changeStatus: "unchanged", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false,
+      sessionId: session.id,
+      stableId: "fn:routeHandler",
+      label: "routeHandler",
+      file: "src/routes.ts",
+      startLine: 1,
+      endLine: 5,
+      changeStatus: "unchanged",
+      reviewStatus: "unreviewed",
+      reviewedInUnit: null,
+      isTest: false,
     });
-    db.prepare("INSERT INTO edges (id, session_id, source_node_id, target_node_id, edge_type) VALUES (?, ?, ?, ?, 'call')")
-      .run("e1", session.id, caller.id, node.id);
+    db.prepare(
+      "INSERT INTO edges (id, session_id, source_node_id, target_node_id, edge_type) VALUES (?, ?, ?, ?, 'call')",
+    ).run("e1", session.id, caller.id, node.id);
     // Stored structuralContext ("stale value") is ignored on export — it is
     // always recomputed from the session's edges at export time.
     createComment(db, session.id, node.id, "old", "bug here", "stale value");
@@ -117,8 +177,16 @@ describe("comments repo", () => {
   it("preserves multiple comments on one node in creation order", () => {
     const session = createSession(db, "feat", "main");
     const node = createNode(db, {
-      sessionId: session.id, stableId: "fn:handleOrder", label: "handleOrder",
-      file: "src/orders.ts", startLine: 10, endLine: 30, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false,
+      sessionId: session.id,
+      stableId: "fn:handleOrder",
+      label: "handleOrder",
+      file: "src/orders.ts",
+      startLine: 10,
+      endLine: 30,
+      changeStatus: "changed",
+      reviewStatus: "unreviewed",
+      reviewedInUnit: null,
+      isTest: false,
     });
     createComment(db, session.id, node.id, "snippetA", "first", "ctxA");
     createComment(db, session.id, node.id, "snippetB", "second", "ctxB");
@@ -132,11 +200,22 @@ describe("comments repo", () => {
   it("persists and parses a comment anchor; null anchor round-trips", () => {
     const session = createSession(db, "feat", "main");
     const node = createNode(db, {
-      sessionId: session.id, stableId: "fn:x", label: "x",
-      file: "x.ts", startLine: 1, endLine: 2, changeStatus: "changed", reviewStatus: "unreviewed", reviewedInUnit: null, isTest: false,
+      sessionId: session.id,
+      stableId: "fn:x",
+      label: "x",
+      file: "x.ts",
+      startLine: 1,
+      endLine: 2,
+      changeStatus: "changed",
+      reviewStatus: "unreviewed",
+      reviewedInUnit: null,
+      isTest: false,
     });
     const anchored = createComment(db, session.id, node.id, "snip", "left on lines", "", {
-      startLine: 3, startSide: "old", endLine: 5, endSide: "new",
+      startLine: 3,
+      startSide: "old",
+      endLine: 5,
+      endSide: "new",
     });
     const plain = createComment(db, session.id, node.id, "snip", "node-level", "");
     const byId = new Map(getCommentsBySession(db, session.id).map((c) => [c.id, c]));
@@ -149,17 +228,27 @@ describe("structuralContextFor", () => {
   it("structuralContextFor lists callers, callees, and tests", () => {
     const db = createMemoryDatabase();
     const session = createSession(db, "HEAD", "main", "sha", "fp");
-    const base = { sessionId: session.id, startLine: 1, endLine: 5, changeStatus: "changed" as const, reviewStatus: "unreviewed" as const, reviewedInUnit: null, isTest: false };
+    const base = {
+      sessionId: session.id,
+      startLine: 1,
+      endLine: 5,
+      changeStatus: "changed" as const,
+      reviewStatus: "unreviewed" as const,
+      reviewedInUnit: null,
+      isTest: false,
+    };
     const a = createNode(db, { ...base, stableId: "fn:a", label: "a", file: "src/a.ts" });
     const b = createNode(db, { ...base, stableId: "fn:b", label: "b", file: "src/b.ts" });
     const c = createNode(db, { ...base, stableId: "fn:c", label: "c", file: "src/c.ts" });
     const t = createNode(db, { ...base, stableId: "fn:t", label: "t", file: "test/t.ts", isTest: true });
-    const addEdge = db.prepare("INSERT INTO edges (id, session_id, source_node_id, target_node_id, edge_type) VALUES (?, ?, ?, ?, ?)");
+    const addEdge = db.prepare(
+      "INSERT INTO edges (id, session_id, source_node_id, target_node_id, edge_type) VALUES (?, ?, ?, ?, ?)",
+    );
     addEdge.run("e1", session.id, b.id, a.id, "call"); // b calls a
     addEdge.run("e2", session.id, a.id, c.id, "call"); // a calls c
     addEdge.run("e3", session.id, t.id, a.id, "test"); // t tests a
     expect(structuralContextFor(db, a.id)).toBe(
-      "called by: b (src/b.ts:1); calls: c (src/c.ts:1); tested by: t (test/t.ts:1)"
+      "called by: b (src/b.ts:1); calls: c (src/c.ts:1); tested by: t (test/t.ts:1)",
     );
   });
 });
@@ -179,7 +268,15 @@ describe("bulkUpdateNodeReviewStatus", () => {
   it("updates all nodes in one call, normalizing commented nodes", () => {
     const db = createMemoryDatabase();
     const session = createSession(db, "HEAD", "main", "sha", "fp");
-    const base = { sessionId: session.id, startLine: 1, endLine: 5, changeStatus: "changed" as const, reviewStatus: "unreviewed" as const, reviewedInUnit: null, isTest: false };
+    const base = {
+      sessionId: session.id,
+      startLine: 1,
+      endLine: 5,
+      changeStatus: "changed" as const,
+      reviewStatus: "unreviewed" as const,
+      reviewedInUnit: null,
+      isTest: false,
+    };
     const a = createNode(db, { ...base, stableId: "fn:a", label: "a", file: "a.ts" });
     const b = createNode(db, { ...base, stableId: "fn:b", label: "b", file: "b.ts" });
     createComment(db, session.id, b.id, "", "note", "");
@@ -190,10 +287,19 @@ describe("bulkUpdateNodeReviewStatus", () => {
   it("is atomic: one unknown id writes nothing", () => {
     const db = createMemoryDatabase();
     const session = createSession(db, "HEAD", "main", "sha", "fp");
-    const base = { sessionId: session.id, startLine: 1, endLine: 5, changeStatus: "changed" as const, reviewStatus: "unreviewed" as const, reviewedInUnit: null, isTest: false };
+    const base = {
+      sessionId: session.id,
+      startLine: 1,
+      endLine: 5,
+      changeStatus: "changed" as const,
+      reviewStatus: "unreviewed" as const,
+      reviewedInUnit: null,
+      isTest: false,
+    };
     const a = createNode(db, { ...base, stableId: "fn:a", label: "a", file: "a.ts" });
-    expect(() => bulkUpdateNodeReviewStatus(db, session.id, [a.id, "node_nope"], "reviewed-clean"))
-      .toThrowError(BulkNodeError);
+    expect(() => bulkUpdateNodeReviewStatus(db, session.id, [a.id, "node_nope"], "reviewed-clean")).toThrowError(
+      BulkNodeError,
+    );
     expect(getNode(db, a.id)!.reviewStatus).toBe("unreviewed");
   });
 
@@ -201,7 +307,14 @@ describe("bulkUpdateNodeReviewStatus", () => {
     const db = createMemoryDatabase();
     const s1 = createSession(db, "HEAD", "main", "sha", "fp");
     const s2 = createSession(db, "HEAD", "main", "sha", "fp");
-    const base = { startLine: 1, endLine: 5, changeStatus: "changed" as const, reviewStatus: "unreviewed" as const, reviewedInUnit: null, isTest: false };
+    const base = {
+      startLine: 1,
+      endLine: 5,
+      changeStatus: "changed" as const,
+      reviewStatus: "unreviewed" as const,
+      reviewedInUnit: null,
+      isTest: false,
+    };
     const foreign = createNode(db, { ...base, sessionId: s2.id, stableId: "fn:x", label: "x", file: "x.ts" });
     try {
       bulkUpdateNodeReviewStatus(db, s1.id, [foreign.id], "reviewed-clean");

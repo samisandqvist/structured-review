@@ -5,48 +5,108 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  ci:
-    # macOS support was verified on run 29583867228 (commit a972afb): the full
-    # suite incl. real indexers and the bundle rebuild passed on macos-latest.
-    # Removed from the matrix afterwards to save runner minutes — re-add
-    # `macos-latest` here if a platform-sensitive area changes (spawning,
-    # paths, indexer resolution).
+  verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
+      - name: Check out the full history
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
-      - uses: pnpm/action-setup@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
 
-      - uses: actions/setup-node@v5
+      - name: Install Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24
           cache: pnpm
 
-      # coursier (`cs`) lets the scip-java integration test run for real;
-      # without it the test self-skips and Java coverage silently drops.
-      # JDK + Maven are preinstalled on ubuntu runners.
-      - uses: coursier/setup-action@v1
+      # Coursier keeps the real scip-java integration enabled. The Ubuntu
+      # image supplies its JDK and Maven; TypeScript and Python indexers come
+      # from the frozen pnpm installation.
+      - name: Install Coursier
+        uses: coursier/setup-action@6f83a6f6433e2d3057fc56cc482ce8ed465c577e # v1
 
-      - run: pnpm install --frozen-lockfile
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-      - run: pnpm typecheck
-
-      - run: pnpm test
-
-      - run: pnpm build
-
-      # Both host packages ship committed bundles from one source.
-      # Fail when a runtime change was pushed without rebuilding it.
-      - name: Plugin bundle freshness
+      - name: Verify real indexer toolchains
         run: |
-          pnpm build:plugin
-          if ! git diff --exit-code plugin/ plugins/ || [ -n "$(git status --porcelain plugin/ plugins/)" ]; then
-            echo "::error::plugin bundles are stale — run 'pnpm build && pnpm build:plugin' and commit the result"
-            git status --porcelain plugin/ plugins/
-            exit 1
+          cs version
+          java -version
+          mvn --version
+          pnpm --filter @crw/server exec scip-typescript --version
+          pnpm --filter @crw/server exec scip-python --version
+          cs launch com.sourcegraph:scip-java_2.13:0.12.3 -M com.sourcegraph.scip_java.ScipJava -- --help
+
+      - name: Cache security tool downloads
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            .tools/security/downloads
+            .tools/security/pip-cache
+          key: security-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/security/setup-tools.sh', 'security/semgrep-constraints.txt') }}
+
+      - name: Install pinned security tools
+        run: pnpm security:setup
+
+      # The advisory database is downloaded before the scan, then all package
+      # matching in pnpm verify runs locally with OSV-Scanner's offline mode.
+      - name: Update offline advisory database
+        run: pnpm security:update
+
+      - name: Install Chromium and system dependencies
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Select changed-line coverage base
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            base="$PR_BASE_SHA"
+          elif [[ "$PUSH_BEFORE_SHA" =~ ^0+$ ]]; then
+            base="HEAD^"
+          else
+            base="$PUSH_BEFORE_SHA"
           fi
+          printf 'HARNESS_BASE=%s\n' "$base" >> "$GITHUB_ENV"
+
+      - name: Verify
+        run: pnpm verify
+
+      - name: Mutation check when selected code or its tests change
+        run: |
+          changed=$(git diff --name-only "$HARNESS_BASE" HEAD -- \
+            packages/server/src/coverage.ts packages/server/src/globs.ts packages/server/src/diff.ts \
+            packages/server/test/coverage.test.ts packages/server/test/globs.test.ts \
+            packages/server/test/properties.test.ts stryker.config.mjs vitest.mutation.config.ts \
+            package.json pnpm-lock.yaml)
+          if [[ -n "$changed" ]]; then
+            pnpm test:mutation
+          fi
+
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ci-evidence-${{ github.run_id }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            reports/
+            coverage/
+            playwright-report/
+            test-results/

@@ -19,11 +19,7 @@ export interface ResidualNode {
  * per file (bounding box). Guarantees changed lines outside the graph — types,
  * imports, configs, non-indexed files — still enter the review universe.
  */
-export function computeResiduals(
-  baseRef: string,
-  nodeSpans: Map<string, LineRange[]>,
-  root: string
-): ResidualNode[] {
+export function computeResiduals(baseRef: string, nodeSpans: Map<string, LineRange[]>, root: string): ResidualNode[] {
   const out: ResidualNode[] = [];
   for (const file of changedFilesStrict(baseRef, root)) {
     const ranges = fileChangedRanges(baseRef, file, root, { strict: true });
