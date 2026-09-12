@@ -1,5 +1,5 @@
 {
-  "revision": "06c96a840ab86e6cbb19077a96c2fbd7c0986672",
+  "revision": "cb5ca28c0fe0824dfe8b400d99d0ebb1fa003101",
   "description": "Explicit migration debt: existing files after formatting and strict TypeScript adaptation. New findings and worsened scores fail.",
   "lint": {
     "packages/server/src/db/connection.ts|@typescript-eslint/no-unnecessary-type-assertion|This assertion is unnecessary since the receiver accepts the original type of the expression.|return this.db.prepare(sql) as unknown as Statement;": 1,

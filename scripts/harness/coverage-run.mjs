@@ -6,8 +6,8 @@ import { assessCoverage, changedLines, changedExecutableCoverage } from "./cover
 import { maintainedSources } from "./scope.mjs";
 
 // Approved initial migration only. Editing baseline JSON cannot mint new exemptions.
-const BOOTSTRAP_REVISION = "06c96a840ab86e6cbb19077a96c2fbd7c0986672";
-const BOOTSTRAP_MANIFEST_SHA256 = "8518d0c49857128bccb3d69998db3b569b34b033a7b6f7895bc7303a76fed3da";
+const BOOTSTRAP_REVISION = "cb5ca28c0fe0824dfe8b400d99d0ebb1fa003101";
+const BOOTSTRAP_MANIFEST_SHA256 = "0ed96f994d90ed2090b962787aa7ec575918c7b268ff7c0b12161d21f139f299";
 function validateBootstrap(bootstrap) {
   if (bootstrap === undefined) return;
   const digest = createHash("sha256").update(JSON.stringify(bootstrap)).digest("hex");

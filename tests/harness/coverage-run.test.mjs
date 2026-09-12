@@ -95,7 +95,7 @@ describe("setup migration exceptions", () => {
     };
     writeFileSync(join(root, ".harness/coverage-baseline.json"), JSON.stringify(policy));
     expect(() => runCoverage({ root, changed: true })).toThrow(/unapproved setup exception/);
-    policy.bootstrapChanges.base = "06c96a840ab86e6cbb19077a96c2fbd7c0986672";
+    policy.bootstrapChanges.base = "cb5ca28c0fe0824dfe8b400d99d0ebb1fa003101";
     writeFileSync(join(root, ".harness/coverage-baseline.json"), JSON.stringify(policy));
     expect(() => runCoverage({ root, changed: true })).toThrow(/unapproved setup exception/);
     policy.bootstrapChanges.base = git("rev-parse", "HEAD");
