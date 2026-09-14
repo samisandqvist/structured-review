@@ -1,6 +1,6 @@
 {
   "name": "structured-review",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "displayName": "Structured Review",
   "description": "Walk a reviewer through code changes along the call/dependency graph instead of a file tree. Structured review plans, a local web UI, and exported line-anchored comments.",
   "author": {
