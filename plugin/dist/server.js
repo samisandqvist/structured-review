@@ -3214,13 +3214,13 @@ var require_path = __commonJS({
         return null;
       }
     }
-    var isAbsolute = (
+    var isAbsolute2 = (
       /**
        * Tests if the specified path is absolute.
        * @param {string} path Path to test
        * @returns {boolean} `true` if path is absolute
        */
-      path.isAbsolute = function isAbsolute2(path2) {
+      path.isAbsolute = function isAbsolute3(path2) {
         return /^(?:\/|\w+:|\\\\\w+)/.test(path2);
       }
     );
@@ -3241,7 +3241,7 @@ var require_path = __commonJS({
           path2 = path2.substring(2);
         }
         path2 = path2.replace(/\\/g, "/").replace(/\/{2,}/g, "/");
-        var parts = path2.split("/"), absolute = isAbsolute(path2), prefix = "";
+        var parts = path2.split("/"), absolute = isAbsolute2(path2), prefix = "";
         if (absolute)
           prefix = parts.shift() + "/";
         for (var i = 0; i < parts.length; ) {
@@ -3266,7 +3266,7 @@ var require_path = __commonJS({
         return resolvedUrl;
       if (!alreadyNormalized)
         includePath = normalize2(includePath);
-      if (isAbsolute(includePath))
+      if (isAbsolute2(includePath))
         return includePath;
       if (!alreadyNormalized)
         originPath = normalize2(originPath);
@@ -14814,7 +14814,7 @@ var require_which = __commonJS({
         opt = {};
       const { pathEnv, pathExt, pathExtExe } = getPathInfo(cmd, opt);
       const found = [];
-      const step = (i) => new Promise((resolve, reject) => {
+      const step2 = (i) => new Promise((resolve, reject) => {
         if (i === pathEnv.length)
           return opt.all && found.length ? resolve(found) : reject(getNotFoundError(cmd));
         const ppRaw = pathEnv[i];
@@ -14825,7 +14825,7 @@ var require_which = __commonJS({
       });
       const subStep = (p, i, ii) => new Promise((resolve, reject) => {
         if (ii === pathExt.length)
-          return resolve(step(i + 1));
+          return resolve(step2(i + 1));
         const ext = pathExt[ii];
         isexe(p + ext, { pathExt: pathExtExe }, (er, is) => {
           if (!er && is) {
@@ -14837,7 +14837,7 @@ var require_which = __commonJS({
           return resolve(subStep(p, i, ii + 1));
         });
       });
-      return cb ? step(0).then((res) => cb(null, res), cb) : step(0);
+      return cb ? step2(0).then((res) => cb(null, res), cb) : step2(0);
     };
     var whichSync = (cmd, opt) => {
       opt = opt || {};
@@ -15152,9 +15152,9 @@ __export(flows_exports, {
   readFlows: () => readFlows
 });
 import { DatabaseSync as DatabaseSync2 } from "node:sqlite";
-import { join as join7 } from "node:path";
+import { join as join9 } from "node:path";
 function readFlows(root = repoRoot(), changedStableIds) {
-  const dbPath = process.env.CRG_GRAPH_DB || join7(root, ".code-review-graph", "graph.db");
+  const dbPath = process.env.CRG_GRAPH_DB || join9(root, ".code-review-graph", "graph.db");
   let db2;
   try {
     db2 = new DatabaseSync2(dbPath, { readOnly: true });
@@ -15210,8 +15210,8 @@ var init_flows = __esm({
 });
 
 // packages/server/src/index.ts
-import { existsSync as existsSync4 } from "node:fs";
-import { dirname as dirname2, join as join8 } from "node:path";
+import { existsSync as existsSync5 } from "node:fs";
+import { dirname as dirname2, join as join10 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // node_modules/.pnpm/@hono+node-server@1.19.14_hono@4.12.26/node_modules/@hono/node-server/dist/index.mjs
@@ -15856,8 +15856,8 @@ var serve = (options, listeningListener) => {
 };
 
 // packages/server/src/app.ts
-import { existsSync as existsSync3 } from "node:fs";
-import { join as join6 } from "node:path";
+import { existsSync as existsSync4 } from "node:fs";
+import { join as join8 } from "node:path";
 
 // node_modules/.pnpm/hono@4.12.26/node_modules/hono/dist/compose.js
 var compose = (middleware, onError, onNotFound) => {
@@ -17972,7 +17972,7 @@ function createStaticRoute(webDistPath2) {
 function randomId(prefix) {
   return `${prefix}_${Math.random().toString(36).slice(2, 14)}`;
 }
-var isTestFile = (p) => /\.(test|spec)\.[cm]?[jt]sx?$/.test(p) || /(^|\/)(test_[^/]*|[^/]+_test|conftest)\.py$/.test(p) || /(^|\/)src\/test\/java\//.test(p) || /(Test|IT)\.java$/.test(p) || /(^|\/)(test|tests|__tests__)\//.test(p);
+var isTestFile = (p) => /\.(test|spec)\.[cm]?[jt]sx?$/.test(p) || /(^|\/)(test_[^/]*|[^/]+_test|conftest)\.py$/.test(p) || /(^|\/)src\/test\/java\//.test(p) || /(Test|IT)\.java$/.test(p) || /(Tests?|Specs?)\.cs$/.test(p) || /(^|\/)[^/]+\.(Tests?|Specs?)\//.test(p) || /(^|\/)(test|tests|__tests__)\//.test(p);
 
 // packages/server/src/repo/sessions.ts
 function createSession(db2, branch, baseRef, headSha = "", repoFingerprint2 = "", indexWarnings = []) {
@@ -18128,9 +18128,9 @@ init_diff();
 var import_protobufjs = __toESM(require_protobufjs(), 1);
 init_diff();
 import { execFileSync as execFileSync2 } from "node:child_process";
-import { accessSync, constants as fsConstants, existsSync as existsSync2, mkdtempSync, readFileSync as readFileSync4, rmSync } from "node:fs";
+import { existsSync as existsSync3, mkdtempSync, readFileSync as readFileSync4, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join as join5 } from "node:path";
+import { dirname, join as join7 } from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
@@ -18140,12 +18140,15 @@ import { join as join3 } from "node:path";
 var MARKERS = {
   ts: ["tsconfig.json", "package.json"],
   py: ["pyproject.toml", "setup.py", "requirements.txt"],
-  java: ["pom.xml", "build.gradle", "build.gradle.kts"]
+  java: ["pom.xml", "build.gradle", "build.gradle.kts"],
+  // `*.ext` entries match by suffix (solution/project files carry the project's name).
+  cs: ["*.sln", "*.slnx", "*.csproj"]
 };
 var SOURCE_EXTS = {
   ts: [".ts", ".tsx", ".mts", ".cts"],
   py: [".py"],
-  java: [".java"]
+  java: [".java"],
+  cs: [".cs"]
 };
 var FINGERPRINT_EXTRAS = {
   ts: ["tsconfig*.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock"],
@@ -18157,8 +18160,19 @@ var FINGERPRINT_EXTRAS = {
     "gradle.lockfile",
     "maven-wrapper.properties",
     "settings.xml"
+  ],
+  cs: [
+    "Directory.Build.props",
+    "Directory.Build.targets",
+    "Directory.Packages.props",
+    "global.json",
+    "NuGet.config",
+    "packages.lock.json"
   ]
 };
+function matchesMarker(fileName, marker) {
+  return marker.startsWith("*.") ? fileName.endsWith(marker.slice(1)) : fileName === marker;
+}
 function languagePathspecs(language, root) {
   const prefix = root ? `${root}/` : "";
   return [
@@ -18167,7 +18181,7 @@ function languagePathspecs(language, root) {
     ...FINGERPRINT_EXTRAS[language].map((m) => `:(glob)${prefix}**/${m}`)
   ];
 }
-var SKIP_DIRS = /* @__PURE__ */ new Set(["node_modules", "dist", "build", "out", "target", "coverage", "venv", "__pycache__"]);
+var SKIP_DIRS = /* @__PURE__ */ new Set(["node_modules", "dist", "build", "out", "target", "coverage", "venv", "__pycache__", "obj"]);
 function discoverLanguageRoots(repoRoot2) {
   const candidates = [];
   walk(repoRoot2, "", candidates);
@@ -18188,9 +18202,9 @@ function walk(abs, rel, out) {
   } catch {
     return;
   }
-  const fileNames = new Set(entries.filter((e) => e.isFile()).map((e) => e.name));
+  const fileNames = entries.filter((e) => e.isFile()).map((e) => e.name);
   for (const language of Object.keys(MARKERS)) {
-    if (MARKERS[language].some((m) => fileNames.has(m))) out.push({ language, root: rel });
+    if (MARKERS[language].some((m) => fileNames.some((f) => matchesMarker(f, m)))) out.push({ language, root: rel });
   }
   for (const e of entries) {
     if (!e.isDirectory() || e.name.startsWith(".") || SKIP_DIRS.has(e.name)) continue;
@@ -18216,15 +18230,247 @@ function rootHasSources(absRoot, language) {
   return false;
 }
 
+// packages/server/src/graph/scip-dotnet.ts
+import { accessSync as accessSync2, constants as fsConstants2, existsSync as existsSync2, readdirSync as readdirSync2 } from "node:fs";
+import { isAbsolute, join as join5 } from "node:path";
+
+// packages/server/src/graph/toolchain.ts
+import { accessSync, constants as fsConstants } from "node:fs";
+import { join as join4 } from "node:path";
+function parseCommandOverride(raw2) {
+  const trimmed = raw2?.trim();
+  if (!trimmed) return void 0;
+  const [argv0, ...args] = trimmed.split(/\s+/);
+  return argv0 ? { argv0, args } : void 0;
+}
+function findOnPath(bin, env) {
+  for (const dir of (env.PATH ?? "").split(":")) {
+    if (!dir) continue;
+    try {
+      accessSync(join4(dir, bin), fsConstants.X_OK);
+      return true;
+    } catch {
+    }
+  }
+  return false;
+}
+
+// packages/server/src/graph/scip-dotnet.ts
+var SCIP_DOTNET_INSTALL_HINT = "install it with 'dotnet tool install --global scip-dotnet' (needs the .NET SDK 8 or newer), or set SCIP_DOTNET_CMD";
+function resolveScipDotnetCommand(env = process.env) {
+  const override = parseCommandOverride(env.SCIP_DOTNET_CMD);
+  if (override) return override;
+  if (findOnPath("scip-dotnet", env)) return { argv0: "scip-dotnet", args: [] };
+  const home = env.DOTNET_CLI_HOME ?? env.HOME;
+  if (!home) return null;
+  const tool = join5(home, ".dotnet", "tools", "scip-dotnet");
+  try {
+    accessSync2(tool, fsConstants2.X_OK);
+    return { argv0: tool, args: [] };
+  } catch {
+    return null;
+  }
+}
+var SOLUTION_EXTS = [".slnx", ".sln", ".csproj"];
+function pickSolutionFile(absRoot, override) {
+  const chosen = override?.trim();
+  if (chosen) {
+    const path = isAbsolute(chosen) ? chosen : join5(absRoot, chosen);
+    if (!existsSync2(path)) {
+      throw new Error(`SCIP_DOTNET_SOLUTION points at '${chosen}', which does not exist under '${absRoot}'`);
+    }
+    return path;
+  }
+  const names = readdirSync2(absRoot, { withFileTypes: true }).filter((e) => e.isFile()).map((e) => e.name).sort();
+  for (const ext of SOLUTION_EXTS) {
+    const found = names.filter((n) => n.endsWith(ext));
+    if (found.length === 1) return join5(absRoot, found[0]);
+    if (found.length > 1) {
+      throw new Error(
+        `multiple ${ext} files in '${absRoot}' (${found.join(", ")}); set SCIP_DOTNET_SOLUTION to choose one`
+      );
+    }
+  }
+  throw new Error(`no .slnx, .sln or .csproj file in '${absRoot}'`);
+}
+function scipDotnetIndexArgs(solution, absRoot, indexPath) {
+  return [
+    "index",
+    solution,
+    "--working-directory",
+    absRoot,
+    "--output",
+    indexPath,
+    "--exclude",
+    "**/obj/**",
+    "--exclude",
+    "**/bin/**"
+  ];
+}
+
+// packages/server/src/graph/csharp-spans.ts
+function synthesizeCsharpSpans(docs, readFile) {
+  return docs.map((doc) => {
+    const path = doc.relativePath ?? "";
+    if (!path.endsWith(".cs") || !(doc.occurrences ?? []).some(needsSpan)) return doc;
+    let lines;
+    try {
+      lines = readFile(path).split("\n");
+    } catch {
+      return doc;
+    }
+    const occurrences = doc.occurrences.map((o) => needsSpan(o) ? withSpan(o, lines) : o);
+    return { ...doc, occurrences };
+  });
+}
+var ROLE_DEFINITION = 1;
+function needsSpan(o) {
+  if (!((o.symbolRoles ?? 0) & ROLE_DEFINITION) || o.enclosingRange || o.range?.[0] === void 0) return false;
+  return !!o.symbol && !o.symbol.startsWith("local ") && /\)\.$/.test(o.symbol);
+}
+function withSpan(o, lines) {
+  const start = o.range[0];
+  const end = memberEndLine(lines, start);
+  return { ...o, enclosingRange: [start, 0, end, lines[end]?.length ?? 0] };
+}
+var top = (s) => s.modes[s.modes.length - 1];
+function memberEndLine(lines, startLine) {
+  const s = { modes: ["code"], depth: 0, sawBrace: false, rawQuotes: 0, holeDepth: 0, done: false };
+  for (let i = startLine; i < lines.length; i++) {
+    const line = lines[i];
+    if (top(s) === "line-comment") s.modes.pop();
+    if (top(s) === "code" && /^\s*#/.test(line)) continue;
+    for (let c = 0; c < line.length; c++) {
+      c = step(s, line, c);
+      if (s.done) return i;
+    }
+  }
+  return startLine;
+}
+function step(s, line, c) {
+  switch (top(s)) {
+    case "code":
+    case "hole":
+      return stepCode(s, line, c);
+    case "line-comment":
+      return line.length;
+    case "block-comment":
+      if (!line.startsWith("*/", c)) return c;
+      s.modes.pop();
+      return c + 1;
+    case "string":
+      return stepQuoted(s, line, c, '"');
+    case "char":
+      return stepQuoted(s, line, c, "'");
+    case "verbatim":
+      if (line.startsWith('""', c)) return c + 1;
+      if (line[c] === '"') s.modes.pop();
+      return c;
+    case "raw": {
+      const closer = '"'.repeat(s.rawQuotes);
+      if (!line.startsWith(closer, c)) return c;
+      s.modes.pop();
+      return c + s.rawQuotes - 1;
+    }
+    case "interp":
+      return stepInterpolated(s, line, c);
+  }
+}
+function stepQuoted(s, line, c, quote) {
+  if (line[c] === "\\") return c + 1;
+  if (line[c] === quote) s.modes.pop();
+  return c;
+}
+function stepInterpolated(s, line, c) {
+  const ch = line[c];
+  if (ch === "\\") return c + 1;
+  if (ch === "{") {
+    if (line[c + 1] === "{") return c + 1;
+    s.modes.push("hole");
+    s.holeDepth = 0;
+    return c;
+  }
+  if (ch === '"') s.modes.pop();
+  return c;
+}
+function stepCode(s, line, c) {
+  const ch = line[c];
+  const next = line[c + 1];
+  if (ch === "/" && next === "/") {
+    s.modes.push("line-comment");
+    return line.length;
+  }
+  if (ch === "/" && next === "*") {
+    s.modes.push("block-comment");
+    return c + 1;
+  }
+  if (ch === "'") {
+    s.modes.push("char");
+    return c;
+  }
+  if (ch === '"') return openString(s, line, c);
+  if (ch === "@" && next === '"') {
+    s.modes.push("verbatim");
+    return c + 1;
+  }
+  if (ch === "$" || ch === "@" && next === "$") return openInterpolated(s, line, c);
+  return top(s) === "hole" ? stepHoleBrace(s, ch, c) : stepMemberBrace(s, ch, c);
+}
+function openString(s, line, c) {
+  let quotes = 0;
+  while (line[c + quotes] === '"') quotes++;
+  if (quotes >= 3) {
+    s.modes.push("raw");
+    s.rawQuotes = quotes;
+    return c + quotes - 1;
+  }
+  if (quotes === 2) return c + 1;
+  s.modes.push("string");
+  return c;
+}
+function openInterpolated(s, line, c) {
+  const rest = line.slice(c, c + 3);
+  if (rest === '$@"' || rest === '@$"') {
+    s.modes.push("verbatim");
+    return c + 2;
+  }
+  if (rest === '$""' && line[c + 3] === '"') return openString(s, line, c + 1);
+  if (rest.startsWith('$"')) {
+    s.modes.push("interp");
+    return c + 1;
+  }
+  return c;
+}
+function stepHoleBrace(s, ch, c) {
+  if (ch === "{") s.holeDepth++;
+  else if (ch === "}") {
+    if (s.holeDepth === 0) s.modes.pop();
+    else s.holeDepth--;
+  }
+  return c;
+}
+function stepMemberBrace(s, ch, c) {
+  if (ch === "{") {
+    s.depth++;
+    s.sawBrace = true;
+  } else if (ch === "}") {
+    s.depth--;
+    if (s.sawBrace && s.depth === 0) s.done = true;
+  } else if (ch === ";" && !s.sawBrace && s.depth === 0) {
+    s.done = true;
+  }
+  return c;
+}
+
 // packages/server/src/graph/scip.ts
 init_flow_tree();
 
 // packages/server/src/graph/entry-points.ts
 import { readFileSync as readFileSync3 } from "node:fs";
-import { join as join4 } from "node:path";
+import { join as join6 } from "node:path";
 function loadConfiguredEntries(root) {
   try {
-    const raw2 = JSON.parse(readFileSync3(join4(root, ".srev-entry-points.json"), "utf8"));
+    const raw2 = JSON.parse(readFileSync3(join6(root, ".srev-entry-points.json"), "utf8"));
     if (!Array.isArray(raw2.entryPoints)) return [];
     return raw2.entryPoints.filter(
       (e) => !!e && typeof e.label === "string" && (e.file === void 0 || typeof e.file === "string")
@@ -18237,7 +18483,7 @@ function isExportedAt(root, file2, startLine, cache) {
   try {
     let lines = cache?.get(file2);
     if (!lines) {
-      lines = readFileSync3(join4(root, file2), "utf8").split("\n");
+      lines = readFileSync3(join6(root, file2), "utf8").split("\n");
       cache?.set(file2, lines);
     }
     return /^export\b/.test((lines[startLine - 1] ?? "").trimStart());
@@ -18254,7 +18500,7 @@ function pythonEntryReasons(root, file2, node, cache) {
   let lines = cache?.get(file2);
   if (!lines) {
     try {
-      lines = readFileSync3(join4(root, file2), "utf8").split("\n");
+      lines = readFileSync3(join6(root, file2), "utf8").split("\n");
     } catch {
       return [];
     }
@@ -18290,6 +18536,32 @@ function pythonEntryReasons(root, file2, node, cache) {
         break;
       }
     }
+  }
+  return [...reasons];
+}
+var CS_ROUTE_ATTRIBUTE = /\[(?:[^\]]*,\s*)?(?:Http(?:Get|Post|Put|Delete|Patch|Head|Options)|Route|AcceptVerbs)\b/;
+function cachedLines(root, file2, cache) {
+  const hit = cache?.get(file2);
+  if (hit) return hit;
+  try {
+    const lines = readFileSync3(join6(root, file2), "utf8").split("\n");
+    cache?.set(file2, lines);
+    return lines;
+  } catch {
+    return void 0;
+  }
+}
+function csharpEntryReasons(root, file2, node, cache) {
+  const lines = cachedLines(root, file2, cache);
+  if (!lines) return [];
+  const reasons = /* @__PURE__ */ new Set();
+  const def = lines[node.startLine - 1] ?? "";
+  if (/\bstatic\b[^;{=]*\bMain\s*\(/.test(def)) reasons.add("cli");
+  if (CS_ROUTE_ATTRIBUTE.test(def)) reasons.add("http-route");
+  for (let i = node.startLine - 2; i >= 0; i--) {
+    const t = (lines[i] ?? "").trim();
+    if (!t.startsWith("[")) break;
+    if (CS_ROUTE_ATTRIBUTE.test(t)) reasons.add("http-route");
   }
   return [...reasons];
 }
@@ -18428,16 +18700,24 @@ var ScipGraphProvider = class {
     const fileCache = /* @__PURE__ */ new Map();
     return entrySyms.map((sym, i) => {
       const n = g.nodes.get(sym);
-      const isPy = n.file.endsWith(".py");
-      const evidence = entryEvidence({
-        isRoot: rootSyms.has(sym),
-        // `export` keyword is a TS/JS concept; never probe it on Python files.
-        isExported: isPy ? false : isExportedAt(this.repoRoot, n.file, n.startLine, fileCache),
-        isConfigured: configuredSyms.has(sym),
-        detected: isPy ? pythonEntryReasons(this.repoRoot, n.file, { label: n.label, startLine: n.startLine }, fileCache) : []
-      });
+      const evidence = this.evidenceFor(sym, n, { roots: rootSyms, configured: configuredSyms }, fileCache);
       return makeFlow(i + 1, n.label, buildFlowTree(sym, g.callAdj, resolve, relevant), evidence);
     }).filter((f) => f.steps.length > 1).sort((a, b) => b.criticality - a.criticality);
+  }
+  /** Entry evidence for one graph root. `export` is a TS/JS concept and is never probed on Python or C# files. */
+  evidenceFor(sym, n, sets, fileCache) {
+    const node = { label: n.label, startLine: n.startLine };
+    const isPy = n.file.endsWith(".py");
+    const isCs = n.file.endsWith(".cs");
+    let detected = [];
+    if (isPy) detected = pythonEntryReasons(this.repoRoot, n.file, node, fileCache);
+    else if (isCs) detected = csharpEntryReasons(this.repoRoot, n.file, node, fileCache);
+    return entryEvidence({
+      isRoot: sets.roots.has(sym),
+      isExported: isPy || isCs ? false : isExportedAt(this.repoRoot, n.file, n.startLine, fileCache),
+      isConfigured: sets.configured.has(sym),
+      detected
+    });
   }
   /**
    * Content-sensitive repo-state fingerprint. Any git failure yields a unique
@@ -18460,10 +18740,10 @@ var ScipGraphProvider = class {
     });
     return entry.graph;
   }
-  /** Enabled indexer jobs: discovered roots filtered by SCIP_LANGS (default ts,py,java). */
+  /** Enabled indexer jobs: discovered roots filtered by SCIP_LANGS (default ts,py,java,cs). */
   discoverJobs() {
     const enabled = new Set(
-      (process.env.SCIP_LANGS ?? "ts,py,java").split(",").map((s) => s.trim()).filter(Boolean)
+      (process.env.SCIP_LANGS ?? "ts,py,java,cs").split(",").map((s) => s.trim()).filter(Boolean)
     );
     const discovered = discoverLanguageRoots(this.repoRoot);
     const jobs = discovered.filter((j) => enabled.has(j.language));
@@ -18476,24 +18756,43 @@ var ScipGraphProvider = class {
   resolveJavaCommand() {
     return resolveScipJavaCommand();
   }
+  /** Test seam over the module-level resolver. */
+  resolveDotnetCommand() {
+    return resolveScipDotnetCommand();
+  }
+  /** Unbundled toolchains: when one is missing, its jobs drop with a warning instead of failing the session. */
+  externalToolchains() {
+    return [
+      {
+        language: "java",
+        available: () => this.resolveJavaCommand() !== null,
+        skipped: (n, roots) => `Java indexing skipped for ${n} root(s) (${roots}): scip-java toolchain not found. Install coursier ('cs') plus a JDK and Maven (scip-java runs via 'cs launch com.sourcegraph:scip-java_2.13:${SCIP_JAVA_DEFAULT_VERSION} -M com.sourcegraph.scip_java.ScipJava -- index'), or set SCIP_JAVA_CMD. Java changes appear as residual-only until then.`
+      },
+      {
+        language: "cs",
+        available: () => this.resolveDotnetCommand() !== null,
+        skipped: (n, roots) => `C# indexing skipped for ${n} root(s) (${roots}): scip-dotnet not found; ${SCIP_DOTNET_INSTALL_HINT}. C# changes appear as residual-only until then.`
+      }
+    ];
+  }
   /**
-   * Jobs to actually run plus degradation warnings. A missing Java toolchain
-   * must not fail (or silently hollow out) a ts/py session: java jobs drop
-   * with a warning that surfaces in session diagnostics; their files stay
-   * visible as residual-only changes. A present-but-failing toolchain is NOT
-   * handled here — runIndexer throws IndexError loudly for that.
+   * Jobs to actually run plus degradation warnings. A missing external
+   * toolchain must not fail (or silently hollow out) the other languages'
+   * session: its jobs drop with a warning that surfaces in session
+   * diagnostics; their files stay visible as residual-only changes. A
+   * present-but-failing toolchain is NOT handled here — runIndexer throws
+   * IndexError loudly for that.
    */
   planJobs() {
-    const jobs = this.discoverJobs();
-    const javaJobs = jobs.filter((j) => j.language === "java");
-    if (javaJobs.length === 0 || this.resolveJavaCommand()) return { jobs, warnings: [] };
-    const roots = javaJobs.map((j) => `'${j.root || "."}'`).join(", ");
-    return {
-      jobs: jobs.filter((j) => j.language !== "java"),
-      warnings: [
-        `Java indexing skipped for ${javaJobs.length} root(s) (${roots}): scip-java toolchain not found. Install coursier ('cs') plus a JDK and Maven (scip-java runs via 'cs launch com.sourcegraph:scip-java_2.13:${SCIP_JAVA_DEFAULT_VERSION} -M com.sourcegraph.scip_java.ScipJava -- index'), or set SCIP_JAVA_CMD. Java changes appear as residual-only until then.`
-      ]
-    };
+    let jobs = this.discoverJobs();
+    const warnings = [];
+    for (const tool of this.externalToolchains()) {
+      const affected = jobs.filter((j) => j.language === tool.language);
+      if (affected.length === 0 || tool.available()) continue;
+      warnings.push(tool.skipped(affected.length, affected.map((j) => `'${j.root || "."}'`).join(", ")));
+      jobs = jobs.filter((j) => j.language !== tool.language);
+    }
+    return { jobs, warnings };
   }
   /** Degradation notices for the current (cached) build — [] when none. */
   async getIndexWarnings() {
@@ -18534,44 +18833,16 @@ var ScipGraphProvider = class {
   }
   /** Run one job's SCIP indexer, decode its index, and re-root the documents. */
   async runIndexer(job) {
-    const absRoot = job.root ? join5(this.repoRoot, job.root) : this.repoRoot;
-    const dir = mkdtempSync(join5(tmpdir(), "scip-srev-"));
-    const indexPath = join5(dir, "index.scip");
-    const tsconfigPath = join5(absRoot, "tsconfig.json");
-    const hadTsconfig = existsSync2(tsconfigPath);
+    const absRoot = job.root ? join7(this.repoRoot, job.root) : this.repoRoot;
+    const dir = mkdtempSync(join7(tmpdir(), "scip-srev-"));
+    const indexPath = join7(dir, "index.scip");
+    const tsconfigPath = join7(absRoot, "tsconfig.json");
+    const hadTsconfig = existsSync3(tsconfigPath);
     const started = Date.now();
     try {
       try {
-        if (job.language === "ts") {
-          const binJs = resolveIndexerBin("@sourcegraph/scip-typescript", "scip-typescript");
-          execFileSync2(process.execPath, [binJs, "index", "--infer-tsconfig", "--output", indexPath], {
-            cwd: absRoot,
-            encoding: "utf8",
-            maxBuffer: 256 * 1024 * 1024
-          });
-        } else if (job.language === "py") {
-          const binJs = resolveIndexerBin("@sourcegraph/scip-python", "scip-python");
-          const projectName = job.root.replace(/[^A-Za-z0-9._-]+/g, "-") || "repo";
-          execFileSync2(process.execPath, [binJs, "index", ".", "--output", indexPath, "--project-name", projectName], {
-            cwd: absRoot,
-            encoding: "utf8",
-            maxBuffer: 256 * 1024 * 1024
-          });
-        } else if (job.language === "java") {
-          const cmd = this.resolveJavaCommand();
-          if (!cmd) {
-            throw new IndexError(
-              `scip-java toolchain not found for root '${job.root || "."}': install coursier ('cs') plus a JDK and Maven, or set SCIP_JAVA_CMD`
-            );
-          }
-          execFileSync2(cmd.argv0, [...cmd.args, "index", "--output", indexPath], {
-            cwd: absRoot,
-            encoding: "utf8",
-            maxBuffer: 256 * 1024 * 1024
-          });
-        } else {
-          throw new IndexError(`no indexer available for language '${job.language}' (root '${job.root || "."}')`);
-        }
+        const cmd = this.indexerCommand(job, absRoot, indexPath);
+        execFileSync2(cmd.argv0, cmd.args, { cwd: absRoot, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
       } catch (e) {
         if (e instanceof IndexError) throw e;
         const err = e;
@@ -18585,7 +18856,11 @@ ${String(err.stderr).slice(-2e3)}` : "";
         longs: Number,
         defaults: false
       });
-      const docs = rerootDocuments(idx.documents ?? [], job.root, absRoot);
+      let documents = idx.documents ?? [];
+      if (job.language === "cs") {
+        documents = synthesizeCsharpSpans(documents, (rel) => readFileSync4(join7(absRoot, rel), "utf8"));
+      }
+      const docs = rerootDocuments(documents, job.root, absRoot);
       assertIndexNotEmpty(docs, job);
       console.log(
         `scip: ${job.language} root '${job.root || "."}' \u2014 ${docs.length} documents in ${Date.now() - started}ms`
@@ -18596,6 +18871,49 @@ ${String(err.stderr).slice(-2e3)}` : "";
       if (job.language === "ts" && !hadTsconfig) rmSync(tsconfigPath, { force: true });
     }
   }
+  /**
+   * argv for one job's indexer. External toolchains route through their
+   * resolve*Command() seams (not the module-level helpers) so a subclass
+   * overriding them for planning also controls execution; argv0 may be a bare
+   * name that execFileSync re-resolves against PATH at spawn time. Throws
+   * IndexError when an external toolchain is absent.
+   */
+  indexerCommand(job, absRoot, indexPath) {
+    if (job.language === "ts") {
+      const binJs = resolveIndexerBin("@sourcegraph/scip-typescript", "scip-typescript");
+      return { argv0: process.execPath, args: [binJs, "index", "--infer-tsconfig", "--output", indexPath] };
+    }
+    if (job.language === "py") {
+      const binJs = resolveIndexerBin("@sourcegraph/scip-python", "scip-python");
+      const projectName = job.root.replace(/[^A-Za-z0-9._-]+/g, "-") || "repo";
+      return {
+        argv0: process.execPath,
+        args: [binJs, "index", ".", "--output", indexPath, "--project-name", projectName]
+      };
+    }
+    if (job.language === "java") {
+      const cmd = this.resolveJavaCommand();
+      if (!cmd) {
+        throw new IndexError(
+          `scip-java toolchain not found for root '${job.root || "."}': install coursier ('cs') plus a JDK and Maven, or set SCIP_JAVA_CMD`
+        );
+      }
+      return { argv0: cmd.argv0, args: [...cmd.args, "index", "--output", indexPath] };
+    }
+    return this.dotnetCommand(job, absRoot, indexPath);
+  }
+  dotnetCommand(job, absRoot, indexPath) {
+    const where = `root '${job.root || "."}'`;
+    const cmd = this.resolveDotnetCommand();
+    if (!cmd) throw new IndexError(`scip-dotnet not found for ${where}: ${SCIP_DOTNET_INSTALL_HINT}`);
+    let solution;
+    try {
+      solution = pickSolutionFile(absRoot, process.env.SCIP_DOTNET_SOLUTION);
+    } catch (e) {
+      throw new IndexError(`cs ${where}: ${e.message}`);
+    }
+    return { argv0: cmd.argv0, args: [...cmd.args, ...scipDotnetIndexArgs(solution, absRoot, indexPath)] };
+  }
 };
 function resolveIndexerBin(pkgName, binName) {
   const home = process.env.SREV_INDEXER_HOME;
@@ -18603,16 +18921,12 @@ function resolveIndexerBin(pkgName, binName) {
   const pkg = JSON.parse(readFileSync4(pkgPath, "utf8"));
   const rel = typeof pkg.bin === "string" ? pkg.bin : pkg.bin[binName];
   if (!rel) throw new Error(`package '${pkgName}' does not expose the '${binName}' executable`);
-  return join5(dirname(pkgPath), rel);
+  return join7(dirname(pkgPath), rel);
 }
 var SCIP_JAVA_DEFAULT_VERSION = "0.12.3";
 function resolveScipJavaCommand(env = process.env) {
-  const override = env.SCIP_JAVA_CMD?.trim();
-  if (override) {
-    const [argv0, ...args] = override.split(/\s+/);
-    if (!argv0) return null;
-    return { argv0, args };
-  }
+  const override = parseCommandOverride(env.SCIP_JAVA_CMD);
+  if (override) return override;
   if (findOnPath("scip-java", env)) return { argv0: "scip-java", args: [] };
   if (findOnPath("cs", env)) {
     const version2 = env.SCIP_JAVA_VERSION ?? SCIP_JAVA_DEFAULT_VERSION;
@@ -18622,17 +18936,6 @@ function resolveScipJavaCommand(env = process.env) {
     };
   }
   return null;
-}
-function findOnPath(bin, env) {
-  for (const dir of (env.PATH ?? "").split(":")) {
-    if (!dir) continue;
-    try {
-      accessSync(join5(dir, bin), fsConstants.X_OK);
-      return true;
-    } catch {
-    }
-  }
-  return false;
 }
 var IndexError = class extends Error {
   phase = "index";
@@ -18657,12 +18960,14 @@ function rerootDocuments(docs, jobRoot, absRoot) {
     return { ...d, relativePath: `${prefix}${p}` };
   });
 }
-var ROLE_DEFINITION = 1;
+var ROLE_DEFINITION2 = 1;
 var ROLE_IMPORT = 2;
 function labelOf(symbol2) {
   const s = symbol2.replace(/\([^)]*\)\.$/, "").replace(/[.#/]+$/, "");
   const ctor = s.match(/([A-Za-z0-9_$]+)#`<init>`$/);
   if (ctor) return ctor[1] ?? null;
+  const csCtor = s.match(/([A-Za-z0-9_$]+)#`\.ctor`$/);
+  if (csCtor) return csCtor[1] ?? null;
   const m = s.match(/([A-Za-z0-9_$]+)`?$/);
   return m?.[1] ?? null;
 }
@@ -18708,7 +19013,7 @@ function collectDefinitions(documents) {
   const definitionFiles = /* @__PURE__ */ new Map();
   for (const { file: file2, occurrences } of documents) {
     for (const occurrence of occurrences) {
-      if (!((occurrence.symbolRoles ?? 0) & ROLE_DEFINITION)) continue;
+      if (!((occurrence.symbolRoles ?? 0) & ROLE_DEFINITION2)) continue;
       const symbol2 = occurrence.symbol;
       if (!symbol2 || symbol2.startsWith("local ")) continue;
       definitionFiles.set(symbol2, file2);
@@ -18719,7 +19024,7 @@ function collectDefinitions(documents) {
   return { nodes, definitionFiles };
 }
 function addFileReference(file2, occurrence, definitionFiles, requires) {
-  if ((occurrence.symbolRoles ?? 0) & ROLE_DEFINITION) return;
+  if ((occurrence.symbolRoles ?? 0) & ROLE_DEFINITION2) return;
   if (!occurrence.symbol) return;
   const definition = definitionFiles.get(occurrence.symbol);
   if (!definition || definition === file2) return;
@@ -18740,7 +19045,7 @@ function collectFileRequires(documents, definitionFiles) {
 function documentCallers(document, nodes) {
   const callers = [];
   for (const occurrence of document.occurrences) {
-    if (!((occurrence.symbolRoles ?? 0) & ROLE_DEFINITION) || !occurrence.symbol) continue;
+    if (!((occurrence.symbolRoles ?? 0) & ROLE_DEFINITION2) || !occurrence.symbol) continue;
     const node = nodes.get(occurrence.symbol);
     if (node?.file === document.file) {
       callers.push({ symbol: occurrence.symbol, sl: node.startLine, el: node.endLine });
@@ -18752,7 +19057,7 @@ function collectDocumentCalls(document, nodes, implementations, calls) {
   const callers = documentCallers(document, nodes);
   for (const occurrence of document.occurrences) {
     const roles = occurrence.symbolRoles ?? 0;
-    if (roles & ROLE_DEFINITION || roles & ROLE_IMPORT || !occurrence.symbol) continue;
+    if (roles & ROLE_DEFINITION2 || roles & ROLE_IMPORT || !occurrence.symbol) continue;
     const targets = callTargets(occurrence.symbol, nodes, implementations);
     if (targets.length === 0) continue;
     const caller = enclosingCaller(callers, occurrence);
@@ -19720,8 +20025,8 @@ function cleanRegex(source) {
   const end = source.endsWith("$") ? source.length - 1 : source.length;
   return source.slice(start, end);
 }
-function floatSafeRemainder(val, step) {
-  const ratio = val / step;
+function floatSafeRemainder(val, step2) {
+  const ratio = val / step2;
   const roundedRatio = Math.round(ratio);
   const tolerance = Number.EPSILON * Math.max(Math.abs(ratio), 1);
   if (Math.abs(ratio - roundedRatio) < tolerance)
@@ -34427,7 +34732,7 @@ function createApp(ctx) {
   app2.route("/api/sessions", createEventsRoute(resolved));
   app2.route("/api/sessions", createFlowsRoute(resolved));
   app2.route("/api/sessions", createChangesRoute(resolved));
-  if (resolved.webDistPath && existsSync3(join6(resolved.webDistPath, "index.html"))) {
+  if (resolved.webDistPath && existsSync4(join8(resolved.webDistPath, "index.html"))) {
     app2.route("/", createStaticRoute(resolved.webDistPath));
   }
   return app2;
@@ -38365,8 +38670,8 @@ switch (which) {
     graphProvider = new StubGraphProvider();
 }
 var here = dirname2(fileURLToPath2(import.meta.url));
-var webDistPath = [process.env.SREV_WEB_DIST, join8(here, "..", "..", "web", "dist"), join8(here, "..", "web")].find(
-  (p) => p && existsSync4(join8(p, "index.html"))
+var webDistPath = [process.env.SREV_WEB_DIST, join10(here, "..", "..", "web", "dist"), join10(here, "..", "web")].find(
+  (p) => p && existsSync5(join10(p, "index.html"))
 );
 var webBuilt = webDistPath !== void 0;
 var hostname3 = process.env.SREV_HOST || "127.0.0.1";

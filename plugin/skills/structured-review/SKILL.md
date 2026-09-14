@@ -55,7 +55,9 @@ Language support: TypeScript and Python indexers are installed automatically
 minute once and network access to the npm registry). Java additionally needs the scip-java toolchain on PATH
 (coursier `cs` + JDK + Maven); without it Java changes appear as residual-only
 with a visible warning — relay that warning, it is expected degradation, not
-an error.
+an error. C# needs scip-dotnet (`dotnet tool install --global scip-dotnet`,
+.NET SDK 8+) on PATH or in `~/.dotnet/tools`; without it C# changes appear as
+residual-only with the same kind of warning.
 
 Setup flow:
 

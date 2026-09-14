@@ -32,11 +32,20 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      # Coursier keeps the real scip-java integration enabled. The Ubuntu
-      # image supplies its JDK and Maven; TypeScript and Python indexers come
-      # from the frozen pnpm installation.
+      # Coursier keeps the real scip-java integration enabled and the .NET SDK
+      # plus scip-dotnet keep the real scip-dotnet integration enabled. The
+      # Ubuntu image supplies its JDK and Maven; TypeScript and Python indexers
+      # come from the frozen pnpm installation.
       - name: Install Coursier
         uses: coursier/setup-action@9b7939bf01fd1185ce2babe16135168361bf2c62 # v3.0.2
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Install scip-dotnet
+        run: dotnet tool install --global scip-dotnet --version 0.2.14
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -49,6 +58,8 @@ jobs:
           pnpm --filter @srev/server exec scip-typescript --version
           pnpm --filter @srev/server exec scip-python --version
           cs launch com.sourcegraph:scip-java_2.13:0.12.3 -M com.sourcegraph.scip_java.ScipJava -- --help
+          dotnet --version
+          "$HOME/.dotnet/tools/scip-dotnet" --version
 
       - name: Cache security tool downloads
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

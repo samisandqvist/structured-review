@@ -8,7 +8,7 @@
     {
       "name": "structured-review",
       "source": "./plugin",
-      "description": "Graph-based code review walkthrough: review plans along call flows, local web UI, exported line-anchored comments. TS/Python bundled; Java via scip-java toolchain on PATH."
+      "description": "Graph-based code review walkthrough: review plans along call flows, local web UI, exported line-anchored comments. TS/Python bundled; Java via scip-java toolchain on PATH; C# via scip-dotnet."
     }
   ]
 }

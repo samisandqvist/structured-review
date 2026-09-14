@@ -84,7 +84,7 @@ Initial high findings were removed with narrow pnpm overrides to `brace-expansio
 
 Gitleaks has one content allowlist for the `sourcegraph-access-token` rule: a complete workflow line of the form `uses: owner/action@<40 lowercase hex characters>`, optionally followed by a comment. These public immutable Action revisions otherwise collide with that rule. Workflow paths and other rules are still scanned, and the negative secret fixture still blocks. Tool caches and local agent-session state have separate documented path exclusions because they are ignored local state outside the repository deliverable.
 
-OSV covers the repository's pnpm lockfile, including build and test dependencies. It does not scan the private Python environment used to execute Semgrep. Freezing that dependency tree improves reproducibility but is not advisory coverage; Python runtime dependency vulnerabilities remain an explicit gap. The separately downloaded SCIP Java/Maven/Coursier toolchain also sits outside the pnpm advisory inventory. The Semgrep rules are a bounded syntactic local ruleset rather than a claim of complete source vulnerability detection. Tool setup currently supports Linux x64 and arm64 with Python 3.10 or newer. No scanner uploads source, lockfile metadata, or results.
+OSV covers the repository's pnpm lockfile, including build and test dependencies. It does not scan the private Python environment used to execute Semgrep. Freezing that dependency tree improves reproducibility but is not advisory coverage; Python runtime dependency vulnerabilities remain an explicit gap. The separately downloaded SCIP Java/Maven/Coursier toolchain and the .NET SDK / scip-dotnet tool also sit outside the pnpm advisory inventory. The Semgrep rules are a bounded syntactic local ruleset rather than a claim of complete source vulnerability detection. Tool setup currently supports Linux x64 and arm64 with Python 3.10 or newer. No scanner uploads source, lockfile metadata, or results.
 
 Dependabot is configured weekly for npm production/development groups and GitHub Actions, using the standard [Dependabot options](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference). This file alone does not prove activation, update delivery, or protected review/merge policy.
 
@@ -135,11 +135,11 @@ Initial size/complexity assessment: 45 production violations plus 20 in tests, w
 
 The owner approved three behavior-preserving implementation changes after harness commit `98bf523`. Attachment derivation now coordinates four named rules with unchanged first-match precedence and cross-unit reference ownership. SCIP graph construction separates definition discovery, file dependencies, caller attribution, and adjacency construction; type/value distinctions, language filters, innermost-caller selection, deduplication, and iteration order remain intact. The plan unit separates pure review progress from interaction state, header editing, and flow/orphan content. Helpers remain local to their existing modules; no public interfaces or product behavior were changed.
 
-| Function | Cyclomatic before → after | Cognitive before → after |
-| --- | --- | --- |
-| `deriveAttachments` | 18 → 5 | 39 → 1 |
-| `buildGraphFromIndex` | 59 → 3 | 79 → 2 |
-| `UnitBlock` | 35 → 4 | 25 → 1 |
+| Function              | Cyclomatic before → after | Cognitive before → after |
+| --------------------- | ------------------------- | ------------------------ |
+| `deriveAttachments`   | 18 → 5                    | 39 → 1                   |
+| `buildGraphFromIndex` | 59 → 3                    | 79 → 2                   |
+| `UnitBlock`           | 35 → 4                    | 25 → 1                   |
 
 All extracted helpers meet the existing function limits. `UnitBlock` falls from 179 to 22 nonblank/noncomment lines; the work removes eight production violations (45 → 37). Their eight allowances were removed from the static baseline so reintroducing those violations fails. This does not clear unrelated legacy debt. Extra local functions make responsibilities explicit at the cost of more named operations; no shared framework or cross-package layer was introduced.
 

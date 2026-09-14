@@ -12,12 +12,12 @@ This document describes the implementation checked on 2026-09-12. See the
 
 ## Boundaries
 
-| Component | Responsibility | Boundary |
-| --- | --- | --- |
-| `packages/skill` | Agent instructions, planning context, plan submission, server lifecycle, comment harvesting | Uses the server over HTTP; does not access its SQLite database directly |
-| `packages/server` | Git/diff access, graph providers, sessions, plans, comments, review state, static UI | The single stateful hub; Hono and Node's built-in `node:sqlite` |
-| `packages/web` | Plan tracks, diff display, navigation, comments, review marks | Uses the hub; never reads Git or indexers directly |
-| `plugin/`, `plugins/structured-review/` | Claude Code and Codex distribution packages | Generated from the same runtime and skill sources |
+| Component                               | Responsibility                                                                              | Boundary                                                                |
+| --------------------------------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `packages/skill`                        | Agent instructions, planning context, plan submission, server lifecycle, comment harvesting | Uses the server over HTTP; does not access its SQLite database directly |
+| `packages/server`                       | Git/diff access, graph providers, sessions, plans, comments, review state, static UI        | The single stateful hub; Hono and Node's built-in `node:sqlite`         |
+| `packages/web`                          | Plan tracks, diff display, navigation, comments, review marks                               | Uses the hub; never reads Git or indexers directly                      |
+| `plugin/`, `plugins/structured-review/` | Claude Code and Codex distribution packages                                                 | Generated from the same runtime and skill sources                       |
 
 The agent owns interpretation of intent and plan narratives. The server owns
 membership, validation, persistence, and coverage arithmetic. It stores narrative
@@ -65,14 +65,22 @@ The SCIP provider discovers project roots from language markers and runs one
 indexer job per retained root. A root nested under another root of the same
 language is omitted; nested roots of different languages remain. Decoded document
 paths are rebased to repository-relative paths before documents are combined into
-one graph. TypeScript/JavaScript, Python, and Java use separate indexers; combining
-their indexes does not create cross-process request traces.
+one graph. TypeScript/JavaScript, Python, Java, and C# use separate indexers;
+combining their indexes does not create cross-process request traces.
 
 Java indexing uses an external launcher or coursier and invokes the project's
 build. A missing launcher produces visible warnings and leaves Java text changes
 reviewable as residuals. A launcher that is present but fails is an indexing
 error. The decoder also rejects an empty index for a root known to contain
 sources. Indexer absence and indexer failure have deliberately different outcomes.
+
+C# indexing runs scip-dotnet over the root's solution file (or single project
+file) and lets it restore packages. scip-dotnet emits no enclosing ranges, so the
+provider derives method body spans from source before building the graph;
+properties, fields and events never become nodes. scip-dotnet exits successfully
+even when the build has compile errors, so a broken C# build produces a partial
+index rather than an indexing error; only a missing tool (warning) or a non-zero
+exit / empty index (error) are signalled.
 
 Static references are evidence, not proof of execution. A call that binds to an
 interface or abstract method is bridged to every implementation the indexer

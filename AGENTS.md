@@ -72,9 +72,9 @@ srev shutdown                                      # stop the hub over HTTP
 ## Graph providers
 
 `GRAPH_PROVIDER=scip` is the default. It indexes the tracked working tree with
-scip-typescript, scip-python, and (when available) scip-java. A missing Java
-compiler toolchain is reported in `indexWarnings`; affected text changes remain
-reviewable as residuals. SCIP relationships are inferred from references and
+scip-typescript, scip-python, and (when available) scip-java and scip-dotnet. A
+missing Java or .NET indexer toolchain is reported in `indexWarnings`; affected
+text changes remain reviewable as residuals. SCIP relationships are inferred from references and
 are not execution traces.
 
 `GRAPH_PROVIDER=crg` selects the external code-review-graph provider;

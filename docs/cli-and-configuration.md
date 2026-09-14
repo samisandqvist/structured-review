@@ -67,20 +67,23 @@ or proof of correctness. See the [README's limits](../README.md#what-the-review-
 
 ## Providers and environment variables
 
-| Variable | Default | Meaning |
-|---|---|---|
-| `GRAPH_PROVIDER` | `scip` | Graph source: `scip` (multi-language SCIP indexers, default), `crg` (external code-review-graph server), or `stub` (fixed fake graph for testing). |
-| `SREV_DB_PATH` | `review.db` | Path to the local SQLite database file (built-in `node:sqlite`, no native deps). |
-| `PORT` | `3456` | Port the server listens on. |
-| `SREV_HOST` | `127.0.0.1` | Bind address. Keep it loopback-only: the API has no authentication and rejects request hosts other than `localhost`, `127.0.0.1`, or `[::1]`. |
-| `SREV_WEB_DIST` | auto | Path to the built web SPA. Auto-resolved for both the monorepo and plugin-bundle layouts. |
-| `SREV_SERVER_URL` | `http://localhost:3456` | Hub URL the `srev` CLI talks to (or pass `--port`). |
-| `SREV_DATA_DIR` | unset | Plugin mode: root for per-repo DBs and logs (keyed by repo name + path hash). Unset = state lands in the repo (`review.db`, `.srev/`). |
-| `SREV_INDEXER_HOME` | unset | Plugin mode: directory whose `node_modules` holds the scip indexers. Unset = resolve from the app's own dependencies. |
-| `SCIP_CONTEXT_DEPTH` | `1` | (scip) Call-graph hops of context around changed nodes. |
-| `SCIP_NO_CACHE` | unset | (scip) Set to `1` to force a full re-index instead of using cached per-root indexes. |
-| `SCIP_JAVA_CMD` | unset | (scip) Explicit scip-java launcher, overriding PATH detection of `scip-java`/`cs`. |
-| `SCIP_JAVA_VERSION` | `0.12.3` | (scip) scip-java version used when launching via coursier. |
+| Variable               | Default                 | Meaning                                                                                                                                            |
+| ---------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GRAPH_PROVIDER`       | `scip`                  | Graph source: `scip` (multi-language SCIP indexers, default), `crg` (external code-review-graph server), or `stub` (fixed fake graph for testing). |
+| `SREV_DB_PATH`         | `review.db`             | Path to the local SQLite database file (built-in `node:sqlite`, no native deps).                                                                   |
+| `PORT`                 | `3456`                  | Port the server listens on.                                                                                                                        |
+| `SREV_HOST`            | `127.0.0.1`             | Bind address. Keep it loopback-only: the API has no authentication and rejects request hosts other than `localhost`, `127.0.0.1`, or `[::1]`.      |
+| `SREV_WEB_DIST`        | auto                    | Path to the built web SPA. Auto-resolved for both the monorepo and plugin-bundle layouts.                                                          |
+| `SREV_SERVER_URL`      | `http://localhost:3456` | Hub URL the `srev` CLI talks to (or pass `--port`).                                                                                                |
+| `SREV_DATA_DIR`        | unset                   | Plugin mode: root for per-repo DBs and logs (keyed by repo name + path hash). Unset = state lands in the repo (`review.db`, `.srev/`).             |
+| `SREV_INDEXER_HOME`    | unset                   | Plugin mode: directory whose `node_modules` holds the scip indexers. Unset = resolve from the app's own dependencies.                              |
+| `SCIP_CONTEXT_DEPTH`   | `1`                     | (scip) Call-graph hops of context around changed nodes.                                                                                            |
+| `SCIP_NO_CACHE`        | unset                   | (scip) Set to `1` to force a full re-index instead of using cached per-root indexes.                                                               |
+| `SCIP_JAVA_CMD`        | unset                   | (scip) Explicit scip-java launcher, overriding PATH detection of `scip-java`/`cs`.                                                                 |
+| `SCIP_JAVA_VERSION`    | `0.12.3`                | (scip) scip-java version used when launching via coursier.                                                                                         |
+| `SCIP_DOTNET_CMD`      | unset                   | (scip) Explicit scip-dotnet launcher, overriding PATH and `~/.dotnet/tools` detection.                                                             |
+| `SCIP_DOTNET_SOLUTION` | unset                   | (scip) Solution or project file to index when a C# root holds several; relative to that root.                                                      |
+| `SCIP_LANGS`           | `ts,py,java,cs`         | (scip) Comma-separated indexer languages to enable.                                                                                                |
 
 A few more exist for advanced setups: `SCIP_REPO_ROOT` and `CRG_REPO_ROOT`
 override the git root the respective provider reads from (default: the
@@ -104,12 +107,22 @@ HTTP 415; bodyless shutdown and DELETE requests do not need a content type.
   "baseRef": "main",
   "headSha": "…",
   "overview": "…",
-  "comments": [ {
-    "id": "…", "nodeId": "…", "stableId": "…", "label": "…",
-    "file": "…", "startLine": 1, "endLine": 20,
-    "anchor": { "startLine": 4, "startSide": "new", "endLine": 6, "endSide": "new" },
-    "hunkSnippet": "…", "text": "…", "structuralContext": "…", "createdAt": 0
-  } ]
+  "comments": [
+    {
+      "id": "…",
+      "nodeId": "…",
+      "stableId": "…",
+      "label": "…",
+      "file": "…",
+      "startLine": 1,
+      "endLine": 20,
+      "anchor": { "startLine": 4, "startSide": "new", "endLine": 6, "endSide": "new" },
+      "hunkSnippet": "…",
+      "text": "…",
+      "structuralContext": "…",
+      "createdAt": 0
+    }
+  ]
 }
 ```
 
@@ -143,7 +156,7 @@ handlers) often have callers in the graph and are missed by inference —
 declare them in `.srev-entry-points.json` at the repository root:
 
 ```json
-{ "entryPoints": [ { "label": "main", "file": "src/cli.ts" } ] }
+{ "entryPoints": [{ "label": "main", "file": "src/cli.ts" }] }
 ```
 
 `label` matches the function name exactly; `file` (optional) must equal or

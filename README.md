@@ -13,13 +13,13 @@ I built this because I wanted help understanding changes before approving them.
 It's useful for reviewing a teammate's work as well as code written by an agent.
 Claude Code or Codex prepares the walkthrough; you do the reviewing.
 
-**Experimental alpha, in active use.** TypeScript/JavaScript, Python and Java are
-supported, with limitations below. Feedback about confusing reviews and awkward
+**Experimental alpha, in active use.** TypeScript/JavaScript, Python, Java and C#
+are supported, with limitations below. Feedback about confusing reviews and awkward
 first-use experiences is especially welcome.
 
 ![Example review: a call-based plan and related test on the left, an order-pricing diff and review comments on the right.](docs/images/demo-review.png)
 
-*A small order-pricing review. Run `pnpm demo` to try it yourself.*
+_A small order-pricing review. Run `pnpm demo` to try it yourself._
 
 ## Try it
 
@@ -125,15 +125,15 @@ Publishing them to GitHub is a separate step.
 
 ### Keyboard shortcuts
 
-| Key | Action |
-| --- | --- |
-| `j` / `k` | Next / previous change, wrapping around the walk |
-| `n` | Next unreviewed change |
-| `r` | Mark the current change reviewed and advance |
-| `c` | Focus the comment box |
-| `?` | Show or hide keyboard help (also available as a button) |
-| `Esc` | Close keyboard help; cancel a review-note draft or a comment edit |
-| `Ctrl+Enter` / `Cmd+Enter` | Send a comment or review note; save a comment edit |
+| Key                        | Action                                                            |
+| -------------------------- | ----------------------------------------------------------------- |
+| `j` / `k`                  | Next / previous change, wrapping around the walk                  |
+| `n`                        | Next unreviewed change                                            |
+| `r`                        | Mark the current change reviewed and advance                      |
+| `c`                        | Focus the comment box                                             |
+| `?`                        | Show or hide keyboard help (also available as a button)           |
+| `Esc`                      | Close keyboard help; cancel a review-note draft or a comment edit |
+| `Ctrl+Enter` / `Cmd+Enter` | Send a comment or review note; save a comment edit                |
 
 Navigation shortcuts pause while you're typing or using a dropdown. You can
 also drag the divider to give the diff or the plan more room. Double-click a
@@ -177,14 +177,17 @@ describe possible additions; they are proposals, not shipped features.
 - “Reviewed” means a person marked the item. It doesn't establish test coverage,
   architectural fit, security or correctness.
 
-| Language | Indexing setup |
-| --- | --- |
-| TypeScript / JavaScript | scip-typescript, installed automatically by the plugin |
-| Python | scip-python, installed automatically by the plugin |
-| Java | scip-java; requires coursier (`cs`), a JDK and Maven on PATH |
+| Language                | Indexing setup                                                                             |
+| ----------------------- | ------------------------------------------------------------------------------------------ |
+| TypeScript / JavaScript | scip-typescript, installed automatically by the plugin                                     |
+| Python                  | scip-python, installed automatically by the plugin                                         |
+| Java                    | scip-java; requires coursier (`cs`), a JDK and Maven on PATH                               |
+| C#                      | scip-dotnet (`dotnet tool install --global scip-dotnet`); requires the .NET SDK 8 or newer |
 
-Missing Java tooling produces a visible warning and a text-only review of the
+Missing Java or C# tooling produces a visible warning and a text-only review of the
 affected changes. Install the tools and recreate the session for call relationships.
+scip-dotnet does not fail on compile errors: a broken C# build yields a partial
+index and more residuals rather than an error.
 
 ## Local data
 
@@ -194,8 +197,9 @@ It accepts only loopback hostnames and rejects foreign browser origins and
 cross-site requests. JSON write endpoints require `Content-Type: application/json`.
 These checks protect the browser boundary; local processes can still use the API.
 
-Review only repositories and build configurations you trust. Java indexing runs
-the project's build (including build plugins); indexing is not sandboxed.
+Review only repositories and build configurations you trust. Java and C# indexing
+run the project's build or package restore (including build plugins and NuGet
+restore); indexing is not sandboxed.
 
 Plugin state uses the host's writable plugin data directory when available,
 otherwise `~/.local/share/structured-review` (or `XDG_DATA_HOME`).
@@ -203,7 +207,7 @@ otherwise `~/.local/share/structured-review` (or `XDG_DATA_HOME`).
 and `.srev/` in the reviewed repository. `srev gc` removes a repository's review data.
 
 The hub has no telemetry or model API calls. Indexer installation downloads
-packages, and Java tooling may download build dependencies. If you use Claude
+packages, and Java or .NET tooling may download build dependencies. If you use Claude
 Code or Codex to prepare a review, the source/context those agents read is subject
 to that product's data handling; using a local hub doesn't make the agent offline.
 The browser also requests display fonts from Google Fonts.
