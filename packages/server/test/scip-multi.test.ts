@@ -403,3 +403,25 @@ describe("interface-to-implementation call bridging", () => {
     expect(g.callAdj.get(IMPL)).toEqual([IFACE]);
   });
 });
+
+describe("c# symbol shapes", () => {
+  const CTOR = "scip-dotnet nuget . . Controllers/TokenController#`.ctor`().";
+  const GET = "scip-dotnet nuget . . Controllers/TokenController#Get().";
+  const OVERLOAD = "scip-dotnet nuget . . Core/TokenService#Resolve(+1).";
+  it("labels constructors with the class name and keeps overloads as nodes", () => {
+    const documents: ScipDocument[] = [
+      {
+        relativePath: "src/TokenController.cs",
+        occurrences: [
+          { symbol: CTOR, symbolRoles: 1, range: [3, 11, 26], enclosingRange: [3, 0, 3, 60] },
+          { symbol: GET, symbolRoles: 1, range: [5, 32, 35], enclosingRange: [5, 0, 5, 70] },
+          { symbol: OVERLOAD, symbolRoles: 1, range: [8, 18, 25], enclosingRange: [8, 0, 8, 80] },
+        ],
+      },
+    ];
+    const g = buildGraphFromIndex({ documents }, "/repo");
+    expect(g.nodes.get(CTOR)?.label).toBe("TokenController");
+    expect(g.nodes.get(GET)?.label).toBe("Get");
+    expect(g.nodes.get(OVERLOAD)?.label).toBe("Resolve");
+  });
+});

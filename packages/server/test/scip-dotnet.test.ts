@@ -3,6 +3,9 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pickSolutionFile, resolveScipDotnetCommand, scipDotnetIndexArgs } from "../src/graph/scip-dotnet.js";
+import { ScipGraphProvider } from "../src/graph/scip.js";
+import type { IndexerJob } from "../src/graph/roots.js";
+import type { ToolCommand } from "../src/graph/toolchain.js";
 
 const tmp = (prefix: string) => mkdtempSync(join(tmpdir(), prefix));
 const exe = (dir: string, name: string) => writeFileSync(join(dir, name), "#!/bin/sh\n", { mode: 0o755 });
@@ -83,5 +86,68 @@ describe("scipDotnetIndexArgs", () => {
       "--exclude",
       "**/bin/**",
     ]);
+  });
+});
+
+describe("C# degradation (planJobs)", () => {
+  const JOBS: IndexerJob[] = [
+    { language: "ts", root: "", hasSources: true },
+    { language: "cs", root: "dotnet", hasSources: true },
+    { language: "java", root: "svc", hasSources: true },
+  ];
+  class Probe extends ScipGraphProvider {
+    dotnet: ToolCommand | null = null;
+    java: ToolCommand | null = { argv0: "scip-java", args: [] };
+    protected override discoverJobs(): IndexerJob[] {
+      return JOBS;
+    }
+    protected override resolveDotnetCommand(): ToolCommand | null {
+      return this.dotnet;
+    }
+    protected override resolveJavaCommand(): ToolCommand | null {
+      return this.java;
+    }
+    plan() {
+      return this.planJobs();
+    }
+  }
+  it("drops cs jobs with an install hint when scip-dotnet is missing", () => {
+    const { jobs, warnings } = new Probe({ repoRoot: "/tmp" }).plan();
+    expect(jobs.map((j) => j.language)).toEqual(["ts", "java"]);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/^C# indexing skipped for 1 root\(s\) \('dotnet'\)/);
+    expect(warnings[0]).toMatch(/dotnet tool install --global scip-dotnet/);
+    expect(warnings[0]).toMatch(/SCIP_DOTNET_CMD/);
+  });
+  it("reports both missing toolchains independently", () => {
+    const p = new Probe({ repoRoot: "/tmp" });
+    p.java = null;
+    const { jobs, warnings } = p.plan();
+    expect(jobs.map((j) => j.language)).toEqual(["ts"]);
+    expect(warnings.map((w) => w.slice(0, 4))).toEqual(["Java", "C# i"]);
+  });
+  it("keeps cs jobs when the tool resolves", () => {
+    const p = new Probe({ repoRoot: "/tmp" });
+    p.dotnet = { argv0: "scip-dotnet", args: [] };
+    expect(p.plan()).toEqual({ jobs: JOBS, warnings: [] });
+  });
+});
+
+describe("SCIP_LANGS default", () => {
+  it("enables cs alongside ts, py and java", () => {
+    class Probe extends ScipGraphProvider {
+      jobs() {
+        return this.discoverJobs();
+      }
+    }
+    const dir = tmp("srev-langs-");
+    writeFileSync(join(dir, "App.sln"), "");
+    const prev = process.env.SCIP_LANGS;
+    delete process.env.SCIP_LANGS;
+    try {
+      expect(new Probe({ repoRoot: dir }).jobs()).toEqual([{ language: "cs", root: "", hasSources: false }]);
+    } finally {
+      if (prev !== undefined) process.env.SCIP_LANGS = prev;
+    }
   });
 });

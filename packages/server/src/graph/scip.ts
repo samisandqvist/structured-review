@@ -15,7 +15,20 @@ import {
   subtreeFingerprint,
   type LineRange,
 } from "../diff.js";
-import { discoverLanguageRoots, languagePathspecs, rootHasSources, type IndexerJob } from "./roots.js";
+import {
+  discoverLanguageRoots,
+  languagePathspecs,
+  rootHasSources,
+  type IndexerJob,
+  type IndexerLanguage,
+} from "./roots.js";
+import {
+  pickSolutionFile,
+  resolveScipDotnetCommand,
+  scipDotnetIndexArgs,
+  SCIP_DOTNET_INSTALL_HINT,
+} from "./scip-dotnet.js";
+import { synthesizeCsharpSpans } from "./csharp-spans.js";
 import { isTestFile } from "../util.js";
 import { findOnPath, parseCommandOverride, type ToolCommand } from "./toolchain.js";
 import { buildFlowTree, makeFlow, reachesChanged } from "./flow-tree.js";
@@ -258,10 +271,10 @@ export class ScipGraphProvider implements GraphProvider {
     return entry.graph;
   }
 
-  /** Enabled indexer jobs: discovered roots filtered by SCIP_LANGS (default ts,py,java). */
+  /** Enabled indexer jobs: discovered roots filtered by SCIP_LANGS (default ts,py,java,cs). */
   protected discoverJobs(): IndexerJob[] {
     const enabled = new Set(
-      (process.env.SCIP_LANGS ?? "ts,py,java")
+      (process.env.SCIP_LANGS ?? "ts,py,java,cs")
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean),
@@ -281,27 +294,55 @@ export class ScipGraphProvider implements GraphProvider {
     return resolveScipJavaCommand();
   }
 
-  /**
-   * Jobs to actually run plus degradation warnings. A missing Java toolchain
-   * must not fail (or silently hollow out) a ts/py session: java jobs drop
-   * with a warning that surfaces in session diagnostics; their files stay
-   * visible as residual-only changes. A present-but-failing toolchain is NOT
-   * handled here — runIndexer throws IndexError loudly for that.
-   */
-  protected planJobs(): { jobs: IndexerJob[]; warnings: string[] } {
-    const jobs = this.discoverJobs();
-    const javaJobs = jobs.filter((j) => j.language === "java");
-    if (javaJobs.length === 0 || this.resolveJavaCommand()) return { jobs, warnings: [] };
-    const roots = javaJobs.map((j) => `'${j.root || "."}'`).join(", ");
-    return {
-      jobs: jobs.filter((j) => j.language !== "java"),
-      warnings: [
-        `Java indexing skipped for ${javaJobs.length} root(s) (${roots}): scip-java toolchain not found. ` +
+  /** Test seam over the module-level resolver. */
+  protected resolveDotnetCommand(): ToolCommand | null {
+    return resolveScipDotnetCommand();
+  }
+
+  /** Unbundled toolchains: when one is missing, its jobs drop with a warning instead of failing the session. */
+  private externalToolchains(): {
+    language: IndexerLanguage;
+    available: () => boolean;
+    skipped: (n: number, roots: string) => string;
+  }[] {
+    return [
+      {
+        language: "java",
+        available: () => this.resolveJavaCommand() !== null,
+        skipped: (n, roots) =>
+          `Java indexing skipped for ${n} root(s) (${roots}): scip-java toolchain not found. ` +
           `Install coursier ('cs') plus a JDK and Maven (scip-java runs via ` +
           `'cs launch com.sourcegraph:scip-java_2.13:${SCIP_JAVA_DEFAULT_VERSION} -M com.sourcegraph.scip_java.ScipJava -- index'), ` +
           `or set SCIP_JAVA_CMD. Java changes appear as residual-only until then.`,
-      ],
-    };
+      },
+      {
+        language: "cs",
+        available: () => this.resolveDotnetCommand() !== null,
+        skipped: (n, roots) =>
+          `C# indexing skipped for ${n} root(s) (${roots}): scip-dotnet not found; ${SCIP_DOTNET_INSTALL_HINT}. ` +
+          `C# changes appear as residual-only until then.`,
+      },
+    ];
+  }
+
+  /**
+   * Jobs to actually run plus degradation warnings. A missing external
+   * toolchain must not fail (or silently hollow out) the other languages'
+   * session: its jobs drop with a warning that surfaces in session
+   * diagnostics; their files stay visible as residual-only changes. A
+   * present-but-failing toolchain is NOT handled here — runIndexer throws
+   * IndexError loudly for that.
+   */
+  protected planJobs(): { jobs: IndexerJob[]; warnings: string[] } {
+    let jobs = this.discoverJobs();
+    const warnings: string[] = [];
+    for (const tool of this.externalToolchains()) {
+      const affected = jobs.filter((j) => j.language === tool.language);
+      if (affected.length === 0 || tool.available()) continue;
+      warnings.push(tool.skipped(affected.length, affected.map((j) => `'${j.root || "."}'`).join(", ")));
+      jobs = jobs.filter((j) => j.language !== tool.language);
+    }
+    return { jobs, warnings };
   }
 
   /** Degradation notices for the current (cached) build — [] when none. */
@@ -361,40 +402,8 @@ export class ScipGraphProvider implements GraphProvider {
     const started = Date.now();
     try {
       try {
-        if (job.language === "ts") {
-          const binJs = resolveIndexerBin("@sourcegraph/scip-typescript", "scip-typescript");
-          execFileSync(process.execPath, [binJs, "index", "--infer-tsconfig", "--output", indexPath], {
-            cwd: absRoot,
-            encoding: "utf8",
-            maxBuffer: 256 * 1024 * 1024,
-          });
-        } else if (job.language === "py") {
-          const binJs = resolveIndexerBin("@sourcegraph/scip-python", "scip-python");
-          const projectName = job.root.replace(/[^A-Za-z0-9._-]+/g, "-") || "repo";
-          execFileSync(process.execPath, [binJs, "index", ".", "--output", indexPath, "--project-name", projectName], {
-            cwd: absRoot,
-            encoding: "utf8",
-            maxBuffer: 256 * 1024 * 1024,
-          });
-        } else if (job.language === "java") {
-          // Route through the resolveJavaCommand() seam (not the module-level
-          // helper directly) so a subclass overriding it for planning also
-          // controls execution. argv0 may be a bare name (e.g. "cs") that
-          // execFileSync re-resolves against PATH at spawn time.
-          const cmd = this.resolveJavaCommand();
-          if (!cmd) {
-            throw new IndexError(
-              `scip-java toolchain not found for root '${job.root || "."}': install coursier ('cs') plus a JDK and Maven, or set SCIP_JAVA_CMD`,
-            );
-          }
-          execFileSync(cmd.argv0, [...cmd.args, "index", "--output", indexPath], {
-            cwd: absRoot,
-            encoding: "utf8",
-            maxBuffer: 256 * 1024 * 1024,
-          });
-        } else {
-          throw new IndexError(`no indexer available for language '${job.language}' (root '${job.root || "."}')`);
-        }
+        const cmd = this.indexerCommand(job, absRoot, indexPath);
+        execFileSync(cmd.argv0, cmd.args, { cwd: absRoot, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
       } catch (e) {
         if (e instanceof IndexError) throw e;
         const err = e as Error & { stderr?: unknown };
@@ -407,7 +416,12 @@ export class ScipGraphProvider implements GraphProvider {
         longs: Number,
         defaults: false,
       }) as ScipIndex;
-      const docs = rerootDocuments(idx.documents ?? [], job.root, absRoot);
+      let documents = idx.documents ?? [];
+      if (job.language === "cs") {
+        // scip-dotnet writes paths relative to --working-directory (= absRoot).
+        documents = synthesizeCsharpSpans(documents, (rel) => readFileSync(join(absRoot, rel), "utf8"));
+      }
+      const docs = rerootDocuments(documents, job.root, absRoot);
       assertIndexNotEmpty(docs, job);
       console.log(
         `scip: ${job.language} root '${job.root || "."}' — ${docs.length} documents in ${Date.now() - started}ms`,
@@ -417,6 +431,51 @@ export class ScipGraphProvider implements GraphProvider {
       rmSync(dir, { recursive: true, force: true });
       if (job.language === "ts" && !hadTsconfig) rmSync(tsconfigPath, { force: true });
     }
+  }
+
+  /**
+   * argv for one job's indexer. External toolchains route through their
+   * resolve*Command() seams (not the module-level helpers) so a subclass
+   * overriding them for planning also controls execution; argv0 may be a bare
+   * name that execFileSync re-resolves against PATH at spawn time. Throws
+   * IndexError when an external toolchain is absent.
+   */
+  private indexerCommand(job: IndexerJob, absRoot: string, indexPath: string): ToolCommand {
+    if (job.language === "ts") {
+      const binJs = resolveIndexerBin("@sourcegraph/scip-typescript", "scip-typescript");
+      return { argv0: process.execPath, args: [binJs, "index", "--infer-tsconfig", "--output", indexPath] };
+    }
+    if (job.language === "py") {
+      const binJs = resolveIndexerBin("@sourcegraph/scip-python", "scip-python");
+      const projectName = job.root.replace(/[^A-Za-z0-9._-]+/g, "-") || "repo";
+      return {
+        argv0: process.execPath,
+        args: [binJs, "index", ".", "--output", indexPath, "--project-name", projectName],
+      };
+    }
+    if (job.language === "java") {
+      const cmd = this.resolveJavaCommand();
+      if (!cmd) {
+        throw new IndexError(
+          `scip-java toolchain not found for root '${job.root || "."}': install coursier ('cs') plus a JDK and Maven, or set SCIP_JAVA_CMD`,
+        );
+      }
+      return { argv0: cmd.argv0, args: [...cmd.args, "index", "--output", indexPath] };
+    }
+    return this.dotnetCommand(job, absRoot, indexPath);
+  }
+
+  private dotnetCommand(job: IndexerJob, absRoot: string, indexPath: string): ToolCommand {
+    const where = `root '${job.root || "."}'`;
+    const cmd = this.resolveDotnetCommand();
+    if (!cmd) throw new IndexError(`scip-dotnet not found for ${where}: ${SCIP_DOTNET_INSTALL_HINT}`);
+    let solution: string;
+    try {
+      solution = pickSolutionFile(absRoot, process.env.SCIP_DOTNET_SOLUTION);
+    } catch (e) {
+      throw new IndexError(`cs ${where}: ${(e as Error).message}`);
+    }
+    return { argv0: cmd.argv0, args: [...cmd.args, ...scipDotnetIndexArgs(solution, absRoot, indexPath)] };
   }
 }
 
@@ -531,6 +590,9 @@ function labelOf(symbol: string): string | null {
   // Java constructors (`Cls#`<init>``): label with the class name.
   const ctor = s.match(/([A-Za-z0-9_$]+)#`<init>`$/);
   if (ctor) return ctor[1] ?? null;
+  // C# constructors (`Cls#`.ctor``): label with the class name.
+  const csCtor = s.match(/([A-Za-z0-9_$]+)#`\.ctor`$/);
+  if (csCtor) return csCtor[1] ?? null;
   const m = s.match(/([A-Za-z0-9_$]+)`?$/);
   return m?.[1] ?? null;
 }
