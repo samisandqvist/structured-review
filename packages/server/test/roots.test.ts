@@ -36,6 +36,37 @@ describe("discoverLanguageRoots", () => {
     }
   });
 
+  it("finds a C# root by solution or project file and drops project roots nested under a solution root", () => {
+    const dir = fixture({
+      "dotnet/Demo.sln": "",
+      "dotnet/src/Demo.Core/Demo.Core.csproj": "<Project/>",
+      "dotnet/src/Demo.Core/Token.cs": "class Token {}",
+      "lonely/Lonely.csproj": "<Project/>",
+      "lonely/Program.cs": "class P {}",
+    });
+    try {
+      expect(discoverLanguageRoots(dir)).toEqual([
+        { language: "cs", root: "dotnet", hasSources: true },
+        { language: "cs", root: "lonely", hasSources: true },
+      ]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not treat generated obj/ trees as roots or sources", () => {
+    const dir = fixture({
+      "svc/Svc.slnx": "",
+      "svc/obj/Debug/net8.0/Svc.GlobalUsings.g.cs": "// generated",
+      "svc/obj/project.assets.json": "{}",
+    });
+    try {
+      expect(discoverLanguageRoots(dir)).toEqual([{ language: "cs", root: "svc", hasSources: false }]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("skips roots nested inside a root of the same language", () => {
     const dir = fixture({
       "package.json": "{}",
@@ -138,6 +169,23 @@ describe("languagePathspecs", () => {
       ":(glob)example-service/**/gradle.lockfile",
       ":(glob)example-service/**/maven-wrapper.properties",
       ":(glob)example-service/**/settings.xml",
+    ]);
+  });
+});
+
+describe("languagePathspecs (cs)", () => {
+  it("covers C# sources, solution/project markers and build props under a root", () => {
+    expect(languagePathspecs("cs", "dotnet")).toEqual([
+      ":(glob)dotnet/**/*.cs",
+      ":(glob)dotnet/**/*.sln",
+      ":(glob)dotnet/**/*.slnx",
+      ":(glob)dotnet/**/*.csproj",
+      ":(glob)dotnet/**/Directory.Build.props",
+      ":(glob)dotnet/**/Directory.Build.targets",
+      ":(glob)dotnet/**/Directory.Packages.props",
+      ":(glob)dotnet/**/global.json",
+      ":(glob)dotnet/**/NuGet.config",
+      ":(glob)dotnet/**/packages.lock.json",
     ]);
   });
 });

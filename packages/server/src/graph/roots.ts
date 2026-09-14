@@ -8,10 +8,10 @@ import { join } from "node:path";
  * workspace packages under a monorepo root); a different-language root nested
  * inside survives (a Python service inside a TS monorepo).
  *
- * Java is detected here but only enabled in Phase 4 — callers filter by
- * enabled language (see SCIP_LANGS in scip.ts).
+ * Every language here is enabled by default; callers filter by SCIP_LANGS
+ * (see scip.ts).
  */
-export type IndexerLanguage = "ts" | "py" | "java";
+export type IndexerLanguage = "ts" | "py" | "java" | "cs";
 
 export interface IndexerJob {
   language: IndexerLanguage;
@@ -25,12 +25,15 @@ const MARKERS: Record<IndexerLanguage, string[]> = {
   ts: ["tsconfig.json", "package.json"],
   py: ["pyproject.toml", "setup.py", "requirements.txt"],
   java: ["pom.xml", "build.gradle", "build.gradle.kts"],
+  // `*.ext` entries match by suffix (solution/project files carry the project's name).
+  cs: ["*.sln", "*.slnx", "*.csproj"],
 };
 
 const SOURCE_EXTS: Record<IndexerLanguage, string[]> = {
   ts: [".ts", ".tsx", ".mts", ".cts"],
   py: [".py"],
   java: [".java"],
+  cs: [".cs"],
 };
 
 // Fingerprint-only inputs: files the indexers read beyond sources and markers
@@ -46,7 +49,20 @@ const FINGERPRINT_EXTRAS: Record<IndexerLanguage, string[]> = {
     "maven-wrapper.properties",
     "settings.xml",
   ],
+  cs: [
+    "Directory.Build.props",
+    "Directory.Build.targets",
+    "Directory.Packages.props",
+    "global.json",
+    "NuGet.config",
+    "packages.lock.json",
+  ],
 };
+
+/** Marker match: exact file name, or suffix when the marker is a `*.ext` glob. */
+function matchesMarker(fileName: string, marker: string): boolean {
+  return marker.startsWith("*.") ? fileName.endsWith(marker.slice(1)) : fileName === marker;
+}
 
 /**
  * Git pathspecs covering one language's index inputs under a root: its source
@@ -69,7 +85,7 @@ export function languagePathspecs(language: IndexerLanguage, root: string): stri
 
 // Never descend into dependency trees, build output, or venvs; hidden dirs
 // (".git", ".venv", ".hidden") are skipped by the dot rule.
-const SKIP_DIRS = new Set(["node_modules", "dist", "build", "out", "target", "coverage", "venv", "__pycache__"]);
+const SKIP_DIRS = new Set(["node_modules", "dist", "build", "out", "target", "coverage", "venv", "__pycache__", "obj"]);
 
 export function discoverLanguageRoots(repoRoot: string): IndexerJob[] {
   const candidates: { language: IndexerLanguage; root: string }[] = [];
@@ -96,9 +112,9 @@ function walk(abs: string, rel: string, out: { language: IndexerLanguage; root: 
   } catch {
     return;
   }
-  const fileNames = new Set(entries.filter((e) => e.isFile()).map((e) => e.name));
+  const fileNames = entries.filter((e) => e.isFile()).map((e) => e.name);
   for (const language of Object.keys(MARKERS) as IndexerLanguage[]) {
-    if (MARKERS[language].some((m) => fileNames.has(m))) out.push({ language, root: rel });
+    if (MARKERS[language].some((m) => fileNames.some((f) => matchesMarker(f, m)))) out.push({ language, root: rel });
   }
   for (const e of entries) {
     if (!e.isDirectory() || e.name.startsWith(".") || SKIP_DIRS.has(e.name)) continue;
