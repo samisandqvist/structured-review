@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { accessSync, constants as fsConstants, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createRequire } from "node:module";
@@ -17,6 +17,7 @@ import {
 } from "../diff.js";
 import { discoverLanguageRoots, languagePathspecs, rootHasSources, type IndexerJob } from "./roots.js";
 import { isTestFile } from "../util.js";
+import { findOnPath, parseCommandOverride, type ToolCommand } from "./toolchain.js";
 import { buildFlowTree, makeFlow, reachesChanged } from "./flow-tree.js";
 import { entryEvidence, isExportedAt, loadConfiguredEntries, pythonEntryReasons } from "./entry-points.js";
 
@@ -433,10 +434,7 @@ function resolveIndexerBin(pkgName: string, binName: string): string {
 
 const SCIP_JAVA_DEFAULT_VERSION = "0.12.3";
 
-export interface ScipJavaCommand {
-  argv0: string;
-  args: string[];
-}
+export type ScipJavaCommand = ToolCommand;
 
 /**
  * Locate a way to run scip-java (a JVM tool we cannot bundle): SCIP_JAVA_CMD
@@ -447,12 +445,8 @@ export interface ScipJavaCommand {
  * form is reliable.
  */
 export function resolveScipJavaCommand(env: NodeJS.ProcessEnv = process.env): ScipJavaCommand | null {
-  const override = env.SCIP_JAVA_CMD?.trim();
-  if (override) {
-    const [argv0, ...args] = override.split(/\s+/);
-    if (!argv0) return null;
-    return { argv0, args };
-  }
+  const override = parseCommandOverride(env.SCIP_JAVA_CMD);
+  if (override) return override;
   if (findOnPath("scip-java", env)) return { argv0: "scip-java", args: [] };
   if (findOnPath("cs", env)) {
     const version = env.SCIP_JAVA_VERSION ?? SCIP_JAVA_DEFAULT_VERSION;
@@ -462,19 +456,6 @@ export function resolveScipJavaCommand(env: NodeJS.ProcessEnv = process.env): Sc
     };
   }
   return null;
-}
-
-function findOnPath(bin: string, env: NodeJS.ProcessEnv): boolean {
-  for (const dir of (env.PATH ?? "").split(":")) {
-    if (!dir) continue;
-    try {
-      accessSync(join(dir, bin), fsConstants.X_OK);
-      return true;
-    } catch {
-      /* keep looking */
-    }
-  }
-  return false;
 }
 
 // ---- SCIP decoding -------------------------------------------------------
