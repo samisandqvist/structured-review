@@ -1,6 +1,6 @@
 {
   "name": "structured-review",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Walk through code changes with related code and tests together, saved review progress, and a local web UI.",
   "author": {
     "name": "Sami Sandqvist"
