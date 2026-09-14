@@ -2,7 +2,13 @@ import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
-import { loadConfiguredEntries, isExportedAt, entryEvidence, pythonEntryReasons } from "../src/graph/entry-points.js";
+import {
+  loadConfiguredEntries,
+  isExportedAt,
+  entryEvidence,
+  pythonEntryReasons,
+  csharpEntryReasons,
+} from "../src/graph/entry-points.js";
 
 describe("entryEvidence", () => {
   it("scores configured entries 1.0 regardless of other flags", () => {
@@ -129,5 +135,48 @@ describe("entryEvidence with detected reasons", () => {
       reasons: ["graph-root", "cli", "configured"],
       confidence: 1.0,
     });
+  });
+});
+
+describe("csharpEntryReasons", () => {
+  function write(lines: string[]) {
+    const root = mkdtempSync(join(tmpdir(), "srev-cs-entry-"));
+    mkdirSync(join(root, "src"));
+    writeFileSync(join(root, "src", "A.cs"), lines.join("\n"));
+    return root;
+  }
+  it("detects controller actions by HTTP verb or Route attributes above the definition", () => {
+    const root = write([
+      "public class TokenController : ControllerBase",
+      "{",
+      '    [HttpGet("{userId}")]',
+      "    [Authorize]",
+      "    public ActionResult<string> Get(string userId) => Ok(userId);",
+      "",
+      '    [Route("x"), Authorize]',
+      "    public IActionResult Route() => Ok();",
+      "}",
+    ]);
+    expect(csharpEntryReasons(root, "src/A.cs", { label: "Get", startLine: 5 })).toEqual(["http-route"]);
+    expect(csharpEntryReasons(root, "src/A.cs", { label: "Route", startLine: 8 })).toEqual(["http-route"]);
+  });
+  it("detects a static Main as a cli entry and stops scanning at non-attribute lines", () => {
+    const root = write([
+      "[ApiController]",
+      "public class Program",
+      "{",
+      "    public static int Main(string[] args) => 0;",
+      "    public void Helper() {}",
+      "}",
+    ]);
+    expect(csharpEntryReasons(root, "src/A.cs", { label: "Main", startLine: 4 })).toEqual(["cli"]);
+    expect(csharpEntryReasons(root, "src/A.cs", { label: "Helper", startLine: 5 })).toEqual([]);
+  });
+  it("returns [] for unreadable files and reuses the line cache", () => {
+    expect(csharpEntryReasons("/nonexistent", "src/A.cs", { label: "X", startLine: 1 })).toEqual([]);
+    const cache = new Map<string, string[]>([["src/A.cs", ["[HttpPost]", "public void Post() {}"]]]);
+    expect(csharpEntryReasons("/nonexistent", "src/A.cs", { label: "Post", startLine: 2 }, cache)).toEqual([
+      "http-route",
+    ]);
   });
 });

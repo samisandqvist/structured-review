@@ -31,4 +31,15 @@ describe("isTestFile", () => {
     expect(isTestFile("src/main/java/com/x/Foo.java")).toBe(false);
     expect(isTestFile("src/main/java/com/x/Splitter.java")).toBe(false);
   });
+
+  it("matches C# test conventions", () => {
+    expect(isTestFile("tests/Demo.Core.Tests/TokenServiceTests.cs")).toBe(true);
+    expect(isTestFile("src/Demo.Core.Tests/TokenServiceTest.cs")).toBe(true);
+    expect(isTestFile("src/Demo.Core.Tests/Helpers.cs")).toBe(true); // *.Tests/ project folder
+    expect(isTestFile("src/Demo.Core/TokenServiceSpec.cs")).toBe(true);
+    expect(isTestFile("src/Demo.Core.Specs/Helpers.cs")).toBe(true);
+    expect(isTestFile("src/Demo.Core/TokenService.cs")).toBe(false);
+    expect(isTestFile("src/Demo.Core/Contests.cs")).toBe(false); // case-sensitive: "tests" is not "Tests"
+    expect(isTestFile("src/Demo.Core/Attestation.cs")).toBe(false);
+  });
 });

@@ -114,6 +114,46 @@ export function pythonEntryReasons(
   return [...reasons];
 }
 
+/** Controller-action attributes (ASP.NET Core MVC attribute routing). */
+const CS_ROUTE_ATTRIBUTE = /\[(?:[^\]]*,\s*)?(?:Http(?:Get|Post|Put|Delete|Patch|Head|Options)|Route|AcceptVerbs)\b/;
+
+function cachedLines(root: string, file: string, cache?: Map<string, string[]>): string[] | undefined {
+  const hit = cache?.get(file);
+  if (hit) return hit;
+  try {
+    const lines = readFileSync(join(root, file), "utf8").split("\n");
+    cache?.set(file, lines);
+    return lines;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Detected entry evidence for a C# definition: HTTP verb / Route attributes on
+ * the lines directly above (or on) the definition line mark a controller
+ * action; a `static … Main(` signature marks the program entry.
+ */
+export function csharpEntryReasons(
+  root: string,
+  file: string,
+  node: { label: string; startLine: number },
+  cache?: Map<string, string[]>,
+): EntryReason[] {
+  const lines = cachedLines(root, file, cache);
+  if (!lines) return [];
+  const reasons = new Set<EntryReason>();
+  const def = lines[node.startLine - 1] ?? "";
+  if (/\bstatic\b[^;{=]*\bMain\s*\(/.test(def)) reasons.add("cli");
+  if (CS_ROUTE_ATTRIBUTE.test(def)) reasons.add("http-route");
+  for (let i = node.startLine - 2; i >= 0; i--) {
+    const t = (lines[i] ?? "").trim();
+    if (!t.startsWith("[")) break;
+    if (CS_ROUTE_ATTRIBUTE.test(t)) reasons.add("http-route");
+  }
+  return [...reasons];
+}
+
 /**
  * Deterministic confidence: explicit configuration is trusted outright;
  * detected framework evidence (route/tool/cli decorators, __main__ guard) is

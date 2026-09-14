@@ -6,7 +6,8 @@ export function randomId(prefix: string): string {
  * Per-language test-file detection (roadmap Phase 2), by filename shape:
  * TS/JS `*.test.ts` / `*.spec.tsx` …, Python `test_*.py` / `*_test.py` /
  * `conftest.py`, Java Maven `src/test/java/` trees plus surefire/failsafe
- * naming (`*Test.java`, `*IT.java`), and the shared test-directory rule.
+ * naming (`*Test.java`, `*IT.java`), C# `*Test(s).cs` / `*Spec(s).cs` files
+ * and `*.Tests/`-style project folders, and the shared test-directory rule.
  *
  * TODO (Phase 4): revisit the Java patterns against surefire/failsafe
  * defaults — `*Tests.java` (plural) under-matches, and the all-caps `…IT.java`
@@ -17,4 +18,6 @@ export const isTestFile = (p: string) =>
   /(^|\/)(test_[^/]*|[^/]+_test|conftest)\.py$/.test(p) ||
   /(^|\/)src\/test\/java\//.test(p) ||
   /(Test|IT)\.java$/.test(p) ||
+  /(Tests?|Specs?)\.cs$/.test(p) ||
+  /(^|\/)[^/]+\.(Tests?|Specs?)\//.test(p) ||
   /(^|\/)(test|tests|__tests__)\//.test(p);

@@ -32,7 +32,13 @@ import { synthesizeCsharpSpans } from "./csharp-spans.js";
 import { isTestFile } from "../util.js";
 import { findOnPath, parseCommandOverride, type ToolCommand } from "./toolchain.js";
 import { buildFlowTree, makeFlow, reachesChanged } from "./flow-tree.js";
-import { entryEvidence, isExportedAt, loadConfiguredEntries, pythonEntryReasons } from "./entry-points.js";
+import {
+  csharpEntryReasons,
+  entryEvidence,
+  isExportedAt,
+  loadConfiguredEntries,
+  pythonEntryReasons,
+} from "./entry-points.js";
 
 /**
  * Graph provider backed by SCIP (Sourcegraph Code Intelligence Protocol).
@@ -231,20 +237,32 @@ export class ScipGraphProvider implements GraphProvider {
     return entrySyms
       .map((sym, i) => {
         const n = g.nodes.get(sym)!;
-        const isPy = n.file.endsWith(".py");
-        const evidence = entryEvidence({
-          isRoot: rootSyms.has(sym),
-          // `export` keyword is a TS/JS concept; never probe it on Python files.
-          isExported: isPy ? false : isExportedAt(this.repoRoot, n.file, n.startLine, fileCache),
-          isConfigured: configuredSyms.has(sym),
-          detected: isPy
-            ? pythonEntryReasons(this.repoRoot, n.file, { label: n.label, startLine: n.startLine }, fileCache)
-            : [],
-        });
+        const evidence = this.evidenceFor(sym, n, { roots: rootSyms, configured: configuredSyms }, fileCache);
         return makeFlow(i + 1, n.label, buildFlowTree(sym, g.callAdj, resolve, relevant), evidence);
       })
       .filter((f) => f.steps.length > 1)
       .sort((a, b) => b.criticality - a.criticality);
+  }
+
+  /** Entry evidence for one graph root. `export` is a TS/JS concept and is never probed on Python or C# files. */
+  private evidenceFor(
+    sym: string,
+    n: { label: string; file: string; startLine: number },
+    sets: { roots: Set<string>; configured: Set<string> },
+    fileCache: Map<string, string[]>,
+  ) {
+    const node = { label: n.label, startLine: n.startLine };
+    const isPy = n.file.endsWith(".py");
+    const isCs = n.file.endsWith(".cs");
+    let detected: ReturnType<typeof pythonEntryReasons> = [];
+    if (isPy) detected = pythonEntryReasons(this.repoRoot, n.file, node, fileCache);
+    else if (isCs) detected = csharpEntryReasons(this.repoRoot, n.file, node, fileCache);
+    return entryEvidence({
+      isRoot: sets.roots.has(sym),
+      isExported: isPy || isCs ? false : isExportedAt(this.repoRoot, n.file, n.startLine, fileCache),
+      isConfigured: sets.configured.has(sym),
+      detected,
+    });
   }
 
   /**
