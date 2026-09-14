@@ -35,7 +35,9 @@ describe("discoverLanguageRoots", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+});
 
+describe("discoverLanguageRoots (cs)", () => {
   it("finds a C# root by solution or project file and drops project roots nested under a solution root", () => {
     const dir = fixture({
       "dotnet/Demo.sln": "",
@@ -66,7 +68,9 @@ describe("discoverLanguageRoots", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+});
 
+describe("discoverLanguageRoots (nesting and skips)", () => {
   it("skips roots nested inside a root of the same language", () => {
     const dir = fixture({
       "package.json": "{}",
