@@ -485,9 +485,20 @@ export interface ScipOccurrence {
   symbol?: string;
   symbolRoles?: number;
 }
+/** SCIP `Relationship`: how `SymbolInformation.symbol` relates to `symbol`. */
+interface ScipRelationship {
+  symbol?: string;
+  isImplementation?: boolean;
+  isReference?: boolean;
+}
+interface ScipSymbolInformation {
+  symbol?: string;
+  relationships?: ScipRelationship[];
+}
 export interface ScipDocument {
   relativePath?: string;
   occurrences?: ScipOccurrence[];
+  symbols?: ScipSymbolInformation[];
 }
 export interface ScipIndex {
   documents: ScipDocument[];
@@ -554,6 +565,38 @@ function span1(arr?: number[]): [number, number] | null {
 interface GraphDocument {
   file: string;
   occurrences: ScipOccurrence[];
+  symbols: ScipSymbolInformation[];
+}
+
+/** abstract/interface method symbol -> the method symbols that implement it,
+ * from `is_implementation` relationships (emitted by scip-java and scip-dotnet). */
+type Implementations = Map<string, string[]>;
+
+function collectImplementations(documents: GraphDocument[]): Implementations {
+  const implementations: Implementations = new Map();
+  for (const { symbols } of documents) {
+    for (const info of symbols) {
+      for (const rel of info.relationships ?? []) {
+        if (!rel.isImplementation || !rel.symbol || !info.symbol) continue;
+        const impls = implementations.get(rel.symbol) ?? [];
+        impls.push(info.symbol);
+        implementations.set(rel.symbol, impls);
+      }
+    }
+  }
+  return implementations;
+}
+
+/** Callable targets of a reference: the bound symbol itself plus, when the
+ * call binds to an interface/abstract method, its implementations. Static
+ * references cannot tell which implementation runs, so every implementation
+ * with a body becomes a call target. */
+function callTargets(symbol: string, nodes: Map<string, RawNode>, implementations: Implementations): string[] {
+  const targets = nodes.has(symbol) ? [symbol] : [];
+  for (const impl of implementations.get(symbol) ?? []) {
+    if (nodes.has(impl) && !targets.includes(impl)) targets.push(impl);
+  }
+  return targets;
 }
 
 /** Types and namespaces still define file dependencies, but only callable
@@ -625,21 +668,33 @@ function documentCallers(document: GraphDocument, nodes: Map<string, RawNode>) {
   return callers.sort((a, b) => a.el - a.sl - (b.el - b.sl));
 }
 
-function collectDocumentCalls(document: GraphDocument, nodes: Map<string, RawNode>, calls: Map<string, Set<string>>) {
+function collectDocumentCalls(
+  document: GraphDocument,
+  nodes: Map<string, RawNode>,
+  implementations: Implementations,
+  calls: Map<string, Set<string>>,
+) {
   const callers = documentCallers(document, nodes);
   for (const occurrence of document.occurrences) {
     const roles = occurrence.symbolRoles ?? 0;
-    if (roles & ROLE_DEFINITION || roles & ROLE_IMPORT) continue;
-    if (!occurrence.symbol || !nodes.has(occurrence.symbol)) continue;
-    const start = occurrence.range?.[0];
-    if (start === undefined) continue;
-    const line = start + 1;
-    const caller = callers.find((c) => line >= c.sl && line <= c.el && c.symbol !== occurrence.symbol);
+    if (roles & ROLE_DEFINITION || roles & ROLE_IMPORT || !occurrence.symbol) continue;
+    const targets = callTargets(occurrence.symbol, nodes, implementations);
+    if (targets.length === 0) continue;
+    const caller = enclosingCaller(callers, occurrence);
     if (!caller) continue;
-    const targets = calls.get(caller.symbol) ?? new Set<string>();
-    targets.add(occurrence.symbol);
-    calls.set(caller.symbol, targets);
+    const known = calls.get(caller) ?? new Set<string>();
+    for (const target of targets) if (target !== caller) known.add(target);
+    calls.set(caller, known);
   }
+}
+
+/** The innermost caller whose span contains the reference line; a method's
+ * reference to itself (recursion) is not attributed to itself. */
+function enclosingCaller(callers: { symbol: string; sl: number; el: number }[], occurrence: ScipOccurrence) {
+  const start = occurrence.range?.[0];
+  if (start === undefined) return undefined;
+  const line = start + 1;
+  return callers.find((c) => line >= c.sl && line <= c.el && c.symbol !== occurrence.symbol)?.symbol;
 }
 
 function callAdjacency(calls: Map<string, Set<string>>) {
@@ -663,11 +718,13 @@ export function buildGraphFromIndex(idx: ScipIndex, root: string): BuiltGraph {
     return {
       file: path.startsWith(rootSlash) ? path.slice(rootSlash.length) : path,
       occurrences: document.occurrences ?? [],
+      symbols: document.symbols ?? [],
     };
   });
   const { nodes, definitionFiles } = collectDefinitions(documents);
   const fileRequires = collectFileRequires(documents, definitionFiles);
+  const implementations = collectImplementations(documents);
   const calls = new Map<string, Set<string>>();
-  for (const document of documents) collectDocumentCalls(document, nodes, calls);
+  for (const document of documents) collectDocumentCalls(document, nodes, implementations, calls);
   return { nodes, ...callAdjacency(calls), fileRequires };
 }

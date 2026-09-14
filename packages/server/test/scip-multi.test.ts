@@ -334,3 +334,72 @@ describe("call attribution boundaries", () => {
     expect([...graph.fileRequires]).toEqual([]);
   });
 });
+
+describe("interface-to-implementation call bridging", () => {
+  // Shapes match what scip-java and scip-dotnet emit: the implementing method's
+  // SymbolInformation carries an `is_implementation` relationship to the
+  // interface method, and call sites through an interface-typed receiver bind
+  // to the interface method symbol.
+  const IFACE = "scip-java maven . . svc/TokenService#resolve().";
+  const IMPL = "scip-java maven . . svc/TokenServiceImpl#resolve().";
+  const CTRL = "scip-java maven . . web/TokenController#get().";
+  const implDoc = (
+    relationships: { symbol: string; isImplementation?: boolean; isReference?: boolean }[],
+  ): ScipDocument => ({
+    relativePath: "svc/TokenServiceImpl.java",
+    occurrences: [{ symbol: IMPL, symbolRoles: 1, range: [3, 16, 23], enclosingRange: [3, 2, 6, 3] }],
+    symbols: [{ symbol: IMPL, relationships }],
+  });
+  const ctrlDoc: ScipDocument = {
+    relativePath: "web/TokenController.java",
+    occurrences: [
+      { symbol: CTRL, symbolRoles: 1, range: [5, 20, 23], enclosingRange: [5, 2, 7, 3] },
+      { symbol: IFACE, symbolRoles: 0, range: [6, 18, 25] }, // tokens.resolve(...) via the interface
+    ],
+  };
+  const ifaceDoc = (enclosingRange?: number[]): ScipDocument => ({
+    relativePath: "svc/TokenService.java",
+    occurrences: [{ symbol: IFACE, symbolRoles: 1, range: [2, 9, 16], ...(enclosingRange ? { enclosingRange } : {}) }],
+  });
+
+  it("a call bound to an interface method also reaches its implementations", () => {
+    const documents = [
+      ifaceDoc([2, 2, 2, 25]),
+      implDoc([{ symbol: IFACE, isImplementation: true, isReference: true }]),
+      ctrlDoc,
+    ];
+    const g = buildGraphFromIndex({ documents }, "/repo");
+    expect(g.callAdj.get(CTRL)).toEqual([IFACE, IMPL]);
+    expect(g.callRev.get(IMPL)).toEqual([CTRL]);
+  });
+
+  it("bridges even when the interface method itself has no body span", () => {
+    // scip-dotnet emits no enclosingRange; interface members never become nodes there.
+    const documents = [ifaceDoc(), implDoc([{ symbol: IFACE, isImplementation: true }]), ctrlDoc];
+    const g = buildGraphFromIndex({ documents }, "/repo");
+    expect(g.nodes.has(IFACE)).toBe(false);
+    expect(g.callAdj.get(CTRL)).toEqual([IMPL]);
+  });
+
+  it("ignores relationships that are not implementations", () => {
+    const documents = [ifaceDoc([2, 2, 2, 25]), implDoc([{ symbol: IFACE, isReference: true }]), ctrlDoc];
+    const g = buildGraphFromIndex({ documents }, "/repo");
+    expect(g.callAdj.get(CTRL)).toEqual([IFACE]);
+    expect(g.callRev.has(IMPL)).toBe(false);
+  });
+
+  it("never bridges a call back onto the calling method itself", () => {
+    // TokenServiceImpl#resolve calls the interface method (e.g. on a delegate);
+    // bridging must not add a self-edge IMPL -> IMPL.
+    const selfCalling: ScipDocument = {
+      ...implDoc([{ symbol: IFACE, isImplementation: true }]),
+      occurrences: [
+        { symbol: IMPL, symbolRoles: 1, range: [3, 16, 23], enclosingRange: [3, 2, 6, 3] },
+        { symbol: IFACE, symbolRoles: 0, range: [4, 20, 27] },
+      ],
+    };
+    const documents = [ifaceDoc([2, 2, 2, 25]), selfCalling];
+    const g = buildGraphFromIndex({ documents }, "/repo");
+    expect(g.callAdj.get(IMPL)).toEqual([IFACE]);
+  });
+});

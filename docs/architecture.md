@@ -74,9 +74,13 @@ reviewable as residuals. A launcher that is present but fails is an indexing
 error. The decoder also rejects an empty index for a root known to contain
 sources. Indexer absence and indexer failure have deliberately different outcomes.
 
-Static references are evidence, not proof of execution. Callbacks, dependency
-injection, unresolved dependencies, and heuristic entry detection can limit flow
-quality. Explicit entry-point configuration provides an override. Entry confidence
+Static references are evidence, not proof of execution. A call that binds to an
+interface or abstract method is bridged to every implementation the indexer
+records through `is_implementation` relationships (scip-java and scip-dotnet
+emit these), so flows through injected interfaces continue into the concrete
+classes; with several implementations, all of them become call targets.
+Callbacks, reflection-based wiring, unresolved dependencies, and heuristic entry
+detection can still limit flow quality. Explicit entry-point configuration provides an override. Entry confidence
 is a heuristic ranking, not a calibrated probability of correctness.
 
 Implementation: [root discovery](../packages/server/src/graph/roots.ts),

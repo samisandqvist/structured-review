@@ -18673,6 +18673,27 @@ function span1(arr) {
   const end = arr.length === 4 ? arr[2] : start;
   return [start + 1, (end ?? start) + 1];
 }
+function collectImplementations(documents) {
+  const implementations = /* @__PURE__ */ new Map();
+  for (const { symbols } of documents) {
+    for (const info of symbols) {
+      for (const rel of info.relationships ?? []) {
+        if (!rel.isImplementation || !rel.symbol || !info.symbol) continue;
+        const impls = implementations.get(rel.symbol) ?? [];
+        impls.push(info.symbol);
+        implementations.set(rel.symbol, impls);
+      }
+    }
+  }
+  return implementations;
+}
+function callTargets(symbol2, nodes, implementations) {
+  const targets = nodes.has(symbol2) ? [symbol2] : [];
+  for (const impl of implementations.get(symbol2) ?? []) {
+    if (nodes.has(impl) && !targets.includes(impl)) targets.push(impl);
+  }
+  return targets;
+}
 function callableNode(symbol2, occurrence, file2) {
   if (/[#/]$/.test(symbol2)) return void 0;
   if (file2.endsWith(".java") && !/\)\.$/.test(symbol2)) return void 0;
@@ -18727,21 +18748,25 @@ function documentCallers(document, nodes) {
   }
   return callers.sort((a, b) => a.el - a.sl - (b.el - b.sl));
 }
-function collectDocumentCalls(document, nodes, calls) {
+function collectDocumentCalls(document, nodes, implementations, calls) {
   const callers = documentCallers(document, nodes);
   for (const occurrence of document.occurrences) {
     const roles = occurrence.symbolRoles ?? 0;
-    if (roles & ROLE_DEFINITION || roles & ROLE_IMPORT) continue;
-    if (!occurrence.symbol || !nodes.has(occurrence.symbol)) continue;
-    const start = occurrence.range?.[0];
-    if (start === void 0) continue;
-    const line = start + 1;
-    const caller = callers.find((c) => line >= c.sl && line <= c.el && c.symbol !== occurrence.symbol);
+    if (roles & ROLE_DEFINITION || roles & ROLE_IMPORT || !occurrence.symbol) continue;
+    const targets = callTargets(occurrence.symbol, nodes, implementations);
+    if (targets.length === 0) continue;
+    const caller = enclosingCaller(callers, occurrence);
     if (!caller) continue;
-    const targets = calls.get(caller.symbol) ?? /* @__PURE__ */ new Set();
-    targets.add(occurrence.symbol);
-    calls.set(caller.symbol, targets);
+    const known = calls.get(caller) ?? /* @__PURE__ */ new Set();
+    for (const target of targets) if (target !== caller) known.add(target);
+    calls.set(caller, known);
   }
+}
+function enclosingCaller(callers, occurrence) {
+  const start = occurrence.range?.[0];
+  if (start === void 0) return void 0;
+  const line = start + 1;
+  return callers.find((c) => line >= c.sl && line <= c.el && c.symbol !== occurrence.symbol)?.symbol;
 }
 function callAdjacency(calls) {
   const callAdj = /* @__PURE__ */ new Map();
@@ -18762,13 +18787,15 @@ function buildGraphFromIndex(idx, root) {
     const path = document.relativePath ?? "";
     return {
       file: path.startsWith(rootSlash) ? path.slice(rootSlash.length) : path,
-      occurrences: document.occurrences ?? []
+      occurrences: document.occurrences ?? [],
+      symbols: document.symbols ?? []
     };
   });
   const { nodes, definitionFiles } = collectDefinitions(documents);
   const fileRequires = collectFileRequires(documents, definitionFiles);
+  const implementations = collectImplementations(documents);
   const calls = /* @__PURE__ */ new Map();
-  for (const document of documents) collectDocumentCalls(document, nodes, calls);
+  for (const document of documents) collectDocumentCalls(document, nodes, implementations, calls);
   return { nodes, ...callAdjacency(calls), fileRequires };
 }
 
