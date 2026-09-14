@@ -48,7 +48,7 @@ Behaviour-preserving extraction so the C# resolver can reuse PATH lookup without
 **Interfaces:**
 - Produces: `export interface ToolCommand { argv0: string; args: string[] }`; `export function findOnPath(bin: string, env: NodeJS.ProcessEnv): boolean`; `export function parseCommandOverride(raw: string | undefined): ToolCommand | undefined` (undefined when unset/blank).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // packages/server/test/toolchain.test.ts
@@ -79,12 +79,12 @@ describe("findOnPath", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cd packages/server && pnpm exec vitest run test/toolchain.test.ts`
 Expected: FAIL — cannot resolve `../src/graph/toolchain.js`.
 
-- [ ] **Step 3: Create the module and switch `scip.ts` to it**
+- [x] **Step 3: Create the module and switch `scip.ts` to it**
 
 ```ts
 // packages/server/src/graph/toolchain.ts
@@ -129,12 +129,12 @@ In `scip.ts`:
   ```
 - Delete the module-level `function findOnPath(...)` and, if now unused, the `accessSync`/`fsConstants` imports.
 
-- [ ] **Step 4: Run tests and lint**
+- [x] **Step 4: Run tests and lint**
 
 Run: `cd packages/server && pnpm exec vitest run test/toolchain.test.ts test/scip-java.test.ts && cd ../.. && pnpm lint | tail -1 && pnpm exec tsc --noEmit -p packages/server`
 Expected: both files PASS, `0 blocking`, tsc clean.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 pnpm exec prettier --write packages/server/src/graph/toolchain.ts packages/server/src/graph/scip.ts packages/server/test/toolchain.test.ts
@@ -153,7 +153,7 @@ git commit -m "refactor(scip): extract shared toolchain lookup helpers" -m "Co-A
 **Interfaces:**
 - Produces: `IndexerLanguage = "ts" | "py" | "java" | "cs"`; markers may be suffix globs (`*.sln`); `SKIP_DIRS` includes `obj`.
 
-- [ ] **Step 1: Write the failing tests** (append inside the existing `describe("discoverLanguageRoots")` and add a pathspec case)
+- [x] **Step 1: Write the failing tests** (append inside the existing `describe("discoverLanguageRoots")` and add a pathspec case)
 
 ```ts
   it("finds a C# root by solution or project file and drops project roots nested under a solution root", () => {
@@ -207,12 +207,12 @@ and in the `languagePathspecs` describe (add one if absent):
   });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cd packages/server && pnpm exec vitest run test/roots.test.ts`
 Expected: FAIL — TypeScript/vitest reports `"cs"` not assignable / discovered roots `[]`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `roots.ts`:
 ```ts
@@ -258,12 +258,12 @@ In `walk`, replace the marker test with:
 ```
 `languagePathspecs` needs no change: `**/${m}` with `m = "*.sln"` already yields `**/*.sln`. Update the header comment ("Java is detected here but only enabled in Phase 4") to: "Every language here is enabled by default; callers filter by `SCIP_LANGS` (see scip.ts)."
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `cd packages/server && pnpm exec vitest run test/roots.test.ts test/scip-multi.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 pnpm exec prettier --write packages/server/src/graph/roots.ts packages/server/test/roots.test.ts
@@ -283,7 +283,7 @@ git commit -m "feat(scip): discover C# roots from solution and project files" -m
 - Consumes: `findOnPath`, `parseCommandOverride`, `ToolCommand` from Task 1.
 - Produces: `resolveScipDotnetCommand(env?): ToolCommand | null`; `pickSolutionFile(absRoot: string, override?: string): string` (absolute path; throws `Error` with a user-facing message); `scipDotnetIndexArgs(solution: string, absRoot: string, indexPath: string): string[]`; `SCIP_DOTNET_INSTALL_HINT: string`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // packages/server/test/scip-dotnet.test.ts
@@ -370,12 +370,12 @@ describe("scipDotnetIndexArgs", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cd packages/server && pnpm exec vitest run test/scip-dotnet.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```ts
 // packages/server/src/graph/scip-dotnet.ts
@@ -452,12 +452,12 @@ export function scipDotnetIndexArgs(solution: string, absRoot: string, indexPath
 }
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `cd packages/server && pnpm exec vitest run test/scip-dotnet.test.ts`
 Expected: PASS (all).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 pnpm exec prettier --write packages/server/src/graph/scip-dotnet.ts packages/server/test/scip-dotnet.test.ts
@@ -477,7 +477,7 @@ git commit -m "feat(scip): resolve the scip-dotnet tool and the solution file to
 - Consumes: `ScipDocument`, `ScipOccurrence` types from `scip.ts` (type-only import; no runtime cycle).
 - Produces: `synthesizeCsharpSpans(docs: ScipDocument[], readFile: (relativePath: string) => string): ScipDocument[]`; `memberEndLine(lines: string[], startLine: number): number` (0-based in/out; returns `startLine` when no end is found).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // packages/server/test/csharp-spans.test.ts
@@ -567,12 +567,12 @@ describe("synthesizeCsharpSpans", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cd packages/server && pnpm exec vitest run test/csharp-spans.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```ts
 // packages/server/src/graph/csharp-spans.ts
@@ -778,12 +778,12 @@ function stepMemberBrace(s: Scan, ch: string | undefined, c: number): number {
 
 Note on the `openString` `quotes === 2` branch: `""` is an empty literal; consuming both quotes keeps the scanner in code mode. For `$""` followed by a fourth quote we hand off to `openString` at the first quote so raw-interpolated strings are treated as raw.
 
-- [ ] **Step 4: Run tests and static checks**
+- [x] **Step 4: Run tests and static checks**
 
 Run: `cd packages/server && pnpm exec vitest run test/csharp-spans.test.ts && cd ../.. && pnpm lint | tail -1 && pnpm exec tsc --noEmit -p packages/server`
 Expected: PASS; `0 blocking`; tsc clean. If a case fails, fix the scanner, not the test, unless the expectation itself is miscounted (recount the 0-based lines by hand first).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 pnpm exec prettier --write packages/server/src/graph/csharp-spans.ts packages/server/test/csharp-spans.test.ts
@@ -803,7 +803,7 @@ git commit -m "feat(scip): synthesize C# member spans missing from scip-dotnet i
 - Consumes: Task 3 exports; Task 4 `synthesizeCsharpSpans`; Task 1 `ToolCommand`.
 - Produces: `protected resolveDotnetCommand(): ToolCommand | null` seam; `SCIP_LANGS` default `"ts,py,java,cs"`; C# warning text `C# indexing skipped for N root(s) (...): scip-dotnet not found; install it with 'dotnet tool install --global scip-dotnet' (needs the .NET SDK 8 or newer), or set SCIP_DOTNET_CMD. C# changes appear as residual-only until then.`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `scip-dotnet.test.ts`:
 ```ts
@@ -899,12 +899,12 @@ describe("c# symbol shapes", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cd packages/server && pnpm exec vitest run test/scip-dotnet.test.ts test/scip-multi.test.ts`
 Expected: FAIL — `resolveDotnetCommand` is not a member; ctor label is `` `.ctor` `` or null; SCIP_LANGS default excludes cs.
 
-- [ ] **Step 3: Implement in `scip.ts`**
+- [x] **Step 3: Implement in `scip.ts`**
 
 Imports:
 ```ts
@@ -1027,12 +1027,12 @@ and between decoding and rerooting:
 ```
 (`s` has already had the `()` descriptor and trailing `.` stripped, so the symbol ends in `` #`.ctor` ``.)
 
-- [ ] **Step 4: Run tests, lint, typecheck**
+- [x] **Step 4: Run tests, lint, typecheck**
 
 Run: `cd packages/server && pnpm exec vitest run test/scip-dotnet.test.ts test/scip-multi.test.ts test/scip-java.test.ts test/scip-cache.test.ts test/routes.test.ts && cd ../.. && pnpm lint | tail -1 && pnpm exec tsc --noEmit -p packages/server`
 Expected: PASS (the real scip-java integration case runs when `cs` is on PATH); `0 blocking`; tsc clean. If lint reports a new cognitive-complexity finding on `indexerCommand`, move the `cs` block into `private dotnetCommand(absRoot, indexPath, where): ToolCommand`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 pnpm exec prettier --write packages/server/src/graph/scip.ts packages/server/test/scip-dotnet.test.ts packages/server/test/scip-multi.test.ts
@@ -1051,7 +1051,7 @@ git commit -m "feat(scip): run scip-dotnet jobs with span synthesis and toolchai
 **Interfaces:**
 - Produces: `export function csharpEntryReasons(root: string, file: string, node: { label: string; startLine: number }, cache?: Map<string, string[]>): EntryReason[]` returning `"http-route"` for controller-action attributes and `"cli"` for `static … Main(`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `util.test.ts`, new case:
 ```ts
@@ -1111,12 +1111,12 @@ describe("csharpEntryReasons", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cd packages/server && pnpm exec vitest run test/util.test.ts test/entry-points.test.ts`
 Expected: FAIL — `csharpEntryReasons` not exported; `TokenServiceTests.cs` outside a `tests/` dir is `false`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `util.ts` — add two alternatives to `isTestFile` and extend the doc comment ("C# `*Test(s).cs` / `*Spec(s).cs` files and `*.Tests/`-style project folders"):
 ```ts
@@ -1194,12 +1194,12 @@ Optionally refactor `pythonEntryReasons` to use `cachedLines` (behaviour-preserv
 ```
 and in the `.map((sym, i) => …)`: `const evidence = this.evidenceFor(sym, n, { roots: rootSyms, configured: configuredSyms }, fileCache);`. Add `csharpEntryReasons` to the `./entry-points.js` import. (`RawNode` is the existing node type used by `buildGraphFromIndex`'s `nodes` map; if it is not exported/visible where needed, type the parameter as `{ label: string; file: string; startLine: number }`.)
 
-- [ ] **Step 4: Run tests and lint**
+- [x] **Step 4: Run tests and lint**
 
 Run: `cd packages/server && pnpm exec vitest run && cd ../.. && pnpm lint | tail -1 && pnpm exec tsc --noEmit -p packages/server`
 Expected: all server tests PASS; `0 blocking`; tsc clean.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 pnpm exec prettier --write packages/server/src/util.ts packages/server/src/graph/entry-points.ts packages/server/src/graph/scip.ts packages/server/test/util.test.ts packages/server/test/entry-points.test.ts
@@ -1216,7 +1216,7 @@ Slow, real-toolchain test mirroring `scip-java.test.ts`; skipped when scip-dotne
 **Files:**
 - Test: `packages/server/test/scip-dotnet.test.ts` (append)
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 ```ts
 import { execFileSync } from "node:child_process";
@@ -1316,7 +1316,7 @@ describe("scip-dotnet integration", () => {
 ```
 If `Flow` exposes evidence under a different property name, read `packages/server/src/graph/provider.ts` for the `Flow` interface and adjust the last assertion to that name; do not drop it.
 
-- [ ] **Step 2: Run it with the tool available**
+- [x] **Step 2: Run it with the tool available**
 
 On the dev machine scip-dotnet is only installed as a local tool manifest in the spike scratchpad, so point the override at it (`dotnet tool run` needs that manifest's directory as cwd, which the provider does not control — use the tool's own binary instead):
 ```bash
@@ -1325,7 +1325,7 @@ cd packages/server && pnpm exec vitest run test/scip-dotnet.test.ts
 ```
 Expected: PASS including the integration case (roughly 10–30 s). If it is skipped, `resolveScipDotnetCommand()` did not find `~/.dotnet/tools/scip-dotnet`; check `HOME`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 pnpm exec prettier --write packages/server/test/scip-dotnet.test.ts
@@ -1341,7 +1341,7 @@ git commit -m "test(scip): real scip-dotnet integration over a two-project solut
 - Modify: `AGENTS.md:75-78`, `README.md:16-18,182-186,197-198,206`, `docs/architecture.md:68-75`, `docs/cli-and-configuration.md:82-83`, `docs/harness.md:87`, `scripts/build-plugin.mjs:78-84`, `.claude-plugin/marketplace.json:11`, `.github/workflows/ci.yml:35-51`
 - Regenerate: `plugin/`, `plugins/structured-review/` via `pnpm build && pnpm build:plugin`
 
-- [ ] **Step 1: Documentation text**
+- [x] **Step 1: Documentation text**
 
 `AGENTS.md` (Graph providers paragraph):
 > `GRAPH_PROVIDER=scip` is the default. It indexes the tracked working tree with scip-typescript, scip-python, and (when available) scip-java and scip-dotnet. A missing Java or .NET indexer toolchain is reported in `indexWarnings`; affected text changes remain reviewable as residuals. SCIP relationships are inferred from references and are not execution traces.
@@ -1368,7 +1368,7 @@ Line 206: "Indexer installation downloads packages, and Java or .NET tooling may
 
 `.claude-plugin/marketplace.json` description: "… TS/Python bundled; Java via scip-java toolchain on PATH; C# via scip-dotnet."
 
-- [ ] **Step 2: CI toolchain (`ci.yml`)**
+- [x] **Step 2: CI toolchain (`ci.yml`)**
 
 After the "Install Coursier" step:
 ```yaml
@@ -1387,14 +1387,14 @@ Extend "Verify real indexer toolchains":
 ```
 Update the comment above Coursier to mention that the .NET SDK and scip-dotnet keep the real scip-dotnet integration enabled.
 
-- [ ] **Step 3: Rebuild bundles and run the full gate**
+- [x] **Step 3: Rebuild bundles and run the full gate**
 
 ```bash
 pnpm build && pnpm build:plugin && pnpm verify
 ```
 Expected: all 11 steps exit 0 (typecheck, format, lint, architecture, build, test:coverage, coverage:check, plugin:check, test:e2e, security:check, security:probe). Fix any coverage shortfall on the new files by adding the missing test case, not by touching baselines.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 pnpm exec prettier --write AGENTS.md README.md docs/architecture.md docs/cli-and-configuration.md docs/harness.md
