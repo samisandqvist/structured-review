@@ -153,6 +153,68 @@ describe("SCIP_LANGS default", () => {
   });
 });
 
+/** A committed two-project solution: Demo.App (console, Main) depends on Demo.Core via an interface. */
+function writeDotnetFixture(dir: string): void {
+  const git = (...a: string[]) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
+  git("init", "-b", "main");
+  git("config", "user.email", "t@t");
+  git("config", "user.name", "t");
+  const proj = (extra = "") =>
+    `<Project Sdk="Microsoft.NET.Sdk">\n  <PropertyGroup>\n    <TargetFramework>net8.0</TargetFramework>\n    <Nullable>enable</Nullable>\n    <ImplicitUsings>enable</ImplicitUsings>${extra}\n  </PropertyGroup>\n</Project>\n`;
+  mkdirSync(join(dir, "src", "Demo.Core"), { recursive: true });
+  mkdirSync(join(dir, "src", "Demo.App"), { recursive: true });
+  writeFileSync(join(dir, "src", "Demo.Core", "Demo.Core.csproj"), proj());
+  writeFileSync(
+    join(dir, "src", "Demo.App", "Demo.App.csproj"),
+    proj("\n    <OutputType>Exe</OutputType>").replace(
+      "</Project>",
+      '  <ItemGroup>\n    <ProjectReference Include="../Demo.Core/Demo.Core.csproj" />\n  </ItemGroup>\n</Project>',
+    ),
+  );
+  writeFileSync(
+    join(dir, "src", "Demo.Core", "TokenService.cs"),
+    [
+      "namespace Demo.Core;",
+      "public interface ITokenService { string Resolve(string userId); }",
+      "public class TokenService : ITokenService",
+      "{",
+      "    public string Resolve(string userId) => Mint(userId);",
+      '    private static string Mint(string userId) => $"tok-{userId}";',
+      "}",
+    ].join("\n"),
+  );
+  writeFileSync(
+    join(dir, "src", "Demo.App", "Program.cs"),
+    [
+      "using Demo.Core;",
+      "namespace Demo.App;",
+      "public class App",
+      "{",
+      "    private readonly ITokenService _tokens;",
+      "    public App(ITokenService tokens) { _tokens = tokens; }",
+      "    public string Run(string user) => _tokens.Resolve(user);",
+      '    public static int Main(string[] args) { Console.WriteLine(new App(new TokenService()).Run("u1")); return 0; }',
+      "}",
+    ].join("\n"),
+  );
+  writeFileSync(
+    join(dir, "Demo.sln"),
+    [
+      "Microsoft Visual Studio Solution File, Format Version 12.00",
+      'Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Demo.Core", "src/Demo.Core/Demo.Core.csproj", "{11111111-1111-1111-1111-111111111111}"',
+      "EndProject",
+      'Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Demo.App", "src/Demo.App/Demo.App.csproj", "{22222222-2222-2222-2222-222222222222}"',
+      "EndProject",
+      "Global",
+      "EndGlobal",
+      "",
+    ].join("\n"),
+  );
+  writeFileSync(join(dir, ".gitignore"), "bin/\nobj/\n");
+  git("add", ".");
+  git("commit", "-m", "init");
+}
+
 // Real scip-dotnet run over a two-project solution — slow (restore + Roslyn),
 // so one test, skipped when the tool is not on this machine.
 describe("scip-dotnet integration", () => {
@@ -162,64 +224,7 @@ describe("scip-dotnet integration", () => {
     async () => {
       const dir = mkdtempSync(join(tmpdir(), "srev-cs-"));
       try {
-        const git = (...a: string[]) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
-        git("init", "-b", "main");
-        git("config", "user.email", "t@t");
-        git("config", "user.name", "t");
-        const proj = (extra = "") =>
-          `<Project Sdk="Microsoft.NET.Sdk">\n  <PropertyGroup>\n    <TargetFramework>net8.0</TargetFramework>\n    <Nullable>enable</Nullable>\n    <ImplicitUsings>enable</ImplicitUsings>${extra}\n  </PropertyGroup>\n</Project>\n`;
-        mkdirSync(join(dir, "src", "Demo.Core"), { recursive: true });
-        mkdirSync(join(dir, "src", "Demo.App"), { recursive: true });
-        writeFileSync(join(dir, "src", "Demo.Core", "Demo.Core.csproj"), proj());
-        writeFileSync(
-          join(dir, "src", "Demo.App", "Demo.App.csproj"),
-          proj("\n    <OutputType>Exe</OutputType>").replace(
-            "</Project>",
-            '  <ItemGroup>\n    <ProjectReference Include="../Demo.Core/Demo.Core.csproj" />\n  </ItemGroup>\n</Project>',
-          ),
-        );
-        writeFileSync(
-          join(dir, "src", "Demo.Core", "TokenService.cs"),
-          [
-            "namespace Demo.Core;",
-            "public interface ITokenService { string Resolve(string userId); }",
-            "public class TokenService : ITokenService",
-            "{",
-            "    public string Resolve(string userId) => Mint(userId);",
-            '    private static string Mint(string userId) => $"tok-{userId}";',
-            "}",
-          ].join("\n"),
-        );
-        writeFileSync(
-          join(dir, "src", "Demo.App", "Program.cs"),
-          [
-            "using Demo.Core;",
-            "namespace Demo.App;",
-            "public class App",
-            "{",
-            "    private readonly ITokenService _tokens;",
-            "    public App(ITokenService tokens) { _tokens = tokens; }",
-            "    public string Run(string user) => _tokens.Resolve(user);",
-            '    public static int Main(string[] args) { Console.WriteLine(new App(new TokenService()).Run("u1")); return 0; }',
-            "}",
-          ].join("\n"),
-        );
-        writeFileSync(
-          join(dir, "Demo.sln"),
-          [
-            "Microsoft Visual Studio Solution File, Format Version 12.00",
-            'Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Demo.Core", "src/Demo.Core/Demo.Core.csproj", "{11111111-1111-1111-1111-111111111111}"',
-            "EndProject",
-            'Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Demo.App", "src/Demo.App/Demo.App.csproj", "{22222222-2222-2222-2222-222222222222}"',
-            "EndProject",
-            "Global",
-            "EndGlobal",
-            "",
-          ].join("\n"),
-        );
-        writeFileSync(join(dir, ".gitignore"), "bin/\nobj/\n");
-        git("add", ".");
-        git("commit", "-m", "init");
+        writeDotnetFixture(dir);
 
         const prev = process.env.SCIP_LANGS;
         process.env.SCIP_LANGS = "cs";

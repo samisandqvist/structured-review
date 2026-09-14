@@ -172,6 +172,10 @@ describe("csharpEntryReasons", () => {
     expect(csharpEntryReasons(root, "src/A.cs", { label: "Main", startLine: 4 })).toEqual(["cli"]);
     expect(csharpEntryReasons(root, "src/A.cs", { label: "Helper", startLine: 5 })).toEqual([]);
   });
+  it("returns [] for a definition line beyond the end of the file", () => {
+    const cache = new Map<string, string[]>([["src/A.cs", ["[HttpGet]", "public void Get() {}"]]]);
+    expect(csharpEntryReasons("/nonexistent", "src/A.cs", { label: "Get", startLine: 9 }, cache)).toEqual([]);
+  });
   it("returns [] for unreadable files and reuses the line cache", () => {
     expect(csharpEntryReasons("/nonexistent", "src/A.cs", { label: "X", startLine: 1 })).toEqual([]);
     const cache = new Map<string, string[]>([["src/A.cs", ["[HttpPost]", "public void Post() {}"]]]);

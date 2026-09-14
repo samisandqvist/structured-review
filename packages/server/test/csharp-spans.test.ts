@@ -37,6 +37,18 @@ describe("memberEndLine", () => {
   it("spans multi-line block comments", () => {
     expect(memberEndLine(["void A() {", "  /* start", "  } still comment", "  */ x();", "}"], 0)).toBe(4);
   });
+  it("handles escaped quotes inside regular and interpolated strings", () => {
+    const line = '  var s = "a\\"}" + $"b\\"{x}" + \'\\\'\';';
+    expect(memberEndLine(["void A() {", line, "}"], 0)).toBe(2);
+  });
+  it("handles raw interpolated strings and nested braces inside holes", () => {
+    expect(
+      memberEndLine(["void A() {", '  var r = $"""', "  }", '  """;', '  var n = $"{new[] { 1 }[0]}";', "}"], 0),
+    ).toBe(5);
+  });
+  it("tolerates a stray dollar sign in code", () => {
+    expect(memberEndLine(["int A() => 1 $ 2;", "int B() => 2;"], 0)).toBe(0);
+  });
   it("returns the start line when the member never closes", () => {
     expect(memberEndLine(["void A() {", "  x();"], 0)).toBe(0);
   });
@@ -91,6 +103,22 @@ describe("synthesizeCsharpSpans", () => {
       throw new Error("ENOENT");
     });
     expect(out!.occurrences![1]!.enclosingRange).toBeUndefined();
+  });
+  it("gives a zero-width span to a definition beyond the end of the source", () => {
+    const stale: ScipDocument = {
+      relativePath: "S.cs",
+      occurrences: [{ symbol: METHOD, symbolRoles: 1, range: [50, 0, 3] }],
+    };
+    expect(synthesizeCsharpSpans([stale], () => "class S {}")[0]!.occurrences![0]!.enclosingRange).toEqual([
+      50, 0, 50, 0,
+    ]);
+  });
+  it("passes through documents without a path or without occurrences", () => {
+    const anonymous: ScipDocument = { occurrences: [] };
+    const empty: ScipDocument = { relativePath: "E.cs" };
+    const out = synthesizeCsharpSpans([anonymous, empty], () => "");
+    expect(out[0]).toBe(anonymous);
+    expect(out[1]).toBe(empty);
   });
   it("returns .cs documents with nothing to span untouched", () => {
     const spanned: ScipDocument = {

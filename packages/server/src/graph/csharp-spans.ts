@@ -1,4 +1,14 @@
-import type { ScipDocument, ScipOccurrence } from "./scip.js";
+/** Structural subset of the SCIP occurrence/document shapes decoded in scip.ts (no import: avoids a module cycle). */
+interface SpanOccurrence {
+  range?: number[];
+  enclosingRange?: number[];
+  symbol?: string;
+  symbolRoles?: number;
+}
+interface SpanDocument {
+  relativePath?: string;
+  occurrences?: SpanOccurrence[];
+}
 
 /**
  * scip-dotnet (through 0.2.14) emits no `enclosing_range` on definitions, so
@@ -15,10 +25,10 @@ import type { ScipDocument, ScipOccurrence } from "./scip.js";
  * Known limits: nested interpolation holes share one brace counter, and
  * verbatim-interpolated strings (`$@"..."`) skip their holes entirely.
  */
-export function synthesizeCsharpSpans(
-  docs: ScipDocument[],
+export function synthesizeCsharpSpans<D extends SpanDocument>(
+  docs: D[],
   readFile: (relativePath: string) => string,
-): ScipDocument[] {
+): D[] {
   return docs.map((doc) => {
     const path = doc.relativePath ?? "";
     if (!path.endsWith(".cs") || !(doc.occurrences ?? []).some(needsSpan)) return doc;
@@ -35,12 +45,12 @@ export function synthesizeCsharpSpans(
 
 const ROLE_DEFINITION = 0x1;
 
-function needsSpan(o: ScipOccurrence): boolean {
+function needsSpan(o: SpanOccurrence): boolean {
   if (!((o.symbolRoles ?? 0) & ROLE_DEFINITION) || o.enclosingRange || o.range?.[0] === undefined) return false;
   return !!o.symbol && !o.symbol.startsWith("local ") && /\)\.$/.test(o.symbol);
 }
 
-function withSpan(o: ScipOccurrence, lines: string[]): ScipOccurrence {
+function withSpan<O extends SpanOccurrence>(o: O, lines: string[]): O {
   const start = o.range![0]!;
   const end = memberEndLine(lines, start);
   return { ...o, enclosingRange: [start, 0, end, lines[end]?.length ?? 0] };
@@ -57,13 +67,13 @@ interface Scan {
   done: boolean;
 }
 
-const top = (s: Scan): Mode => s.modes[s.modes.length - 1] ?? "code";
+const top = (s: Scan): Mode => s.modes[s.modes.length - 1]!; // "code" is never popped
 
 /** 0-based line where the member starting at `startLine` ends; `startLine` if never found. */
 export function memberEndLine(lines: string[], startLine: number): number {
   const s: Scan = { modes: ["code"], depth: 0, sawBrace: false, rawQuotes: 0, holeDepth: 0, done: false };
   for (let i = startLine; i < lines.length; i++) {
-    const line = lines[i] ?? "";
+    const line = lines[i]!;
     if (top(s) === "line-comment") s.modes.pop();
     if (top(s) === "code" && /^\s*#/.test(line)) continue;
     for (let c = 0; c < line.length; c++) {
