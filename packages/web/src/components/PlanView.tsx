@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useBulkUpdateNodeStatus, useFlows, useNodes, useSession, useUpdateUnit } from "../api/hooks.js";
 import { useUIStore } from "../store/ui.js";
 import { RESIDUAL_KIND } from "../residual-kind.js";
@@ -534,6 +534,20 @@ function FlowTrack({
   );
 }
 
+/** Keeps the current chip visible in the scrolling plan list. Runs only when
+ *  `current` flips on (keyboard walks and relation jumps move the selection
+ *  without a click), so a reviewer who scrolls away to read the plan is not
+ *  yanked back on unrelated re-renders. */
+function useScrollIntoViewWhenCurrent(current: boolean) {
+  const ref = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!current || !el || typeof el.scrollIntoView !== "function") return;
+    el.scrollIntoView({ block: "nearest" });
+  }, [current]);
+  return ref;
+}
+
 /** A server-attached member (test / DTO / residual) under its parent node.
  *  counted=false renders dimmed as a cross-unit reference (jump link only). */
 function AttachedChip({
@@ -547,6 +561,7 @@ function AttachedChip({
   current: boolean;
   onSelect: (nodeId: string) => void;
 }) {
+  const ref = useScrollIntoViewWhenCurrent(current);
   if (!node) return null;
   const residual = node.residualKind ? RESIDUAL_KIND[node.residualKind] : null;
   const cls = [
@@ -567,6 +582,7 @@ function AttachedChip({
   const title = residual ? `${base}. ${residual.title}` : base;
   return (
     <button
+      ref={ref}
       className={cls}
       data-testid={`attached-${member.counted ? "member" : "ref"}`}
       onClick={() => onSelect(node.id)}
@@ -589,6 +605,7 @@ function StepChip({
   current: boolean;
   onSelect: (nodeId: string) => void;
 }) {
+  const ref = useScrollIntoViewWhenCurrent(current);
   const residual = step.residualKind ? RESIDUAL_KIND[step.residualKind] : null;
   const cls = [
     "step",
@@ -603,6 +620,7 @@ function StepChip({
     .join(" ");
   return (
     <button
+      ref={ref}
       className={cls}
       disabled={!step.nodeId}
       onClick={() => step.nodeId && onSelect(step.nodeId)}

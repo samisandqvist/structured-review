@@ -426,6 +426,35 @@ describe("PlanView", () => {
   });
 });
 
+describe("current chip visibility", () => {
+  it("scrolls the newly current chip into view, once, when the selection moves to it", () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    const { rerender } = render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={() => {}} />);
+    expect(scroll).not.toHaveBeenCalled();
+
+    rerender(<PlanView sessionId="s1" currentNodeId="n2" onSelectNode={() => {}} />);
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll.mock.instances[0]).toBe(screen.getByText("validateOrder").closest("button"));
+    expect(scroll).toHaveBeenCalledWith(expect.objectContaining({ block: "nearest" }));
+
+    // Re-rendering with the same selection must not scroll again (the reviewer
+    // may have scrolled away on purpose to read the plan).
+    rerender(<PlanView sessionId="s1" currentNodeId="n2" onSelectNode={() => {}} />);
+    expect(scroll).toHaveBeenCalledTimes(1);
+  });
+
+  it("scrolls an attached member chip into view when it becomes current", () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    const { rerender } = render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={() => {}} />);
+    rerender(<PlanView sessionId="s1" currentNodeId="n-t1" onSelectNode={() => {}} />);
+    const chips = screen.getAllByText("testOrder").map((el) => el.closest("button"));
+    expect(scroll).toHaveBeenCalled();
+    for (const inst of scroll.mock.instances) expect(chips).toContain(inst);
+  });
+});
+
 describe("unit header interaction boundaries", () => {
   it("cancels bulk review without sending a mutation", () => {
     vi.spyOn(window, "confirm").mockReturnValue(false);
