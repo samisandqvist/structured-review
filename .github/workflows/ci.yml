@@ -37,7 +37,7 @@ jobs:
       # Ubuntu image supplies its JDK and Maven; TypeScript and Python indexers
       # come from the frozen pnpm installation.
       - name: Install Coursier
-        uses: coursier/setup-action@9b7939bf01fd1185ce2babe16135168361bf2c62 # v3.0.2
+        uses: coursier/setup-action@3174df5c784a0c8724f06b7924b849551c40c39e # v3.0.3
 
       - name: Install .NET SDK
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
