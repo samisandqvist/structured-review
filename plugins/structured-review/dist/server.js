@@ -19594,7 +19594,7 @@ function parseCommandOverride(raw2) {
   const trimmed = raw2?.trim();
   if (!trimmed) return void 0;
   const [argv0, ...args] = trimmed.split(/\s+/);
-  return argv0 ? { argv0, args } : void 0;
+  return { argv0, args };
 }
 function findOnPath(bin, env) {
   for (const dir of (env.PATH ?? "").split(":")) {
