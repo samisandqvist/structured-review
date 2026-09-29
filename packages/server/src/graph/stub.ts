@@ -47,11 +47,11 @@ export class StubGraphProvider implements GraphProvider {
   }
 
   async getNeighbors(stableId: string): Promise<{ callers: GraphNode[]; callees: GraphNode[] }> {
-    const callees = STUB_EDGES.filter((e) => e.sourceStableId === stableId).map(
-      (e) => STUB_NODES.find((n) => n.stableId === e.targetStableId)!,
+    const callees = STUB_EDGES.filter((e) => e.sourceStableId === stableId).map((e) =>
+      STUB_NODES.find((n) => n.stableId === e.targetStableId)!,
     );
-    const callers = STUB_EDGES.filter((e) => e.targetStableId === stableId).map(
-      (e) => STUB_NODES.find((n) => n.stableId === e.sourceStableId)!,
+    const callers = STUB_EDGES.filter((e) => e.targetStableId === stableId).map((e) =>
+      STUB_NODES.find((n) => n.stableId === e.sourceStableId)!,
     );
     return { callers, callees };
   }
