@@ -68,8 +68,13 @@ Only changed items outside explicit plan coverage are candidates. Explicit
 membership takes precedence, and parents must already be covered: attachments
 cannot recursively become parents. Four rules run in order; the first match wins:
 
-1. **Test edges:** attach a test under the first exercised covered node in walk
-   order. Other units exercising it receive non-counting references.
+1. **Test edges:** attach a test under the covered node it exercises as its
+   subject: the one whose file basename the test is named after, else the one
+   it references most often, else the first in walk order. Other units
+   exercising it receive non-counting references. A test file whose tests are
+   anonymous callbacks is itself the caller of what they exercise (the SCIP
+   provider gives test documents a whole-file node), so this rule applies to
+   vitest-style suites without named helpers.
 2. **Same file:** attach under the first covered node in the item's file.
 3. **Required by:** attach under the first covered consumer of the item's file.
 4. **Test imports:** for remaining tests, choose a covered subject their file

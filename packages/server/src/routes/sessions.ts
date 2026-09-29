@@ -10,6 +10,7 @@ import {
 } from "../repo/sessions.js";
 import { createUnit, getUnitsBySession, deleteUnit, updateUnitLabel, setUnitPositions } from "../repo/units.js";
 import { createNode, getNodesBySession } from "../repo/nodes.js";
+import { insertEdges, getTestEdges } from "../repo/edges.js";
 import {
   fileChangedRanges,
   gitHeadSha,
@@ -26,7 +27,6 @@ import type { ChangeSubgraph, GraphNode } from "../graph/provider.js";
 import type { ChangeStatus } from "../types.js";
 import { computeCoverage, flowEntries, type PlanUnitInput } from "../coverage.js";
 import { deriveAttachments, countedAttachmentIds } from "../attach.js";
-import { randomId } from "../util.js";
 import { parseBody, sessionCreateSchema, planSchema, unitPatchSchema } from "../validate.js";
 import { resolveOrphanFiles } from "../globs.js";
 
@@ -169,14 +169,7 @@ export function createSessionsRoute(ctx: AppContext) {
         });
       }
       const idByStable = new Map(getNodesBySession(ctx.db, session.id).map((n) => [n.stableId, n.id]));
-      const insertEdge = ctx.db.prepare(
-        "INSERT INTO edges (id, session_id, source_node_id, target_node_id, edge_type) VALUES (?, ?, ?, ?, ?)",
-      );
-      for (const gedge of subgraph.edges) {
-        const source = idByStable.get(gedge.sourceStableId);
-        const target = idByStable.get(gedge.targetStableId);
-        if (source && target) insertEdge.run(randomId("edge"), session.id, source, target, gedge.edgeType);
-      }
+      insertEdges(ctx.db, session.id, subgraph.edges, idByStable);
       return session;
     })();
     return c.json({ session, subgraph });
@@ -271,15 +264,7 @@ export function createSessionsRoute(ctx: AppContext) {
     // Attachment derivation (spec 2026-07-17): nest unassigned tests, DTOs and
     // module-scope residuals under the covered node that gives them context.
     // Derived here (not on read) so web, CLI and coverage share one truth.
-    const testEdges = (
-      ctx.db
-        .prepare(
-          `SELECT sn.stable_id AS prod, tn.stable_id AS test
-       FROM edges e JOIN nodes sn ON e.source_node_id = sn.id JOIN nodes tn ON e.target_node_id = tn.id
-       WHERE e.session_id = ? AND e.edge_type = 'test'`,
-        )
-        .all(sessionId) as { prod: string; test: string }[]
-    ).map((r) => ({ productionStableId: r.prod, testStableId: r.test }));
+    const testEdges = getTestEdges(ctx.db, sessionId);
     const fileRequires = (await ctx.graphProvider.getFileRequires?.()) ?? new Map();
     const attachedPerUnit = deriveAttachments(units, flows, sessionNodes, testEdges, fileRequires);
     const attachedIds = countedAttachmentIds(attachedPerUnit);

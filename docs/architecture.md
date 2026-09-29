@@ -58,8 +58,9 @@ untracked content can invalidate the fingerprint without becoming a review item.
 [`GraphProvider`](../packages/server/src/graph/provider.ts) exposes change
 subgraphs, neighboring nodes, flows, and optional indexing warnings and file
 dependencies. SCIP is the default; CRG and a test stub use the same boundary.
-Call and test edges support navigation. File dependencies support attachment
-derivation and retain whether a reference is to a value or only a type.
+Call and test edges support navigation and carry a weight, the number of
+references behind them. File dependencies support attachment derivation and
+retain whether a reference is to a value or only a type.
 
 The SCIP provider discovers project roots from language markers and runs one
 indexer job per retained root. A root nested under another root of the same

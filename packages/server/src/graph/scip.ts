@@ -1,12 +1,12 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import protobuf from "protobufjs";
 import type { GraphProvider, GraphNode, GraphEdge, ChangeSubgraph, Flow, FileRequires } from "./provider.js";
-import type { ChangeStatus, EdgeType } from "../types.js";
+import type { ChangeStatus } from "../types.js";
 import {
   fileChangedRanges,
   rangesOverlap,
@@ -48,8 +48,11 @@ import {
  *  - nodes  = global definitions with a body span (enclosing_range) — functions
  *             and methods. Nested locals/anonymous callbacks roll up into their
  *             enclosing named function (this is the de-noised altitude we want).
+ *             A TEST document's own symbol (whole-file span) is a node too, so
+ *             calls made from anonymous `it(() => ...)` callbacks have a caller.
  *  - calls  = a non-definition, non-import reference to a node symbol, attributed
- *             to the innermost named node whose body contains it.
+ *             to the innermost node whose body contains it; the count of such
+ *             references per caller/callee pair is the edge weight.
  * Change detection is git-based (see getChangeSubgraph); SCIP gives the whole
  * repo graph and we scope it to the change + N hops of call context.
  *
@@ -71,6 +74,8 @@ export interface BuiltGraph {
   nodes: Map<string, RawNode>; // symbol -> node
   callAdj: Map<string, string[]>; // caller -> callees (deduped)
   callRev: Map<string, string[]>; // callee -> callers
+  /** caller -> callee -> number of references attributed to that caller. */
+  callWeights: CallWeights;
   /** consumer file -> files defining the symbols it references/imports, with
    *  per-edge hasValueRef (false = only bare `#` type symbols referenced). */
   fileRequires: FileRequires;
@@ -98,8 +103,16 @@ export class ScipGraphProvider implements GraphProvider {
 
   async getChangeSubgraph(_branch: string, baseRef: string): Promise<ChangeSubgraph> {
     const g = await this.buildGraph();
+    const changed = this.changedSymbols(g, baseRef);
+    const scope = this.scopeAround(g, changed);
+    const nodes = subgraphNodes(g, scope, changed);
+    const edges = subgraphEdges(g, scope);
+    markEntryPoints(nodes, edges);
+    return { nodes, edges };
+  }
 
-    // Changed nodes = body span overlaps a git diff hunk. Cache diffs per file.
+  /** Changed nodes = body span overlaps a git diff hunk. Diffs are cached per file. */
+  private changedSymbols(g: BuiltGraph, baseRef: string): Set<string> {
     const rangesByFile = new Map<string, LineRange[] | null>();
     const changed = new Set<string>();
     for (const [sym, n] of g.nodes) {
@@ -107,8 +120,11 @@ export class ScipGraphProvider implements GraphProvider {
       const ranges = rangesByFile.get(n.file);
       if (ranges && ranges.length > 0 && rangesOverlap(ranges, n.startLine, n.endLine)) changed.add(sym);
     }
+    return changed;
+  }
 
-    // Scope: changed nodes + N hops of callers/callees as context.
+  /** Scope: changed nodes + N hops of callers/callees as context. */
+  private scopeAround(g: BuiltGraph, changed: Set<string>): Set<string> {
     const scope = new Set(changed);
     let frontier = [...changed];
     for (let hop = 0; hop < this.contextDepth && frontier.length; hop++) {
@@ -123,57 +139,7 @@ export class ScipGraphProvider implements GraphProvider {
       }
       frontier = next;
     }
-
-    const nodes: GraphNode[] = [];
-    for (const sym of scope) {
-      const n = g.nodes.get(sym);
-      if (!n) continue;
-      nodes.push({
-        stableId: sym,
-        label: n.label,
-        file: n.file,
-        startLine: n.startLine,
-        endLine: n.endLine,
-        isEntryPoint: false,
-        changeStatus: (changed.has(sym) ? "changed" : "unchanged") as ChangeStatus,
-        isTest: n.isTest,
-      });
-    }
-
-    // Edges among scoped nodes. A call from a test node into production is a
-    // TESTED_BY edge (production tested-by test), matching the rest of the app.
-    const edges: GraphEdge[] = [];
-    const seen = new Set<string>();
-    for (const [src, tgts] of g.callAdj) {
-      if (!scope.has(src)) continue;
-      const srcNode = g.nodes.get(src);
-      for (const tgt of tgts) {
-        if (src === tgt || !scope.has(tgt)) continue;
-        const tgtNode = g.nodes.get(tgt);
-        let edge: GraphEdge;
-        if (srcNode?.isTest && !tgtNode?.isTest) {
-          edge = { sourceStableId: tgt, targetStableId: src, edgeType: "test" as EdgeType };
-        } else if (srcNode?.isTest) {
-          continue; // test -> test internals: skip
-        } else {
-          edge = { sourceStableId: src, targetStableId: tgt, edgeType: "call" as EdgeType };
-        }
-        const key = `${edge.edgeType}\t${edge.sourceStableId}\t${edge.targetStableId}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        edges.push(edge);
-      }
-    }
-
-    // Entry point = changed, non-test node nothing in-scope calls.
-    const called = new Set(edges.filter((e) => e.edgeType === "call").map((e) => e.targetStableId));
-    for (const node of nodes) {
-      if (node.changeStatus === "changed" && !node.isTest && !called.has(node.stableId)) {
-        node.isEntryPoint = true;
-      }
-    }
-
-    return { nodes, edges };
+    return scope;
   }
 
   async getNeighbors(stableId: string): Promise<{ callers: GraphNode[]; callees: GraphNode[] }> {
@@ -535,6 +501,56 @@ export function resolveScipJavaCommand(env: NodeJS.ProcessEnv = process.env): Sc
   return null;
 }
 
+function subgraphNodes(g: BuiltGraph, scope: Set<string>, changed: Set<string>): GraphNode[] {
+  const nodes: GraphNode[] = [];
+  for (const sym of scope) {
+    const n = g.nodes.get(sym);
+    if (!n) continue;
+    const changeStatus: ChangeStatus = changed.has(sym) ? "changed" : "unchanged";
+    nodes.push({ ...n, stableId: sym, isEntryPoint: false, changeStatus });
+  }
+  return nodes;
+}
+
+/** A call from a test node into production is a TESTED_BY edge (production
+ * tested-by test), matching the rest of the app; test-internal calls are dropped. */
+function subgraphEdge(g: BuiltGraph, src: string, tgt: string): GraphEdge | undefined {
+  const srcIsTest = g.nodes.get(src)?.isTest ?? false;
+  const tgtIsTest = g.nodes.get(tgt)?.isTest ?? false;
+  if (srcIsTest && tgtIsTest) return undefined;
+  const weight = g.callWeights.get(src)?.get(tgt) ?? 1;
+  return srcIsTest
+    ? { sourceStableId: tgt, targetStableId: src, edgeType: "test", weight }
+    : { sourceStableId: src, targetStableId: tgt, edgeType: "call", weight };
+}
+
+/** Edges among scoped nodes, deduplicated by type and endpoints. */
+function subgraphEdges(g: BuiltGraph, scope: Set<string>): GraphEdge[] {
+  const edges: GraphEdge[] = [];
+  const seen = new Set<string>();
+  for (const [src, tgts] of g.callAdj) {
+    if (!scope.has(src)) continue;
+    for (const tgt of tgts) {
+      if (src === tgt || !scope.has(tgt)) continue;
+      const edge = subgraphEdge(g, src, tgt);
+      if (!edge) continue;
+      const key = `${edge.edgeType}\t${edge.sourceStableId}\t${edge.targetStableId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      edges.push(edge);
+    }
+  }
+  return edges;
+}
+
+/** Entry point = changed, non-test node nothing in-scope calls. */
+function markEntryPoints(nodes: GraphNode[], edges: GraphEdge[]): void {
+  const called = new Set(edges.filter((e) => e.edgeType === "call").map((e) => e.targetStableId));
+  for (const node of nodes) {
+    if (node.changeStatus === "changed" && !node.isTest && !called.has(node.stableId)) node.isEntryPoint = true;
+  }
+}
+
 // ---- SCIP decoding -------------------------------------------------------
 
 export interface ScipOccurrence {
@@ -660,10 +676,25 @@ function callTargets(symbol: string, nodes: Map<string, RawNode>, implementation
   return targets;
 }
 
+/** caller -> callee -> reference count. */
+type CallWeights = Map<string, Map<string, number>>;
+
+/** A test document's own symbol (`.../\`x.test.ts\`/`, spanning the whole file)
+ * becomes the caller for references that no named node encloses: vitest-style
+ * tests call their subject from anonymous callbacks. Production documents get
+ * no such node — their import-time references would head a spurious flow each. */
+function testModuleNode(symbol: string, occurrence: ScipOccurrence, file: string): RawNode | undefined {
+  if (!symbol.endsWith("/") || !isTestFile(file)) return undefined;
+  const span = span1(occurrence.enclosingRange);
+  if (!span) return undefined;
+  return { label: basename(file), file, startLine: span[0], endLine: span[1], isTest: true };
+}
+
 /** Types and namespaces still define file dependencies, but only callable
  * definitions with body spans become graph nodes. Java fields also have spans. */
 function callableNode(symbol: string, occurrence: ScipOccurrence, file: string): RawNode | undefined {
-  if (/[#/]$/.test(symbol)) return undefined;
+  if (symbol.endsWith("/")) return testModuleNode(symbol, occurrence, file);
+  if (symbol.endsWith("#")) return undefined;
   if (file.endsWith(".java") && !/\)\.$/.test(symbol)) return undefined;
   const span = span1(occurrence.enclosingRange);
   if (!span) return undefined;
@@ -733,7 +764,7 @@ function collectDocumentCalls(
   document: GraphDocument,
   nodes: Map<string, RawNode>,
   implementations: Implementations,
-  calls: Map<string, Set<string>>,
+  calls: CallWeights,
 ) {
   const callers = documentCallers(document, nodes);
   for (const occurrence of document.occurrences) {
@@ -743,8 +774,8 @@ function collectDocumentCalls(
     if (targets.length === 0) continue;
     const caller = enclosingCaller(callers, occurrence);
     if (!caller) continue;
-    const known = calls.get(caller) ?? new Set<string>();
-    for (const target of targets) if (target !== caller) known.add(target);
+    const known = calls.get(caller) ?? new Map<string, number>();
+    for (const target of targets) if (target !== caller) known.set(target, (known.get(target) ?? 0) + 1);
     calls.set(caller, known);
   }
 }
@@ -758,18 +789,18 @@ function enclosingCaller(callers: { symbol: string; sl: number; el: number }[], 
   return callers.find((c) => line >= c.sl && line <= c.el && c.symbol !== occurrence.symbol)?.symbol;
 }
 
-function callAdjacency(calls: Map<string, Set<string>>) {
+function callAdjacency(calls: CallWeights) {
   const callAdj = new Map<string, string[]>();
   const callRev = new Map<string, string[]>();
   for (const [source, targets] of calls) {
-    callAdj.set(source, [...targets]);
-    for (const target of targets) {
+    callAdj.set(source, [...targets.keys()]);
+    for (const target of targets.keys()) {
       const callers = callRev.get(target) ?? [];
       callers.push(source);
       callRev.set(target, callers);
     }
   }
-  return { callAdj, callRev };
+  return { callAdj, callRev, callWeights: calls };
 }
 
 export function buildGraphFromIndex(idx: ScipIndex, root: string): BuiltGraph {
@@ -785,7 +816,7 @@ export function buildGraphFromIndex(idx: ScipIndex, root: string): BuiltGraph {
   const { nodes, definitionFiles } = collectDefinitions(documents);
   const fileRequires = collectFileRequires(documents, definitionFiles);
   const implementations = collectImplementations(documents);
-  const calls = new Map<string, Set<string>>();
+  const calls: CallWeights = new Map();
   for (const document of documents) collectDocumentCalls(document, nodes, implementations, calls);
   return { nodes, ...callAdjacency(calls), fileRequires };
 }

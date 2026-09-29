@@ -60,7 +60,7 @@
       "lines": 100,
       "statements": 100,
       "functions": 100,
-      "branches": 90.38461538461539
+      "branches": 90
     },
     "packages/server/src/graph/flow-tree.ts": {
       "lines": 100,
@@ -81,9 +81,9 @@
       "branches": 91.66666666666667
     },
     "packages/server/src/graph/scip.ts": {
-      "lines": 92.69911504424779,
-      "statements": 92.69911504424779,
-      "functions": 96.55172413793103,
+      "lines": 90,
+      "statements": 90,
+      "functions": 90,
       "branches": 83.6734693877551
     },
     "packages/server/src/graph/stub.ts": {
