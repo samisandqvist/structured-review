@@ -39,7 +39,8 @@
     "@playwright/test": "1.63.0",
     "@stryker-mutator/core": "10.0.0",
     "@stryker-mutator/vitest-runner": "10.0.0",
-    "@types/node": "26.6.3",
+    "@types/node": "22.20.0",
+    "@typescript/native": "npm:typescript@^7.0.2",
     "@vitest/coverage-v8": "5.0.2",
     "concurrently": "^10.0.5",
     "dependency-cruiser": "18.4.0",
@@ -50,7 +51,7 @@
     "globals": "17.12.0",
     "knip": "6.38.0",
     "prettier": "3.9.9",
-    "typescript": "^7.0.2",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
     "typescript-eslint": "8.70.1",
     "vitest": "^5.0.2"
   },
@@ -66,6 +67,9 @@
       "nanoid@3.3.14": "3.3.18",
       "postcss@8.5.15": "8.5.18",
       "shell-quote@1.8.4": "1.9.0"
+    },
+    "patchedDependencies": {
+      "@stryker-mutator/vitest-runner@10.0.0": "patches/@stryker-mutator__vitest-runner@10.0.0.patch"
     }
   }
 }
