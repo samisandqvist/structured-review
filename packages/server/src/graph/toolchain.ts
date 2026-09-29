@@ -11,8 +11,9 @@ export interface ToolCommand {
 export function parseCommandOverride(raw: string | undefined): ToolCommand | undefined {
   const trimmed = raw?.trim();
   if (!trimmed) return undefined;
-  const [argv0, ...args] = trimmed.split(/\s+/);
-  return argv0 ? { argv0, args } : undefined;
+  // A trimmed non-empty string splits into a non-empty first element.
+  const [argv0, ...args] = trimmed.split(/\s+/) as [string, ...string[]];
+  return { argv0, args };
 }
 
 export function findOnPath(bin: string, env: NodeJS.ProcessEnv): boolean {

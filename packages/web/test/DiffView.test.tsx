@@ -375,3 +375,23 @@ describe("line selection interaction", () => {
     expect(useUIStore.getState().pendingAnchorHighlight).toBeNull();
   });
 });
+
+describe("line drag release", () => {
+  beforeEach(() => useUIStore.setState({ lineSelection: null, pendingAnchorHighlight: null }));
+
+  it("a drag released with no trailing click does not swallow a later click", async () => {
+    render(<DiffView node={NODE} diff={{ oldText: "", newText: "", lines: LINES, totalLines: 12 }} />);
+    const rows = screen.getAllByRole("row");
+    fireEvent.mouseDown(rows[2]);
+    fireEvent.mouseEnter(rows[4]);
+    fireEvent.mouseUp(window); // released off-window: the browser fires no click
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fireEvent.click(rows[3]);
+    expect(useUIStore.getState().lineSelection?.anchor).toEqual({
+      startLine: 11,
+      startSide: "new",
+      endLine: 11,
+      endSide: "new",
+    });
+  });
+});
