@@ -10,7 +10,7 @@
     },
     "packages/server/src/attach.ts": {
       "lines": 100,
-      "statements": 100,
+      "statements": 96.55172413793103,
       "functions": 100,
       "branches": 86.36363636363636
     },
@@ -24,7 +24,7 @@
       "lines": 100,
       "statements": 100,
       "functions": 100,
-      "branches": 90
+      "branches": 87.5
     },
     "packages/server/src/db/schema.ts": {
       "lines": 100,
@@ -33,8 +33,8 @@
       "branches": 100
     },
     "packages/server/src/diff.ts": {
-      "lines": 97.14867617107943,
-      "statements": 97.14867617107943,
+      "lines": 97.07112970711297,
+      "statements": 96.69117647058823,
       "functions": 100,
       "branches": 90
     },
@@ -51,22 +51,22 @@
       "branches": 100
     },
     "packages/server/src/graph/crg.ts": {
-      "lines": 78.61635220125787,
-      "statements": 78.61635220125787,
+      "lines": 75.67567567567568,
+      "statements": 74.44444444444444,
       "functions": 76.92307692307692,
       "branches": 63.793103448275865
     },
     "packages/server/src/graph/entry-points.ts": {
       "lines": 100,
-      "statements": 100,
+      "statements": 95.6989247311828,
       "functions": 100,
-      "branches": 90
+      "branches": 87.5
     },
     "packages/server/src/graph/flow-tree.ts": {
       "lines": 100,
-      "statements": 100,
+      "statements": 93.87755102040816,
       "functions": 100,
-      "branches": 86.48648648648648
+      "branches": 84.21052631578947
     },
     "packages/server/src/graph/provider.ts": {
       "lines": 100,
@@ -75,16 +75,16 @@
       "branches": 100
     },
     "packages/server/src/graph/roots.ts": {
-      "lines": 95.1219512195122,
+      "lines": 94.73684210526315,
       "statements": 95.1219512195122,
       "functions": 100,
-      "branches": 91.66666666666667
+      "branches": 83.78378378378379
     },
     "packages/server/src/graph/scip.ts": {
       "lines": 90,
       "statements": 90,
       "functions": 90,
-      "branches": 83.6734693877551
+      "branches": 82.94314381270902
     },
     "packages/server/src/graph/stub.ts": {
       "lines": 100,
@@ -126,7 +126,7 @@
       "lines": 100,
       "statements": 100,
       "functions": 100,
-      "branches": 90
+      "branches": 80
     },
     "packages/server/src/residuals.ts": {
       "lines": 100,
@@ -136,39 +136,39 @@
     },
     "packages/server/src/routes/changes.ts": {
       "lines": 97.77777777777777,
-      "statements": 97.77777777777777,
+      "statements": 95.45454545454545,
       "functions": 100,
       "branches": 82.3529411764706
     },
     "packages/server/src/routes/comments.ts": {
       "lines": 100,
-      "statements": 100,
+      "statements": 96.22641509433963,
       "functions": 100,
-      "branches": 91.17647058823529
+      "branches": 90.47619047619048
     },
     "packages/server/src/routes/events.ts": {
-      "lines": 30.303030303030305,
-      "statements": 30.303030303030305,
-      "functions": 50,
-      "branches": 100
+      "lines": 19.047619047619047,
+      "statements": 17.391304347826086,
+      "functions": 14.285714285714285,
+      "branches": 0
     },
     "packages/server/src/routes/flows.ts": {
       "lines": 100,
       "statements": 100,
       "functions": 100,
-      "branches": 95.83333333333333
+      "branches": 95.23809523809523
     },
     "packages/server/src/routes/nodes.ts": {
       "lines": 95.55555555555556,
-      "statements": 95.55555555555556,
+      "statements": 91.37931034482759,
       "functions": 100,
       "branches": 81.08108108108108
     },
     "packages/server/src/routes/sessions.ts": {
       "lines": 99.25373134328358,
-      "statements": 99.25373134328358,
+      "statements": 98.84393063583815,
       "functions": 100,
-      "branches": 93.18181818181819
+      "branches": 91.96428571428571
     },
     "packages/server/src/static.ts": {
       "lines": 100,
@@ -198,13 +198,13 @@
       "lines": 86.11111111111111,
       "statements": 86.11111111111111,
       "functions": 60.869565217391305,
-      "branches": 92.20779220779221
+      "branches": 87.5
     },
     "packages/skill/src/cli.ts": {
       "lines": 15.168539325842696,
       "statements": 15.168539325842696,
       "functions": 13.636363636363637,
-      "branches": 78.57142857142857
+      "branches": 72.22222222222221
     },
     "packages/skill/src/gc.ts": {
       "lines": 58.46153846153846,
@@ -228,43 +228,43 @@
       "lines": 100,
       "statements": 100,
       "functions": 100,
-      "branches": 96.7741935483871
+      "branches": 95.45454545454545
     },
     "packages/web/src/App.tsx": {
-      "lines": 98.3695652173913,
-      "statements": 98.3695652173913,
+      "lines": 97.05882352941177,
+      "statements": 97.5,
       "functions": 100,
-      "branches": 88.88888888888889
+      "branches": 86.36363636363636
     },
     "packages/web/src/api/client.ts": {
-      "lines": 50,
-      "statements": 50,
+      "lines": 33.33333333333333,
+      "statements": 31.818181818181817,
       "functions": 17.647058823529413,
-      "branches": 75
+      "branches": 16.666666666666664
     },
     "packages/web/src/api/hooks.ts": {
-      "lines": 60,
-      "statements": 60,
-      "functions": 64,
+      "lines": 41.46341463414634,
+      "statements": 47.82608695652174,
+      "functions": 53.333333333333336,
       "branches": 100
     },
     "packages/web/src/components/CommentBox.tsx": {
       "lines": 98.3739837398374,
-      "statements": 98.3739837398374,
+      "statements": 92.5925925925926,
       "functions": 100,
-      "branches": 76.92307692307692
+      "branches": 72
     },
     "packages/web/src/components/CommentCard.tsx": {
       "lines": 100,
-      "statements": 100,
+      "statements": 95,
       "functions": 100,
-      "branches": 95
+      "branches": 94.73684210526315
     },
     "packages/web/src/components/DiffView.tsx": {
-      "lines": 99.6951219512195,
-      "statements": 99.6951219512195,
+      "lines": 97.6923076923077,
+      "statements": 95.70552147239265,
       "functions": 89.28571428571429,
-      "branches": 92.46575342465754
+      "branches": 91.55844155844156
     },
     "packages/web/src/components/NodeBadge.tsx": {
       "lines": 100,
@@ -285,10 +285,10 @@
       "branches": 100
     },
     "packages/web/src/components/SessionNotes.tsx": {
-      "lines": 91.42857142857143,
-      "statements": 91.42857142857143,
+      "lines": 77.77777777777779,
+      "statements": 71.42857142857143,
       "functions": 83.33333333333333,
-      "branches": 93.75
+      "branches": 61.904761904761905
     },
     "packages/web/src/components/SessionPicker.tsx": {
       "lines": 100,
@@ -297,10 +297,10 @@
       "branches": 100
     },
     "packages/web/src/components/SplitLayout.tsx": {
-      "lines": 92.0754716981132,
-      "statements": 92.0754716981132,
+      "lines": 77.90697674418605,
+      "statements": 77.77777777777779,
       "functions": 55.55555555555556,
-      "branches": 81.13207547169812
+      "branches": 73.01587301587301
     },
     "packages/web/src/main.tsx": {
       "lines": 0,
@@ -309,8 +309,8 @@
       "branches": 0
     },
     "packages/web/src/navigation.ts": {
-      "lines": 66.66666666666667,
-      "statements": 66.66666666666667,
+      "lines": 50,
+      "statements": 50,
       "functions": 50,
       "branches": 100
     },
@@ -330,17 +330,17 @@
       "lines": 100,
       "statements": 100,
       "functions": 100,
-      "branches": 100
+      "branches": 90
     },
     "packages/web/src/store/ui.ts": {
-      "lines": 100,
-      "statements": 100,
-      "functions": 75,
+      "lines": 76.47058823529412,
+      "statements": 75,
+      "functions": 72.22222222222221,
       "branches": 100
     },
     "packages/web/src/walk-order.ts": {
       "lines": 100,
-      "statements": 100,
+      "statements": 98.18181818181819,
       "functions": 100,
       "branches": 88.0952380952381
     },
