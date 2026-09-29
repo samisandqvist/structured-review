@@ -90,7 +90,9 @@ Dependabot is configured weekly for npm production/development groups and GitHub
 
 ## Tool selection and probe evidence
 
-Harness dependencies are pinned in the lockfile: ESLint 9.39.1, typescript-eslint 8.70.0, eslint-plugin-sonarjs 4.2.0, Prettier 3.6.2, dependency-cruiser 18.2.0, Knip 6.35.1, Vitest V8 coverage 3.2.6, fast-check 4.10.0, Stryker core/Vitest runner 10.0.0, Playwright 1.63.0, and axe-core/playwright 4.11.1. Selection used the [Vitest v3 coverage reference](https://v3.vitest.dev/config/#coverage), [typed-linting guide](https://typescript-eslint.io/getting-started/typed-linting/), [ESLint complexity rule](https://eslint.org/docs/latest/rules/complexity), [dependency-cruiser](https://github.com/sverweij/dependency-cruiser), [Knip](https://knip.dev/overview/getting-started), [Stryker Vitest runner](https://stryker-mutator.io/docs/stryker-js/vitest-runner/), [fast-check](https://fast-check.dev/docs/introduction/), and [Playwright accessibility guidance](https://playwright.dev/docs/accessibility-testing). Exact pins preserve the existing Node 24, pnpm 10, Vitest 3, and TypeScript stack rather than introducing unrelated major migrations.
+Harness dependencies are pinned in the lockfile: ESLint 10.11.0, typescript-eslint 8.70.1, eslint-plugin-sonarjs 4.2.1, Prettier 3.9.9, dependency-cruiser 18.4.0, Knip 6.38.0, Vitest and Vitest V8 coverage 5.0.2, fast-check 4.10.2, Stryker core/Vitest runner 10.0.0, Playwright 1.63.0, and axe-core/playwright 4.13.0. Selection used the [Vitest coverage reference](https://vitest.dev/config/#coverage), [typed-linting guide](https://typescript-eslint.io/getting-started/typed-linting/), [ESLint complexity rule](https://eslint.org/docs/latest/rules/complexity), [dependency-cruiser](https://github.com/sverweij/dependency-cruiser), [Knip](https://knip.dev/overview/getting-started), [Stryker Vitest runner](https://stryker-mutator.io/docs/stryker-js/vitest-runner/), [fast-check](https://fast-check.dev/docs/introduction/), and [Playwright accessibility guidance](https://playwright.dev/docs/accessibility-testing).
+
+`tsc` is TypeScript 7 (`@typescript/native` at the root, `typescript` in each package). The root `typescript` name is an alias for `@typescript/typescript6`, because typescript-eslint, Knip and dependency-cruiser load the JavaScript compiler API that TypeScript 7 no longer ships ([side-by-side guide](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/)). Drop the alias once typescript-eslint supports TypeScript 7. `@types/node` tracks the oldest supported runtime (Node 22, per `engines`), not the newest release. `patches/@stryker-mutator__vitest-runner@10.0.0.patch` joins test names with `' > '`: Vitest 5 matches `testNamePattern` against that chain, and the unpatched runner's filter matches nothing, so every mutant survives ([stryker-js#6210](https://github.com/stryker-mutator/stryker-js/issues/6210)). Remove the patch when a runner release fixes it; the mutation score (92.22%) is unchanged from the Vitest 3 run.
 
 | Capability               | Verified access in this Codex session                               | Scope, limitation and fallback                                                                                                |
 | ------------------------ | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
@@ -129,6 +131,15 @@ below the floors recorded on one that had it (`scip.ts` 91.67% lines, 94.34% fun
 `entry-points.ts` 90.28% branches at approval), while the same measurement on `main`
 gave 91.22%, 93.48% and 90.28%. The floors now match the strict branch policy rather
 than the toolchain of the measuring machine.
+
+On 2026-09-29, the owner approved re-measuring the per-file floors for the move from Vitest 3 to
+Vitest 5. Vitest 4 replaced V8 coverage remapping with AST-based remapping, which counts only
+executable lines and statements and finds branches the old remapping missed. With the same source
+and the same 683 passing tests, repository totals went from 6889/7268 lines, 487/537 functions
+and 2673/2917 branches to 2910/3121, 856/941 and 2370/2725 (for example, `routes/events.ts`
+branches went from 1 to 4). Each floor became the smaller of its old value and the Vitest 5
+measurement, so 57 file metrics were lowered and none were raised. The new-file strict defaults
+and the 95% changed-line gate are unchanged.
 
 The instrumented inventory is every maintained JavaScript/TypeScript module under `packages/server/src`, `packages/skill/src`, `packages/web/src`, and `scripts`, including unimported `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts`, and `.cts` files. A new unsupported source extension fails inventory validation. Dependencies, generated plugin/build output, declaration files and tests are outside the production denominator. The one exact source exception is `packages/web/src/test/setup.ts`, which initializes Vitest’s DOM environment. CSS, protobuf schemas, JSON and Markdown are resources rather than V8 executable code. The seven explicitly inventoried `scripts/security/*.sh` entrypoints are syntax checked and exercised by scanner/setup/probe commands; V8 does not measure shell coverage.
 
