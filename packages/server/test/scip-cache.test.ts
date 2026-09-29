@@ -6,7 +6,13 @@ import { join } from "node:path";
 import { ScipGraphProvider, type BuiltGraph, type ScipDocument } from "../src/graph/scip.js";
 import { type IndexerJob } from "../src/graph/roots.js";
 
-const EMPTY: BuiltGraph = { nodes: new Map(), callAdj: new Map(), callRev: new Map() };
+const EMPTY: BuiltGraph = {
+  nodes: new Map(),
+  callAdj: new Map(),
+  callRev: new Map(),
+  callWeights: new Map(),
+  fileRequires: new Map(),
+};
 
 class FakeProvider extends ScipGraphProvider {
   builds = 0;

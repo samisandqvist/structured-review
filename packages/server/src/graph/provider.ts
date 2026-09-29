@@ -15,6 +15,8 @@ export interface GraphEdge {
   sourceStableId: string;
   targetStableId: string;
   edgeType: EdgeType;
+  /** References behind the edge (a caller naming its callee N times). Absent = 1. */
+  weight?: number;
 }
 
 export interface ChangeSubgraph {

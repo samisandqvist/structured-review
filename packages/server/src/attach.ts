@@ -15,10 +15,12 @@ export interface AttachNode {
   residualKind?: string | null;
 }
 
-/** One session TESTED_BY edge, by stableId (production tested-by test). */
+/** One session TESTED_BY edge, by stableId (production tested-by test).
+ *  `weight` = references the test makes to that production node (absent = 1). */
 export interface TestEdge {
   productionStableId: string;
   testStableId: string;
+  weight?: number;
 }
 
 interface WalkPos {
@@ -89,25 +91,39 @@ interface AttachmentContext {
   covered: Set<string>;
   walk: Map<string, WalkPos>;
   byWalk: (a: string, b: string) => number;
-  testsByTest: Map<string, string[]>;
+  /** test stableId -> exercised production stableId -> reference count. */
+  testsByTest: Map<string, Map<string, number>>;
   fileRequires: FileRequires;
 }
 
-function indexTestEdges(edges: TestEdge[]): Map<string, string[]> {
-  const byTest = new Map<string, string[]>();
+function indexTestEdges(edges: TestEdge[]): Map<string, Map<string, number>> {
+  const byTest = new Map<string, Map<string, number>>();
   for (const edge of edges) {
-    const targets = byTest.get(edge.testStableId) ?? [];
-    targets.push(edge.productionStableId);
+    const targets = byTest.get(edge.testStableId) ?? new Map<string, number>();
+    targets.set(edge.productionStableId, (targets.get(edge.productionStableId) ?? 0) + (edge.weight ?? 1));
     byTest.set(edge.testStableId, targets);
   }
   return byTest;
 }
 
-/** First exercised covered node owns the test; other units get one reference each. */
+/** The subject a test exercises, among its covered targets: the node whose file
+ *  basename the test is named after, else the most-referenced one, else the
+ *  earliest in the walk. Fixture setup (config loaders, builders) rarely wins
+ *  on either of the first two. */
+function rankExercised(node: AttachNode, targets: Map<string, number>, context: AttachmentContext): string[] {
+  const { byStable, covered, byWalk } = context;
+  const stems = testNameStems(node.file);
+  const nameRank = (id: string) => (stems.has(fileStem(byStable.get(id)!.file)) ? 0 : 1);
+  return [...targets.keys()]
+    .filter((id) => covered.has(id))
+    .sort((a, b) => nameRank(a) - nameRank(b) || targets.get(b)! - targets.get(a)! || byWalk(a, b));
+}
+
+/** The exercised subject owns the test; other units get one reference each. */
 function exercisedAttachments(node: AttachNode, context: AttachmentContext): AttachedMember[] | null {
   if (!node.isTest) return null;
-  const { covered, testsByTest, byWalk, walk } = context;
-  const exercised = [...new Set(testsByTest.get(node.stableId) ?? [])].filter((id) => covered.has(id)).sort(byWalk);
+  const { testsByTest, walk } = context;
+  const exercised = rankExercised(node, testsByTest.get(node.stableId) ?? new Map<string, number>(), context);
   if (exercised.length === 0) return null;
   const parent = exercised[0];
   if (!parent) return [];

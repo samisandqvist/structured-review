@@ -18121,6 +18121,26 @@ function updateNodeReviewStatus(db2, id, status, reviewedInUnit) {
   );
 }
 
+// packages/server/src/repo/edges.ts
+function insertEdges(db2, sessionId, edges, idByStable) {
+  const insert = db2.prepare(
+    "INSERT INTO edges (id, session_id, source_node_id, target_node_id, edge_type, weight) VALUES (?, ?, ?, ?, ?, ?)"
+  );
+  for (const edge of edges) {
+    const source = idByStable.get(edge.sourceStableId);
+    const target = idByStable.get(edge.targetStableId);
+    if (source && target) insert.run(randomId("edge"), sessionId, source, target, edge.edgeType, edge.weight ?? 1);
+  }
+}
+function getTestEdges(db2, sessionId) {
+  const rows = db2.prepare(
+    `SELECT sn.stable_id AS prod, tn.stable_id AS test, e.weight AS weight
+       FROM edges e JOIN nodes sn ON e.source_node_id = sn.id JOIN nodes tn ON e.target_node_id = tn.id
+       WHERE e.session_id = ? AND e.edge_type = 'test'`
+  ).all(sessionId);
+  return rows.map((r) => ({ productionStableId: r.prod, testStableId: r.test, weight: r.weight }));
+}
+
 // packages/server/src/routes/sessions.ts
 init_diff();
 
@@ -18130,7 +18150,7 @@ init_diff();
 import { execFileSync as execFileSync2 } from "node:child_process";
 import { existsSync as existsSync3, mkdtempSync, readFileSync as readFileSync4, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join as join7 } from "node:path";
+import { basename, dirname, join as join7 } from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
@@ -18591,6 +18611,15 @@ var ScipGraphProvider = class {
   }
   async getChangeSubgraph(_branch, baseRef) {
     const g = await this.buildGraph();
+    const changed = this.changedSymbols(g, baseRef);
+    const scope = this.scopeAround(g, changed);
+    const nodes = subgraphNodes(g, scope, changed);
+    const edges = subgraphEdges(g, scope);
+    markEntryPoints(nodes, edges);
+    return { nodes, edges };
+  }
+  /** Changed nodes = body span overlaps a git diff hunk. Diffs are cached per file. */
+  changedSymbols(g, baseRef) {
     const rangesByFile = /* @__PURE__ */ new Map();
     const changed = /* @__PURE__ */ new Set();
     for (const [sym, n] of g.nodes) {
@@ -18598,6 +18627,10 @@ var ScipGraphProvider = class {
       const ranges = rangesByFile.get(n.file);
       if (ranges && ranges.length > 0 && rangesOverlap(ranges, n.startLine, n.endLine)) changed.add(sym);
     }
+    return changed;
+  }
+  /** Scope: changed nodes + N hops of callers/callees as context. */
+  scopeAround(g, changed) {
     const scope = new Set(changed);
     let frontier = [...changed];
     for (let hop = 0; hop < this.contextDepth && frontier.length; hop++) {
@@ -18612,50 +18645,7 @@ var ScipGraphProvider = class {
       }
       frontier = next;
     }
-    const nodes = [];
-    for (const sym of scope) {
-      const n = g.nodes.get(sym);
-      if (!n) continue;
-      nodes.push({
-        stableId: sym,
-        label: n.label,
-        file: n.file,
-        startLine: n.startLine,
-        endLine: n.endLine,
-        isEntryPoint: false,
-        changeStatus: changed.has(sym) ? "changed" : "unchanged",
-        isTest: n.isTest
-      });
-    }
-    const edges = [];
-    const seen = /* @__PURE__ */ new Set();
-    for (const [src, tgts] of g.callAdj) {
-      if (!scope.has(src)) continue;
-      const srcNode = g.nodes.get(src);
-      for (const tgt of tgts) {
-        if (src === tgt || !scope.has(tgt)) continue;
-        const tgtNode = g.nodes.get(tgt);
-        let edge;
-        if (srcNode?.isTest && !tgtNode?.isTest) {
-          edge = { sourceStableId: tgt, targetStableId: src, edgeType: "test" };
-        } else if (srcNode?.isTest) {
-          continue;
-        } else {
-          edge = { sourceStableId: src, targetStableId: tgt, edgeType: "call" };
-        }
-        const key = `${edge.edgeType}	${edge.sourceStableId}	${edge.targetStableId}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        edges.push(edge);
-      }
-    }
-    const called = new Set(edges.filter((e) => e.edgeType === "call").map((e) => e.targetStableId));
-    for (const node of nodes) {
-      if (node.changeStatus === "changed" && !node.isTest && !called.has(node.stableId)) {
-        node.isEntryPoint = true;
-      }
-    }
-    return { nodes, edges };
+    return scope;
   }
   async getNeighbors(stableId) {
     const g = await this.buildGraph();
@@ -18937,6 +18927,46 @@ function resolveScipJavaCommand(env = process.env) {
   }
   return null;
 }
+function subgraphNodes(g, scope, changed) {
+  const nodes = [];
+  for (const sym of scope) {
+    const n = g.nodes.get(sym);
+    if (!n) continue;
+    const changeStatus = changed.has(sym) ? "changed" : "unchanged";
+    nodes.push({ ...n, stableId: sym, isEntryPoint: false, changeStatus });
+  }
+  return nodes;
+}
+function subgraphEdge(g, src, tgt) {
+  const srcIsTest = g.nodes.get(src)?.isTest ?? false;
+  const tgtIsTest = g.nodes.get(tgt)?.isTest ?? false;
+  if (srcIsTest && tgtIsTest) return void 0;
+  const weight = g.callWeights.get(src)?.get(tgt) ?? 1;
+  return srcIsTest ? { sourceStableId: tgt, targetStableId: src, edgeType: "test", weight } : { sourceStableId: src, targetStableId: tgt, edgeType: "call", weight };
+}
+function subgraphEdges(g, scope) {
+  const edges = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const [src, tgts] of g.callAdj) {
+    if (!scope.has(src)) continue;
+    for (const tgt of tgts) {
+      if (src === tgt || !scope.has(tgt)) continue;
+      const edge = subgraphEdge(g, src, tgt);
+      if (!edge) continue;
+      const key = `${edge.edgeType}	${edge.sourceStableId}	${edge.targetStableId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      edges.push(edge);
+    }
+  }
+  return edges;
+}
+function markEntryPoints(nodes, edges) {
+  const called = new Set(edges.filter((e) => e.edgeType === "call").map((e) => e.targetStableId));
+  for (const node of nodes) {
+    if (node.changeStatus === "changed" && !node.isTest && !called.has(node.stableId)) node.isEntryPoint = true;
+  }
+}
 var IndexError = class extends Error {
   phase = "index";
   constructor(message) {
@@ -18999,8 +19029,15 @@ function callTargets(symbol2, nodes, implementations) {
   }
   return targets;
 }
+function testModuleNode(symbol2, occurrence, file2) {
+  if (!symbol2.endsWith("/") || !isTestFile(file2)) return void 0;
+  const span = span1(occurrence.enclosingRange);
+  if (!span) return void 0;
+  return { label: basename(file2), file: file2, startLine: span[0], endLine: span[1], isTest: true };
+}
 function callableNode(symbol2, occurrence, file2) {
-  if (/[#/]$/.test(symbol2)) return void 0;
+  if (symbol2.endsWith("/")) return testModuleNode(symbol2, occurrence, file2);
+  if (symbol2.endsWith("#")) return void 0;
   if (file2.endsWith(".java") && !/\)\.$/.test(symbol2)) return void 0;
   const span = span1(occurrence.enclosingRange);
   if (!span) return void 0;
@@ -19062,8 +19099,8 @@ function collectDocumentCalls(document, nodes, implementations, calls) {
     if (targets.length === 0) continue;
     const caller = enclosingCaller(callers, occurrence);
     if (!caller) continue;
-    const known = calls.get(caller) ?? /* @__PURE__ */ new Set();
-    for (const target of targets) if (target !== caller) known.add(target);
+    const known = calls.get(caller) ?? /* @__PURE__ */ new Map();
+    for (const target of targets) if (target !== caller) known.set(target, (known.get(target) ?? 0) + 1);
     calls.set(caller, known);
   }
 }
@@ -19077,14 +19114,14 @@ function callAdjacency(calls) {
   const callAdj = /* @__PURE__ */ new Map();
   const callRev = /* @__PURE__ */ new Map();
   for (const [source, targets] of calls) {
-    callAdj.set(source, [...targets]);
-    for (const target of targets) {
+    callAdj.set(source, [...targets.keys()]);
+    for (const target of targets.keys()) {
       const callers = callRev.get(target) ?? [];
       callers.push(source);
       callRev.set(target, callers);
     }
   }
-  return { callAdj, callRev };
+  return { callAdj, callRev, callWeights: calls };
 }
 function buildGraphFromIndex(idx, root) {
   const rootSlash = root.endsWith("/") ? root : `${root}/`;
@@ -19106,7 +19143,7 @@ function buildGraphFromIndex(idx, root) {
 
 // packages/server/src/residuals.ts
 init_diff();
-import { basename } from "node:path";
+import { basename as basename2 } from "node:path";
 function computeResiduals(baseRef, nodeSpans, root) {
   const out = [];
   for (const file2 of changedFilesStrict(baseRef, root)) {
@@ -19122,7 +19159,7 @@ function computeResiduals(baseRef, nodeSpans, root) {
     const sorted = residual.slice().sort((a, b) => a.start - b.start);
     out.push({
       stableId: `file-residual:${file2}`,
-      label: basename(file2),
+      label: basename2(file2),
       file: file2,
       startLine: start,
       endLine: end,
@@ -19208,16 +19245,22 @@ function walkPositions(units, flows, changed, byStable) {
 function indexTestEdges(edges) {
   const byTest = /* @__PURE__ */ new Map();
   for (const edge of edges) {
-    const targets = byTest.get(edge.testStableId) ?? [];
-    targets.push(edge.productionStableId);
+    const targets = byTest.get(edge.testStableId) ?? /* @__PURE__ */ new Map();
+    targets.set(edge.productionStableId, (targets.get(edge.productionStableId) ?? 0) + (edge.weight ?? 1));
     byTest.set(edge.testStableId, targets);
   }
   return byTest;
 }
+function rankExercised(node, targets, context) {
+  const { byStable, covered, byWalk } = context;
+  const stems = testNameStems(node.file);
+  const nameRank = (id) => stems.has(fileStem(byStable.get(id).file)) ? 0 : 1;
+  return [...targets.keys()].filter((id) => covered.has(id)).sort((a, b) => nameRank(a) - nameRank(b) || targets.get(b) - targets.get(a) || byWalk(a, b));
+}
 function exercisedAttachments(node, context) {
   if (!node.isTest) return null;
-  const { covered, testsByTest, byWalk, walk: walk2 } = context;
-  const exercised = [...new Set(testsByTest.get(node.stableId) ?? [])].filter((id) => covered.has(id)).sort(byWalk);
+  const { testsByTest, walk: walk2 } = context;
+  const exercised = rankExercised(node, testsByTest.get(node.stableId) ?? /* @__PURE__ */ new Map(), context);
   if (exercised.length === 0) return null;
   const parent = exercised[0];
   if (!parent) return [];
@@ -34061,14 +34104,7 @@ function createSessionsRoute(ctx) {
         });
       }
       const idByStable = new Map(getNodesBySession(ctx.db, session2.id).map((n) => [n.stableId, n.id]));
-      const insertEdge = ctx.db.prepare(
-        "INSERT INTO edges (id, session_id, source_node_id, target_node_id, edge_type) VALUES (?, ?, ?, ?, ?)"
-      );
-      for (const gedge of subgraph.edges) {
-        const source = idByStable.get(gedge.sourceStableId);
-        const target = idByStable.get(gedge.targetStableId);
-        if (source && target) insertEdge.run(randomId("edge"), session2.id, source, target, gedge.edgeType);
-      }
+      insertEdges(ctx.db, session2.id, subgraph.edges, idByStable);
       return session2;
     })();
     return c.json({ session, subgraph });
@@ -34140,11 +34176,7 @@ function createSessionsRoute(ctx) {
       return c.json({ error: `orphanFiles matched no unassigned changes for unit(s): ${emptyUnits.join(", ")}` }, 400);
     }
     const { unassigned } = computeCoverage(units, flows, changedStableIds);
-    const testEdges = ctx.db.prepare(
-      `SELECT sn.stable_id AS prod, tn.stable_id AS test
-       FROM edges e JOIN nodes sn ON e.source_node_id = sn.id JOIN nodes tn ON e.target_node_id = tn.id
-       WHERE e.session_id = ? AND e.edge_type = 'test'`
-    ).all(sessionId).map((r) => ({ productionStableId: r.prod, testStableId: r.test }));
+    const testEdges = getTestEdges(ctx.db, sessionId);
     const fileRequires = await ctx.graphProvider.getFileRequires?.() ?? /* @__PURE__ */ new Map();
     const attachedPerUnit = deriveAttachments(units, flows, sessionNodes, testEdges, fileRequires);
     const attachedIds = countedAttachmentIds(attachedPerUnit);
@@ -34801,7 +34833,7 @@ CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_node_id);
 CREATE INDEX IF NOT EXISTS idx_comments_session ON comments(session_id);
 CREATE INDEX IF NOT EXISTS idx_comments_node ON comments(node_id);
 `;
-var SCHEMA_VERSION = 9;
+var SCHEMA_VERSION = 10;
 var MIGRATIONS = {
   1: SCHEMA_SQL,
   2: `ALTER TABLE review_sessions ADD COLUMN repo_fingerprint TEXT NOT NULL DEFAULT '';`,
@@ -34834,7 +34866,10 @@ CREATE INDEX IF NOT EXISTS idx_comments_node ON comments(node_id);
 `,
   // v9: plan-narrative overview — replaced on every plan submit (cleared when
   // the submitted plan omits it), so a replan never keeps a stale narrative.
-  9: `ALTER TABLE review_sessions ADD COLUMN overview TEXT NOT NULL DEFAULT '';`
+  9: `ALTER TABLE review_sessions ADD COLUMN overview TEXT NOT NULL DEFAULT '';`,
+  // v10: reference count behind an edge; attachment derivation ranks a test's
+  // exercised subjects by it. Existing edges count as one reference.
+  10: `ALTER TABLE edges ADD COLUMN weight INTEGER NOT NULL DEFAULT 1;`
 };
 
 // packages/server/src/db/connection.ts

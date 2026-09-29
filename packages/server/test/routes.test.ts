@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -182,6 +182,27 @@ describe("POST /api/sessions", () => {
     });
     const { session } = await cr.json();
     expect(session.indexWarnings).toEqual([]);
+  });
+});
+
+describe("POST /api/sessions provider failures", () => {
+  it("rethrows an unexpected provider error and persists nothing", async () => {
+    class BrokenStub extends StubGraphProvider {
+      override getChangeSubgraph(): Promise<ChangeSubgraph> {
+        return Promise.reject(new Error("provider crashed"));
+      }
+    }
+    const app2 = createApp({ db, graphProvider: new BrokenStub(), repoRoot: fixtureRoot });
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const res = await app2.request("/api/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "HEAD", baseRef: "main" }),
+    });
+    quiet.mockRestore();
+    expect(res.status).toBe(500);
+    const { n } = db.prepare("SELECT COUNT(*) AS n FROM review_sessions").get() as { n: number };
+    expect(n).toBe(0);
   });
 });
 

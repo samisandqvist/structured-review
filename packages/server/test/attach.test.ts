@@ -50,6 +50,49 @@ describe("deriveAttachments — tested-by", () => {
     expect(attached).toEqual([{ stableId: "t", parentStableId: "a", reason: "tested-by", counted: true }]);
   });
 
+  it("prefers the exercised node whose file basename matches the test name over an earlier fixture", () => {
+    // claims.property.test.ts builds its fixture with config.ts (walked first)
+    // and exercises claims.ts inside anonymous callbacks.
+    const nodes = [
+      node("load", { file: "src/config.ts" }),
+      node("resolve", { file: "src/claims.ts" }),
+      node("t", { isTest: true, file: "src/claims.test.ts" }),
+    ];
+    const flows = [flow(1, ["load", "resolve"])];
+    const edges: TestEdge[] = [
+      { productionStableId: "load", testStableId: "t", weight: 1 },
+      { productionStableId: "resolve", testStableId: "t", weight: 1 },
+    ];
+    const [attached] = deriveAttachments([flowUnit("load")], flows, nodes, edges, new Map());
+    expect(attached).toEqual([{ stableId: "t", parentStableId: "resolve", reason: "tested-by", counted: true }]);
+  });
+
+  it("without a basename match, the most-referenced exercised node beats walk order", () => {
+    const nodes = [
+      node("load", { file: "src/config.ts" }),
+      node("resolve", { file: "src/claims.ts" }),
+      node("t", { isTest: true, file: "src/principals.property.test.ts" }),
+    ];
+    const flows = [flow(1, ["load", "resolve"])];
+    const edges: TestEdge[] = [
+      { productionStableId: "load", testStableId: "t", weight: 1 },
+      { productionStableId: "resolve", testStableId: "t", weight: 6 },
+    ];
+    const [attached] = deriveAttachments([flowUnit("load")], flows, nodes, edges, new Map());
+    expect(attached).toEqual([{ stableId: "t", parentStableId: "resolve", reason: "tested-by", counted: true }]);
+  });
+
+  it("an edge without a weight counts as one reference", () => {
+    const nodes = [node("a"), node("b"), node("t", { isTest: true, file: "t.test.ts" })];
+    const flows = [flow(1, ["a", "b"])];
+    const edges: TestEdge[] = [
+      { productionStableId: "a", testStableId: "t" },
+      { productionStableId: "b", testStableId: "t", weight: 2 },
+    ];
+    const [attached] = deriveAttachments([flowUnit("a")], flows, nodes, edges, new Map());
+    expect(attached).toEqual([{ stableId: "t", parentStableId: "b", reason: "tested-by", counted: true }]);
+  });
+
   it("adds a non-counting reference in other units, one per unit", () => {
     const nodes = [node("a"), node("b"), node("c"), node("t", { isTest: true, file: "t.test.ts" })];
     const flows = [flow(1, ["a"]), flow(2, ["b", "c"])];
