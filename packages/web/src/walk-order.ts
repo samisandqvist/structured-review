@@ -4,6 +4,9 @@ import { orphanWalkIds } from "./orphan-layout.js";
 export interface WalkEntry {
   nodeId: string;
   stableId: string;
+  /** The unit where the walk visits this node: its home copy (a node also shown elsewhere as a
+   *  cross-unit reference is walked, and scrolled to, here). */
+  unitId: string;
 }
 
 /** Canonical review sequence: units by position; flow steps in tree order;
@@ -16,12 +19,14 @@ export function buildWalkOrder(units: Unit[], flows: Flow[], nodes: Node[]): Wal
   const nodeByStable = new Map(nodes.map((n) => [n.stableId, n]));
   const seen = new Set<string>();
   const order: WalkEntry[] = [];
+  let unitId = "";
   const push = (stableId: string, nodeId: string | null) => {
     if (!nodeId || seen.has(nodeId)) return;
     seen.add(nodeId);
-    order.push({ nodeId, stableId });
+    order.push({ nodeId, stableId, unitId });
   };
   for (const u of [...units].sort((a, b) => a.position - b.position)) {
+    unitId = u.id;
     const attachedByParent = new Map<string, string[]>();
     for (const m of u.attached ?? []) {
       if (!m.counted) continue;

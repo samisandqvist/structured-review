@@ -1,10 +1,39 @@
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useBulkUpdateNodeStatus, useFlows, useNodes, useSession, useUpdateUnit } from "../api/hooks.js";
-import { useUIStore } from "../store/ui.js";
+import { useUIStore, type SelectionSource } from "../store/ui.js";
 import { RESIDUAL_KIND } from "../residual-kind.js";
 import { buildOrphanLayout } from "../orphan-layout.js";
+import { buildWalkOrder } from "../walk-order.js";
 import { SessionNotes } from "./SessionNotes.js";
 import type { AttachedMember, Flow, FlowStep, GraphEdgeDTO, Node, Unit } from "../api/client.js";
+
+/** Which copy of a node scrolls into view on a walk: the unit the walk visits it in (a node can
+ *  also be shown elsewhere as a cross-unit reference or under several parents). */
+interface PlanScroll {
+  /** stableId -> the unit the walk visits that node in. */
+  homeUnitOf: Map<string, string>;
+  source: SelectionSource;
+}
+const PlanScrollContext = createContext<PlanScroll>({ homeUnitOf: new Map(), source: "walk" });
+
+/** The walk's home unit per node and how the current node was selected (see
+ *  useScrollIntoViewWhenCurrent). */
+function usePlanScroll(sessionId: string): PlanScroll {
+  const { data: sessionData } = useSession(sessionId);
+  const { data: flowsData } = useFlows(sessionId);
+  const { data: nodesData } = useNodes(sessionId);
+  const source = useUIStore((s) => s.selectionSource);
+  const units = sessionData?.units;
+  const flows = flowsData?.flows;
+  const nodes = nodesData?.nodes;
+  const homeUnitOf = useMemo(
+    () => new Map(buildWalkOrder(units ?? [], flows ?? [], nodes ?? []).map((w) => [w.stableId, w.unitId])),
+    [units, flows, nodes],
+  );
+  return { homeUnitOf, source };
+}
+/** The unit a chip is rendered in. */
+const UnitIdContext = createContext<string>("");
 
 export function PlanView({
   sessionId,
@@ -13,7 +42,7 @@ export function PlanView({
 }: {
   sessionId: string;
   currentNodeId: string | null;
-  onSelectNode: (nodeId: string) => void;
+  onSelectNode: (nodeId: string, source?: SelectionSource) => void;
 }) {
   const { data: sessionData } = useSession(sessionId);
   const { data: flowsData } = useFlows(sessionId);
@@ -24,6 +53,7 @@ export function PlanView({
   const nodeByStable = new Map((nodesData?.nodes ?? []).map((n) => [n.stableId, n]));
   const nodeById = new Map((nodesData?.nodes ?? []).map((n) => [n.id, n]));
   const edges = nodesData?.edges ?? [];
+  const planScroll = usePlanScroll(sessionId);
 
   if (units.length === 0) {
     return (
@@ -61,23 +91,27 @@ export function PlanView({
       )}
       {sessionData?.session?.overview && <OverviewBlock text={sessionData.session.overview} />}
       <SessionNotes sessionId={sessionId} />
-      <div style={{ overflow: "auto", flex: 1, padding: "4px 16px 20px" }}>
-        {units.map((u) => (
-          <UnitBlock
-            key={u.id}
-            sessionId={sessionId}
-            unit={u}
-            flows={
-              u.kind === "flow" ? u.memberStableIds.map((id) => flowByEntry.get(id)).filter((f): f is Flow => !!f) : []
-            }
-            nodeByStable={nodeByStable}
-            nodeById={nodeById}
-            edges={edges}
-            currentNodeId={currentNodeId}
-            onSelectNode={onSelectNode}
-          />
-        ))}
-      </div>
+      <PlanScrollContext.Provider value={planScroll}>
+        <div style={{ overflow: "auto", flex: 1, padding: "4px 16px 20px" }}>
+          {units.map((u) => (
+            <UnitBlock
+              key={u.id}
+              sessionId={sessionId}
+              unit={u}
+              flows={
+                u.kind === "flow"
+                  ? u.memberStableIds.map((id) => flowByEntry.get(id)).filter((f): f is Flow => !!f)
+                  : []
+              }
+              nodeByStable={nodeByStable}
+              nodeById={nodeById}
+              edges={edges}
+              currentNodeId={currentNodeId}
+              onSelectNode={onSelectNode}
+            />
+          ))}
+        </div>
+      </PlanScrollContext.Provider>
     </div>
   );
 }
@@ -127,7 +161,7 @@ type UnitBlockProps = {
   nodeById: Map<string, Node>;
   edges: GraphEdgeDTO[];
   currentNodeId: string | null;
-  onSelectNode: (nodeId: string) => void;
+  onSelectNode: (nodeId: string, source?: SelectionSource) => void;
 };
 
 /** Shared flow steps count once, with their first occurrence supplying status. */
@@ -226,21 +260,23 @@ function UnitBlock(props: UnitBlockProps) {
   const progress = unitReviewState(props);
   const actions = useUnitActions(sessionId, unit, progress);
   return (
-    <div
-      className={`unit${unit.auto ? " unit--auto" : ""}`}
-      draggable={!unit.auto && !actions.editing}
-      onDragStart={(event) => event.dataTransfer.setData("text/unit-id", unit.id)}
-      onDragOver={(event) => event.preventDefault()}
-      onDrop={(event) => {
-        const draggedId = event.dataTransfer.getData("text/unit-id");
-        if (draggedId && draggedId !== unit.id && !unit.auto) {
-          actions.updateUnit.mutate({ unitId: draggedId, position: unit.position });
-        }
-      }}
-    >
-      <UnitHeader unit={unit} flows={flows} progress={progress} actions={actions} onSelectNode={onSelectNode} />
-      {!actions.collapsed && <UnitContents {...props} attachedByParent={progress.attachedByParent} />}
-    </div>
+    <UnitIdContext.Provider value={unit.id}>
+      <div
+        className={`unit${unit.auto ? " unit--auto" : ""}`}
+        draggable={!unit.auto && !actions.editing}
+        onDragStart={(event) => event.dataTransfer.setData("text/unit-id", unit.id)}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => {
+          const draggedId = event.dataTransfer.getData("text/unit-id");
+          if (draggedId && draggedId !== unit.id && !unit.auto) {
+            actions.updateUnit.mutate({ unitId: draggedId, position: unit.position });
+          }
+        }}
+      >
+        <UnitHeader unit={unit} flows={flows} progress={progress} actions={actions} onSelectNode={onSelectNode} />
+        {!actions.collapsed && <UnitContents {...props} attachedByParent={progress.attachedByParent} />}
+      </div>
+    </UnitIdContext.Provider>
   );
 }
 
@@ -286,7 +322,7 @@ function UnitHeader({
   flows: Flow[];
   progress: UnitProgress;
   actions: UnitActions;
-  onSelectNode: (nodeId: string) => void;
+  onSelectNode: (nodeId: string, source?: SelectionSource) => void;
 }) {
   const { total, reviewed, remaining, testStats } = progress;
   const { collapsed, toggle, markRemaining } = actions;
@@ -393,7 +429,7 @@ function OrphanTree({
   attachedByParent: Map<string, AttachedMember[]>;
   nodeByStable: Map<string, Node>;
   currentNodeId: string | null;
-  onSelectNode: (nodeId: string) => void;
+  onSelectNode: (nodeId: string, source?: SelectionSource) => void;
 }) {
   const stepOf = (n: Node): FlowStep => ({
     stableId: n.stableId,
@@ -483,7 +519,7 @@ function FlowTrack({
   attachedByParent?: Map<string, AttachedMember[]>;
   nodeByStable?: Map<string, Node>;
   currentNodeId: string | null;
-  onSelectNode: (nodeId: string) => void;
+  onSelectNode: (nodeId: string, source?: SelectionSource) => void;
 }) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
@@ -534,17 +570,22 @@ function FlowTrack({
   );
 }
 
-/** Keeps the current chip visible in the scrolling plan list. Runs only when
- *  `current` flips on (keyboard walks and relation jumps move the selection
- *  without a click), so a reviewer who scrolls away to read the plan is not
- *  yanked back on unrelated re-renders. */
-function useScrollIntoViewWhenCurrent(current: boolean) {
+/** Keeps the current chip visible in the scrolling plan list, for walks only: a click selects the
+ *  chip under the pointer (already in view), so scrolling would move the plan away from it. On a
+ *  walk only the node's home copy scrolls, never a cross-unit reference or a copy in another unit
+ *  (several copies scrolling in turn used to leave the plan on the last one). Runs only when this
+ *  flips on, so a reviewer who scrolls away is not yanked back on unrelated re-renders. */
+function useScrollIntoViewWhenCurrent(current: boolean, stableId: string, isReference: boolean) {
   const ref = useRef<HTMLButtonElement>(null);
+  const { homeUnitOf, source } = useContext(PlanScrollContext);
+  const unitId = useContext(UnitIdContext);
+  const home = homeUnitOf.get(stableId) ?? unitId; // unchanged context steps are not walked
+  const scroll = current && source === "walk" && !isReference && home === unitId;
   useEffect(() => {
     const el = ref.current;
-    if (!current || !el || typeof el.scrollIntoView !== "function") return;
+    if (!scroll || !el || typeof el.scrollIntoView !== "function") return;
     el.scrollIntoView({ block: "nearest" });
-  }, [current]);
+  }, [scroll]);
   return ref;
 }
 
@@ -559,9 +600,9 @@ function AttachedChip({
   member: AttachedMember;
   node: Node | undefined;
   current: boolean;
-  onSelect: (nodeId: string) => void;
+  onSelect: (nodeId: string, source?: SelectionSource) => void;
 }) {
-  const ref = useScrollIntoViewWhenCurrent(current);
+  const ref = useScrollIntoViewWhenCurrent(current, member.stableId, !member.counted);
   if (!node) return null;
   const residual = node.residualKind ? RESIDUAL_KIND[node.residualKind] : null;
   const cls = [
@@ -585,7 +626,7 @@ function AttachedChip({
       ref={ref}
       className={cls}
       data-testid={`attached-${member.counted ? "member" : "ref"}`}
-      onClick={() => onSelect(node.id)}
+      onClick={() => onSelect(node.id, "click")}
       title={title}
     >
       {node.label}
@@ -603,9 +644,9 @@ function StepChip({
 }: {
   step: FlowStep;
   current: boolean;
-  onSelect: (nodeId: string) => void;
+  onSelect: (nodeId: string, source?: SelectionSource) => void;
 }) {
-  const ref = useScrollIntoViewWhenCurrent(current);
+  const ref = useScrollIntoViewWhenCurrent(current, step.stableId, false);
   const residual = step.residualKind ? RESIDUAL_KIND[step.residualKind] : null;
   const cls = [
     "step",
@@ -623,7 +664,7 @@ function StepChip({
       ref={ref}
       className={cls}
       disabled={!step.nodeId}
-      onClick={() => step.nodeId && onSelect(step.nodeId)}
+      onClick={() => step.nodeId && onSelect(step.nodeId, "click")}
       title={residual ? `${step.file}:${step.startLine} — ${residual.title}` : `${step.file}:${step.startLine}`}
     >
       {step.label}

@@ -1,5 +1,5 @@
 import { useRef, useCallback, useEffect, useMemo, useState } from "react";
-import { useUIStore } from "../store/ui.js";
+import { useUIStore, type SelectionSource } from "../store/ui.js";
 import { useFlows, useNode, useNodes, useSession, useUpdateNodeStatus } from "../api/hooks.js";
 import { buildWalkOrder, nextInWalk, nextUnreviewed } from "../walk-order.js";
 import { PlanView } from "./PlanView.js";
@@ -33,9 +33,9 @@ export function SplitLayout({ sessionId, currentNodeId }: { sessionId: string; c
 
   // A walk move (plan click, j/k/n/r) ends any detour.
   const walkTo = useCallback(
-    (nodeId: string | null) => {
+    (nodeId: string | null, source: SelectionSource = "walk") => {
       truncateWalkPath(0);
-      setCurrentNode(nodeId);
+      setCurrentNode(nodeId, source);
     },
     [truncateWalkPath, setCurrentNode],
   );

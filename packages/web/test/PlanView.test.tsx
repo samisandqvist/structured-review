@@ -311,7 +311,7 @@ describe("PlanView", () => {
     expect(member.textContent).toContain("testOrder");
     expect(member.textContent).toContain("tested-by");
     fireEvent.click(member);
-    expect(onSelect).toHaveBeenCalledWith("n-t1");
+    expect(onSelect).toHaveBeenCalledWith("n-t1", "click");
   });
 
   it("renders a cross-unit reference dimmed and keeps it out of the ledger", () => {
@@ -430,6 +430,7 @@ describe("current chip visibility", () => {
   it("scrolls the newly current chip into view, once, when the selection moves to it", () => {
     const scroll = vi.fn();
     Element.prototype.scrollIntoView = scroll;
+    useUIStore.setState({ selectionSource: "walk" });
     const { rerender } = render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={() => {}} />);
     expect(scroll).not.toHaveBeenCalled();
 
@@ -444,14 +445,28 @@ describe("current chip visibility", () => {
     expect(scroll).toHaveBeenCalledTimes(1);
   });
 
-  it("scrolls an attached member chip into view when it becomes current", () => {
+  it("a walk to a node rendered in two units scrolls only its home chip, not the reference", () => {
+    // testOrder is a dimmed cross-unit reference in "Order handling" (first) and a counted member
+    // of "Validation helpers" (its home). Walks (j/k/n/r, relation jumps) go to the home copy.
     const scroll = vi.fn();
     Element.prototype.scrollIntoView = scroll;
+    useUIStore.setState({ selectionSource: "walk" });
     const { rerender } = render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={() => {}} />);
     rerender(<PlanView sessionId="s1" currentNodeId="n-t1" onSelectNode={() => {}} />);
-    const chips = screen.getAllByText("testOrder").map((el) => el.closest("button"));
-    expect(scroll).toHaveBeenCalled();
-    for (const inst of scroll.mock.instances) expect(chips).toContain(inst);
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll.mock.instances[0]).toBe(screen.getByTestId("attached-member"));
+  });
+
+  it("a click selects without scrolling: clicking the reference chip keeps the view where it is", () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    const onSelectNode = vi.fn();
+    const { rerender } = render(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={onSelectNode} />);
+    fireEvent.click(screen.getByTestId("attached-ref"));
+    expect(onSelectNode).toHaveBeenCalledWith("n-t1", "click");
+    useUIStore.setState({ selectionSource: "click" });
+    rerender(<PlanView sessionId="s1" currentNodeId="n-t1" onSelectNode={onSelectNode} />);
+    expect(scroll).not.toHaveBeenCalled();
   });
 });
 

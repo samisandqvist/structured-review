@@ -113,7 +113,7 @@ describe("navigation", () => {
 describe("unresolved navigation inputs", () => {
   it("skips an unresolved flow and still walks the next unit", () => {
     const units = [unit("missing", "flow", ["not-indexed"], 0), unit("available", "orphans", ["a"], 1)];
-    expect(buildWalkOrder(units, [], [node("a")])).toEqual([{ nodeId: "n-a", stableId: "a" }]);
+    expect(buildWalkOrder(units, [], [node("a")])).toEqual([{ nodeId: "n-a", stableId: "a", unitId: "available" }]);
   });
 
   it("starts backward navigation at the last node when selection is absent", () => {

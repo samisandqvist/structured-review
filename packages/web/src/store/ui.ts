@@ -15,10 +15,16 @@ export interface LineSelection {
   label: string;
 }
 
+export type SelectionSource = "click" | "walk";
+
 interface UIState {
   splitRatio: number;
   currentUnitIndex: number;
   currentNodeId: string | null;
+  /** How the current node was selected. A click selects the chip under the pointer, which is
+   *  already in view, so the plan must not scroll; a walk (j/k/n/r, relation jump) moves the
+   *  plan to the node's home chip. Not persisted. */
+  selectionSource: SelectionSource;
   walkPath: string[];
   overviewOpen: boolean;
   collapsedUnits: string[];
@@ -30,7 +36,7 @@ interface UIState {
   pendingAnchorHighlight: CommentAnchor | null;
   setSplitRatio: (ratio: number) => void;
   setCurrentUnit: (index: number) => void;
-  setCurrentNode: (nodeId: string | null) => void;
+  setCurrentNode: (nodeId: string | null, source?: SelectionSource) => void;
   pushToWalkPath: (nodeId: string) => void;
   truncateWalkPath: (index: number) => void;
   toggleOverview: () => void;
@@ -47,6 +53,7 @@ export const useUIStore = create<UIState>()(
 
       currentUnitIndex: 0,
       currentNodeId: null,
+      selectionSource: "walk",
       walkPath: [],
       overviewOpen: false,
       collapsedUnits: [],
@@ -55,7 +62,8 @@ export const useUIStore = create<UIState>()(
       pendingAnchorHighlight: null as CommentAnchor | null,
       setSplitRatio: (ratio) => set({ splitRatio: Math.max(0.1, Math.min(0.9, ratio)) }),
       setCurrentUnit: (index) => set({ currentUnitIndex: index, currentNodeId: null, walkPath: [] }),
-      setCurrentNode: (nodeId) => set({ currentNodeId: nodeId, lineSelection: null, pendingAnchorHighlight: null }),
+      setCurrentNode: (nodeId, source = "walk") =>
+        set({ currentNodeId: nodeId, selectionSource: source, lineSelection: null, pendingAnchorHighlight: null }),
       pushToWalkPath: (nodeId) => set((s) => ({ walkPath: [...s.walkPath, nodeId] })),
       truncateWalkPath: (index) => set((s) => ({ walkPath: s.walkPath.slice(0, index) })),
       toggleOverview: () => set((s) => ({ overviewOpen: !s.overviewOpen })),
