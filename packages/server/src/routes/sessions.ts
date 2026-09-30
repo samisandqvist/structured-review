@@ -23,12 +23,12 @@ import {
 } from "../diff.js";
 import { IndexError } from "../graph/scip.js";
 import { computeResiduals } from "../residuals.js";
-import type { ChangeSubgraph, GraphNode } from "../graph/provider.js";
-import type { ChangeStatus } from "../types.js";
+import type { ChangeSubgraph, FileRequires, Flow, GraphNode } from "../graph/provider.js";
+import type { AttachedMember, ChangeStatus } from "../types.js";
 import { computeCoverage, flowEntries, type PlanUnitInput } from "../coverage.js";
-import { deriveAttachments, countedAttachmentIds } from "../attach.js";
+import { deriveAttachments, countedAttachmentIds, type AttachNode } from "../attach.js";
 import { parseBody, sessionCreateSchema, planSchema, unitPatchSchema } from "../validate.js";
-import { resolveOrphanFiles } from "../globs.js";
+import { resolvePlanMembership } from "../plan-membership.js";
 
 /**
  * Turn a provider subgraph into the nodes we actually store:
@@ -68,6 +68,20 @@ function reconcileSubgraph(
   }
   const nodes = subgraph.nodes.filter((n) => status.get(n.stableId) === "changed" || n.isTest || adj.has(n.stableId));
   return { nodes, status };
+}
+
+/** Plan-time attachment over this session's test edges and the provider's file-dependency
+ *  relation (empty when the provider has none, see attach.ts rules 3-4). */
+async function attachmentsFor(
+  ctx: AppContext,
+  sessionId: string,
+  flows: Flow[],
+  sessionNodes: AttachNode[],
+): Promise<(units: PlanUnitInput[]) => AttachedMember[][]> {
+  const testEdges = getTestEdges(ctx.db, sessionId);
+  const fileRequires: FileRequires =
+    (await ctx.graphProvider.getFileRequires?.()) ?? new Map<string, Map<string, { hasValueRef: boolean }>>();
+  return (units) => deriveAttachments(units, flows, sessionNodes, testEdges, fileRequires);
 }
 
 export function createSessionsRoute(ctx: AppContext) {
@@ -254,19 +268,14 @@ export function createSessionsRoute(ctx: AppContext) {
             ...(unit.orphanFiles === undefined ? {} : { orphanFiles: unit.orphanFiles }),
           },
     );
-    const { units, emptyUnits } = resolveOrphanFiles(planUnits, orphanNodes);
+    // Globs and attachments, ordered so tests stay with their subjects (plan-membership.ts).
+    const attach = await attachmentsFor(ctx, sessionId, flows, sessionNodes);
+    const { units, attachedPerUnit, emptyUnits } = resolvePlanMembership(planUnits, orphanNodes, attach);
     if (emptyUnits.length > 0) {
       return c.json({ error: `orphanFiles matched no unassigned changes for unit(s): ${emptyUnits.join(", ")}` }, 400);
     }
 
     const { unassigned } = computeCoverage(units, flows, changedStableIds);
-
-    // Attachment derivation (spec 2026-07-17): nest unassigned tests, DTOs and
-    // module-scope residuals under the covered node that gives them context.
-    // Derived here (not on read) so web, CLI and coverage share one truth.
-    const testEdges = getTestEdges(ctx.db, sessionId);
-    const fileRequires = (await ctx.graphProvider.getFileRequires?.()) ?? new Map();
-    const attachedPerUnit = deriveAttachments(units, flows, sessionNodes, testEdges, fileRequires);
     const attachedIds = countedAttachmentIds(attachedPerUnit);
     const leftovers = unassigned.filter((id) => !attachedIds.has(id));
 

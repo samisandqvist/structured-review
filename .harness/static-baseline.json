@@ -128,7 +128,7 @@
     "packages/web/test/PlanView.test.tsx|max-lines-per-function|Arrow function has too many lines (128). Maximum allowed is 80.|describe(\"PlanView\", () => {": 1,
     "scripts/demo.mjs|max-lines-per-function|Async function 'main' has too many lines (108). Maximum allowed is 80.|async function main() {": 1,
     "scripts/plugin-launcher.mjs|max-depth|Blocks are nested too deeply (5). Maximum allowed is 4.|if (install.error || install.status !== 0 || !indexersPresent()) {": 1,
-    "packages/server/src/routes/sessions.ts|max-lines-per-function|Function 'createSessionsRoute' has too many lines (217). Maximum allowed is 80.|export function createSessionsRoute(ctx: AppContext) {": 1,
+    "packages/server/src/routes/sessions.ts|max-lines-per-function|Function 'createSessionsRoute' has too many lines (215). Maximum allowed is 80.|export function createSessionsRoute(ctx: AppContext) {": 1,
     "packages/server/src/routes/sessions.ts|max-lines-per-function|Async arrow function has too many lines (87). Maximum allowed is 80.|router.post(\"/\", async (c) => {": 1
   },
   "unused": {

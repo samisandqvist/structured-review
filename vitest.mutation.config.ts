@@ -5,6 +5,7 @@ export default defineConfig({
     include: [
       "packages/server/test/coverage.test.ts",
       "packages/server/test/globs.test.ts",
+      "packages/server/test/plan-membership.test.ts",
       "packages/server/test/properties.test.ts",
     ],
   },

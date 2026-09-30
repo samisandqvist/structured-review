@@ -146,7 +146,8 @@ Steps for an LLM-authored plan:
    or module-scope leftovers of files already in flows** — at plan submit the
    server nests those under the covered node that gives them context
    (tested-by / required-by / same-file), and they count toward that unit's
-   coverage. Non-code-graph changes with no such home (configs, dependency
+   coverage. A directory glob that also matches test files is fine: globs place
+   a test only when it attaches nowhere. Non-code-graph changes with no such home (configs, dependency
    manifests) still deserve explicit orphan-units, ordered early: they are the
    foundations the flows sit on.
 5. Write a session `overview` (2–4 sentences, after the units are decided):

@@ -36,7 +36,8 @@ Implementation: [residuals](../packages/server/src/residuals.ts),
 
 A flow unit names one or more entry points and covers the union of their changed
 flow steps. An orphan unit explicitly groups remaining changed items by purpose;
-file globs are resolved to eligible orphan identifiers during plan submission.
+file globs are resolved to eligible orphan identifiers during plan submission
+(tests only after attachment, see below).
 Merging overlapping flows preserves derivable membership. Arbitrary sub-flow
 splitting and nested units are not supported.
 
@@ -66,7 +67,13 @@ would risk different consumers or a fresh index reshuffling the plan mid-review.
 
 Only changed items outside explicit plan coverage are candidates. Explicit
 membership takes precedence, and parents must already be covered: attachments
-cannot recursively become parents. Four rules run in order; the first match wins:
+cannot recursively become parents. Orphan file globs claim non-test items before
+attachment but tests only after it: a test attaches under the subject it
+exercises wherever that sits in the plan, and only a test that attaches nowhere
+is placed by the first glob matching its path. A directory glob later in the plan
+therefore cannot take a test away from its subject's unit, while explicitly listed
+test identifiers stay explicit members. A glob-only unit left without members
+after both passes is rejected. Four rules run in order; the first match wins:
 
 1. **Test edges:** attach a test under the covered node it exercises as its
    subject: the one whose file basename the test is named after, else the one
@@ -92,7 +99,8 @@ need that evidence find no candidates. File-level matches are heuristics and do
 not establish that a test exercises a particular behavior. Explicit orphan-unit
 membership is available when grouping by hand is more appropriate.
 
-Implementation: [attachment rules](../packages/server/src/attach.ts).
+Implementation: [attachment rules](../packages/server/src/attach.ts), [glob and
+attachment order](../packages/server/src/plan-membership.ts).
 
 ## Walk and review state
 
