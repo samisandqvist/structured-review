@@ -116,6 +116,75 @@ describe("deriveAttachments — tested-by", () => {
   });
 });
 
+describe("deriveAttachments — tested-by through an attached subject", () => {
+  // Whole-repo plans cover files by their residual node; the functions inside
+  // sit on flows, so they are attached (same-file), not covered. A test of
+  // those functions must still land in their file's unit.
+  const principalsFile = node("file-residual:principals.ts", {
+    file: "src/principals.ts",
+    residualKind: "module-scope",
+  });
+  const resolveKey = node("resolveKey", { file: "src/principals.ts" });
+  const envFile = node("file-residual:env.ts", { file: "src/env.ts", residualKind: "module-scope" });
+  const principalsTest = node("principals.test", { isTest: true, file: "src/principals.test.ts" });
+  const units = [orphanUnit(["file-residual:principals.ts"], "trust"), orphanUnit(["file-residual:env.ts"], "ops")];
+
+  it("nests a test under the covered parent of the attached node it exercises", () => {
+    const [trust, ops] = deriveAttachments(
+      units,
+      [],
+      [principalsFile, resolveKey, envFile, principalsTest],
+      [
+        { productionStableId: "resolveKey", testStableId: "principals.test", weight: 3 },
+        { productionStableId: "file-residual:env.ts", testStableId: "principals.test", weight: 1 },
+      ],
+      new Map(),
+    );
+    expect(trust).toEqual([
+      { stableId: "resolveKey", parentStableId: "file-residual:principals.ts", reason: "same-file", counted: true },
+      {
+        stableId: "principals.test",
+        parentStableId: "file-residual:principals.ts",
+        reason: "tested-by",
+        counted: true,
+      },
+    ]);
+    expect(ops).toEqual([
+      { stableId: "principals.test", parentStableId: "file-residual:env.ts", reason: "tested-by", counted: false },
+    ]);
+  });
+
+  it("sums the references of every exercised node a covered parent owns", () => {
+    // Two functions in one file (2 + 1) outweigh a single node elsewhere (weight 2) when neither
+    // file matches the test name; earlier walk position would pick the other unit.
+    const a = node("a", { file: "src/worker.ts" });
+    const b = node("b", { file: "src/worker.ts" });
+    const workerFile = node("file-residual:worker.ts", { file: "src/worker.ts", residualKind: "module-scope" });
+    const matchFn = node("match", { file: "src/match.ts" });
+    const t = node("reextraction.test", { isTest: true, file: "src/reextraction.test.ts" });
+    const [first, second] = deriveAttachments(
+      [orphanUnit(["match"], "first"), orphanUnit(["file-residual:worker.ts"], "second")],
+      [],
+      [a, b, workerFile, matchFn, t],
+      [
+        { productionStableId: "match", testStableId: "reextraction.test", weight: 2 },
+        { productionStableId: "a", testStableId: "reextraction.test", weight: 2 },
+        { productionStableId: "b", testStableId: "reextraction.test", weight: 1 },
+      ],
+      new Map(),
+    );
+    expect(second).toContainEqual({
+      stableId: "reextraction.test",
+      parentStableId: "file-residual:worker.ts",
+      reason: "tested-by",
+      counted: true,
+    });
+    expect(first).toEqual([
+      { stableId: "reextraction.test", parentStableId: "match", reason: "tested-by", counted: false },
+    ]);
+  });
+});
+
 describe("deriveAttachments — same-file", () => {
   it("nests a module-scope residual under the first covered node of its file", () => {
     const nodes = [node("svc.method"), node("svc (module scope)", { file: "svc.method.ts" })];

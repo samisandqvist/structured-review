@@ -76,8 +76,12 @@ test identifiers stay explicit members. A glob-only unit left without members
 after both passes is rejected. Four rules run in order; the first match wins:
 
 1. **Test edges:** attach a test under the covered node it exercises as its
-   subject: the one whose file basename the test is named after, else the one
-   it references most often, else the first in walk order. Other units
+   subject. A node the test exercises that is itself attached (a function on a
+   flow whose file the plan covers, say) counts for the covered parent it
+   attached under, so non-test attachments are derived first; the tree stays one
+   level deep. The subject is the owner of a node whose file basename the test is
+   named after, else the owner with the most references summed over its nodes,
+   else the first in walk order. Other units
    exercising it receive non-counting references. A test file whose tests are
    anonymous callbacks is itself the caller of what they exercise (the SCIP
    provider gives test documents a whole-file node), so this rule applies to

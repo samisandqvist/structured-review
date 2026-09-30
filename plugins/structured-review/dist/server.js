@@ -19252,10 +19252,20 @@ function indexTestEdges(edges) {
   return byTest;
 }
 function rankExercised(node, targets, context) {
-  const { byStable, covered, byWalk } = context;
+  const { byStable, ownerOf, byWalk } = context;
   const stems = testNameStems(node.file);
-  const nameRank = (id) => stems.has(fileStem(byStable.get(id).file)) ? 0 : 1;
-  return [...targets.keys()].filter((id) => covered.has(id)).sort((a, b) => nameRank(a) - nameRank(b) || targets.get(b) - targets.get(a) || byWalk(a, b));
+  const references = /* @__PURE__ */ new Map();
+  const named = /* @__PURE__ */ new Set();
+  for (const [target, count] of targets) {
+    const owner = ownerOf.get(target);
+    if (!owner) continue;
+    references.set(owner, (references.get(owner) ?? 0) + count);
+    if (stems.has(fileStem(byStable.get(target).file))) named.add(owner);
+  }
+  const nameRank = (id) => named.has(id) ? 0 : 1;
+  return [...references.keys()].sort(
+    (a, b) => nameRank(a) - nameRank(b) || references.get(b) - references.get(a) || byWalk(a, b)
+  );
 }
 function exercisedAttachments(node, context) {
   if (!node.isTest) return null;
@@ -19311,6 +19321,15 @@ function appendAttachments(attached, members, walk2) {
     unitMembers.push(member);
   }
 }
+function attachmentsFor(node, context) {
+  return exercisedAttachments(node, context) ?? sameFileAttachments(node, context) ?? consumerAttachments(node, context) ?? importedTestAttachments(node, context);
+}
+function partition(items, predicate) {
+  const yes = [];
+  const no = [];
+  for (const item of items) (predicate(item) ? yes : no).push(item);
+  return [yes, no];
+}
 function deriveAttachments(units, flows, nodes, testEdges, fileRequires) {
   const byStable = new Map(nodes.map((n) => [n.stableId, n]));
   const changed = new Set(nodes.filter((n) => n.changeStatus === "changed").map((n) => n.stableId));
@@ -19322,15 +19341,18 @@ function deriveAttachments(units, flows, nodes, testEdges, fileRequires) {
     walk: walk2,
     fileRequires,
     byWalk: (a, b) => walk2.get(a).pos - walk2.get(b).pos,
-    testsByTest: indexTestEdges(testEdges)
+    testsByTest: indexTestEdges(testEdges),
+    ownerOf: new Map([...covered].map((id) => [id, id]))
   };
   const attached = units.map(() => []);
   const unassigned = [...changed].filter((id) => !covered.has(id)).sort();
-  for (const stableId of unassigned) {
-    const node = byStable.get(stableId);
-    const members = exercisedAttachments(node, context) ?? sameFileAttachments(node, context) ?? consumerAttachments(node, context) ?? importedTestAttachments(node, context);
+  const [tests, others] = partition(unassigned, (id) => byStable.get(id).isTest);
+  for (const stableId of others) {
+    const members = attachmentsFor(byStable.get(stableId), context);
     appendAttachments(attached, members, walk2);
+    for (const m of members) if (m.counted) context.ownerOf.set(m.stableId, m.parentStableId);
   }
+  for (const stableId of tests) appendAttachments(attached, attachmentsFor(byStable.get(stableId), context), walk2);
   return attached;
 }
 function fileStem(file2) {
@@ -34035,7 +34057,7 @@ function reconcileSubgraph(subgraph, baseRef, root) {
   const nodes = subgraph.nodes.filter((n) => status.get(n.stableId) === "changed" || n.isTest || adj.has(n.stableId));
   return { nodes, status };
 }
-async function attachmentsFor(ctx, sessionId, flows, sessionNodes) {
+async function attachmentsFor2(ctx, sessionId, flows, sessionNodes) {
   const testEdges = getTestEdges(ctx.db, sessionId);
   const fileRequires = await ctx.graphProvider.getFileRequires?.() ?? /* @__PURE__ */ new Map();
   return (units) => deriveAttachments(units, flows, sessionNodes, testEdges, fileRequires);
@@ -34189,7 +34211,7 @@ function createSessionsRoute(ctx) {
         ...unit.orphanFiles === void 0 ? {} : { orphanFiles: unit.orphanFiles }
       }
     );
-    const attach = await attachmentsFor(ctx, sessionId, flows, sessionNodes);
+    const attach = await attachmentsFor2(ctx, sessionId, flows, sessionNodes);
     const { units, attachedPerUnit, emptyUnits } = resolvePlanMembership(planUnits, orphanNodes, attach);
     if (emptyUnits.length > 0) {
       return c.json({ error: `orphanFiles matched no unassigned changes for unit(s): ${emptyUnits.join(", ")}` }, 400);

@@ -93,6 +93,9 @@ interface AttachmentContext {
   byWalk: (a: string, b: string) => number;
   /** test stableId -> exercised production stableId -> reference count. */
   testsByTest: Map<string, Map<string, number>>;
+  /** Who owns a node in the walk: a covered node owns itself, an attached non-test node
+   *  belongs to its counted parent. Tests rank their subjects through this. */
+  ownerOf: Map<string, string>;
   fileRequires: FileRequires;
 }
 
@@ -106,17 +109,26 @@ function indexTestEdges(edges: TestEdge[]): Map<string, Map<string, number>> {
   return byTest;
 }
 
-/** The subject a test exercises, among its covered targets: the node whose file
- *  basename the test is named after, else the most-referenced one, else the
- *  earliest in the walk. Fixture setup (config loaders, builders) rarely wins
- *  on either of the first two. */
+/** The subject a test exercises, as covered owners of its targets (a target that is itself
+ *  attached counts for its parent, so a test of a function that sits on a flow still lands with
+ *  its file): the owner of a target whose file basename the test is named after, else the owner
+ *  with the most references summed over its targets, else the earliest in the walk. Fixture setup
+ *  (config loaders, builders) rarely wins on either of the first two. */
 function rankExercised(node: AttachNode, targets: Map<string, number>, context: AttachmentContext): string[] {
-  const { byStable, covered, byWalk } = context;
+  const { byStable, ownerOf, byWalk } = context;
   const stems = testNameStems(node.file);
-  const nameRank = (id: string) => (stems.has(fileStem(byStable.get(id)!.file)) ? 0 : 1);
-  return [...targets.keys()]
-    .filter((id) => covered.has(id))
-    .sort((a, b) => nameRank(a) - nameRank(b) || targets.get(b)! - targets.get(a)! || byWalk(a, b));
+  const references = new Map<string, number>();
+  const named = new Set<string>();
+  for (const [target, count] of targets) {
+    const owner = ownerOf.get(target);
+    if (!owner) continue;
+    references.set(owner, (references.get(owner) ?? 0) + count);
+    if (stems.has(fileStem(byStable.get(target)!.file))) named.add(owner);
+  }
+  const nameRank = (id: string) => (named.has(id) ? 0 : 1);
+  return [...references.keys()].sort(
+    (a, b) => nameRank(a) - nameRank(b) || references.get(b)! - references.get(a)! || byWalk(a, b),
+  );
 }
 
 /** The exercised subject owns the test; other units get one reference each. */
@@ -189,8 +201,27 @@ function appendAttachments(attached: AttachedMember[][], members: AttachedMember
   }
 }
 
+/** The four ordered rules for one node, first match wins. */
+function attachmentsFor(node: AttachNode, context: AttachmentContext): AttachedMember[] {
+  return (
+    exercisedAttachments(node, context) ??
+    sameFileAttachments(node, context) ??
+    consumerAttachments(node, context) ??
+    importedTestAttachments(node, context)
+  );
+}
+
+function partition<T>(items: T[], predicate: (item: T) => boolean): [T[], T[]] {
+  const yes: T[] = [];
+  const no: T[] = [];
+  for (const item of items) (predicate(item) ? yes : no).push(item);
+  return [yes, no];
+}
+
 /** Four ordered rules, first match wins. Only explicitly covered nodes can be
- * parents (no attachment chaining); explicitly planned nodes are never candidates. */
+ * parents (no attachment chaining in the tree), though a test ranks an attached
+ * node it exercises as that node's parent; explicitly planned nodes are never
+ * candidates. */
 export function deriveAttachments(
   units: PlanUnitInput[],
   flows: Flow[],
@@ -209,18 +240,18 @@ export function deriveAttachments(
     fileRequires,
     byWalk: (a, b) => walk.get(a)!.pos - walk.get(b)!.pos,
     testsByTest: indexTestEdges(testEdges),
+    ownerOf: new Map([...covered].map((id) => [id, id])),
   };
   const attached: AttachedMember[][] = units.map(() => []);
   const unassigned = [...changed].filter((id) => !covered.has(id)).sort();
-  for (const stableId of unassigned) {
-    const node = byStable.get(stableId)!;
-    const members =
-      exercisedAttachments(node, context) ??
-      sameFileAttachments(node, context) ??
-      consumerAttachments(node, context) ??
-      importedTestAttachments(node, context);
+  // Non-tests first, so every test can rank the attached nodes it exercises by their owner.
+  const [tests, others] = partition(unassigned, (id) => byStable.get(id)!.isTest);
+  for (const stableId of others) {
+    const members = attachmentsFor(byStable.get(stableId)!, context);
     appendAttachments(attached, members, walk);
+    for (const m of members) if (m.counted) context.ownerOf.set(m.stableId, m.parentStableId);
   }
+  for (const stableId of tests) appendAttachments(attached, attachmentsFor(byStable.get(stableId)!, context), walk);
   return attached;
 }
 
