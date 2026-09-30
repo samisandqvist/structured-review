@@ -185,6 +185,34 @@ describe("deriveAttachments — tested-by through an attached subject", () => {
   });
 });
 
+describe("deriveAttachments — a test file stays together", () => {
+  it("places a helper in a test file with the subject the whole file exercises", () => {
+    // client.test.ts's suite exercises the digest client; its fixture helper `atom` only calls a
+    // visibility builder. Ranked alone, the helper would land in the visibility unit.
+    const client = node("fetchPage", { file: "src/digest/client.ts" });
+    const wholeTenant = node("wholeTenant", { file: "src/lib/visibility.ts" });
+    const suite = node("client.test", { isTest: true, file: "src/digest/client.test.ts" });
+    const helper = node("client.test/atom", { isTest: true, file: "src/digest/client.test.ts" });
+    const [visibility, digest] = deriveAttachments(
+      [orphanUnit(["wholeTenant"], "visibility"), orphanUnit(["fetchPage"], "digest")],
+      [],
+      [client, wholeTenant, suite, helper],
+      [
+        { productionStableId: "fetchPage", testStableId: "client.test", weight: 5 },
+        { productionStableId: "wholeTenant", testStableId: "client.test/atom", weight: 1 },
+      ],
+      new Map(),
+    );
+    expect(digest).toEqual([
+      { stableId: "client.test", parentStableId: "fetchPage", reason: "tested-by", counted: true },
+      { stableId: "client.test/atom", parentStableId: "fetchPage", reason: "tested-by", counted: true },
+    ]);
+    expect(visibility).toEqual([
+      { stableId: "client.test/atom", parentStableId: "wholeTenant", reason: "tested-by", counted: false },
+    ]);
+  });
+});
+
 describe("deriveAttachments — same-file", () => {
   it("nests a module-scope residual under the first covered node of its file", () => {
     const nodes = [node("svc.method"), node("svc (module scope)", { file: "svc.method.ts" })];

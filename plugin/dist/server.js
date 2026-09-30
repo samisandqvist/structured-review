@@ -19267,24 +19267,32 @@ function rankExercised(node, targets, context) {
     (a, b) => nameRank(a) - nameRank(b) || references.get(b) - references.get(a) || byWalk(a, b)
   );
 }
-function exercisedAttachments(node, context) {
+function exercisedAttachments(node, context, fileSubject) {
   if (!node.isTest) return null;
   const { testsByTest, walk: walk2 } = context;
   const exercised = rankExercised(node, testsByTest.get(node.stableId) ?? /* @__PURE__ */ new Map(), context);
-  if (exercised.length === 0) return null;
-  const parent = exercised[0];
-  if (!parent) return [];
+  const parent = fileSubject ?? exercised[0];
+  if (!parent) return null;
   const members = [
     { stableId: node.stableId, parentStableId: parent, reason: "tested-by", counted: true }
   ];
   const refUnits = /* @__PURE__ */ new Set([walk2.get(parent).unitIndex]);
-  for (const other of exercised.slice(1)) {
+  for (const other of exercised) {
     const unitIndex = walk2.get(other).unitIndex;
     if (refUnits.has(unitIndex)) continue;
     refUnits.add(unitIndex);
     members.push({ stableId: node.stableId, parentStableId: other, reason: "tested-by", counted: false });
   }
   return members;
+}
+function fileSubjectOf(testIds, context) {
+  const merged = /* @__PURE__ */ new Map();
+  for (const id of testIds) {
+    for (const [target, count] of context.testsByTest.get(id) ?? []) {
+      merged.set(target, (merged.get(target) ?? 0) + count);
+    }
+  }
+  return rankExercised(context.byStable.get(testIds[0]), merged, context)[0];
 }
 function sameFileAttachments(node, context) {
   const parents = [...context.covered].filter((id) => context.byStable.get(id)?.file === node.file).sort(context.byWalk);
@@ -19321,8 +19329,16 @@ function appendAttachments(attached, members, walk2) {
     unitMembers.push(member);
   }
 }
-function attachmentsFor(node, context) {
-  return exercisedAttachments(node, context) ?? sameFileAttachments(node, context) ?? consumerAttachments(node, context) ?? importedTestAttachments(node, context);
+function attachmentsFor(node, context, fileSubject) {
+  return exercisedAttachments(node, context, fileSubject) ?? sameFileAttachments(node, context) ?? consumerAttachments(node, context) ?? importedTestAttachments(node, context);
+}
+function groupByFile(ids, byStable) {
+  const groups = /* @__PURE__ */ new Map();
+  for (const id of ids) {
+    const file2 = byStable.get(id).file;
+    groups.set(file2, [...groups.get(file2) ?? [], id]);
+  }
+  return [...groups.values()];
 }
 function partition(items, predicate) {
   const yes = [];
@@ -19352,7 +19368,12 @@ function deriveAttachments(units, flows, nodes, testEdges, fileRequires) {
     appendAttachments(attached, members, walk2);
     for (const m of members) if (m.counted) context.ownerOf.set(m.stableId, m.parentStableId);
   }
-  for (const stableId of tests) appendAttachments(attached, attachmentsFor(byStable.get(stableId), context), walk2);
+  for (const group of groupByFile(tests, byStable)) {
+    const subject = fileSubjectOf(group, context);
+    for (const stableId of group) {
+      appendAttachments(attached, attachmentsFor(byStable.get(stableId), context, subject), walk2);
+    }
+  }
   return attached;
 }
 function fileStem(file2) {

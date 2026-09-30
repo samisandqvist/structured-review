@@ -81,7 +81,10 @@ after both passes is rejected. Four rules run in order; the first match wins:
    attached under, so non-test attachments are derived first; the tree stays one
    level deep. The subject is the owner of a node whose file basename the test is
    named after, else the owner with the most references summed over its nodes,
-   else the first in walk order. Other units
+   else the first in walk order. A test file is ranked once, over the references
+   of all its nodes, and every node of the file attaches under that subject, so a
+   fixture helper stays with its suite; each node keeps its own non-counting
+   references to other units it exercises. Other units
    exercising it receive non-counting references. A test file whose tests are
    anonymous callbacks is itself the caller of what they exercise (the SCIP
    provider gives test documents a whole-file node), so this rule applies to

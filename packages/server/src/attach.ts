@@ -131,25 +131,41 @@ function rankExercised(node: AttachNode, targets: Map<string, number>, context: 
   );
 }
 
-/** The exercised subject owns the test; other units get one reference each. */
-function exercisedAttachments(node: AttachNode, context: AttachmentContext): AttachedMember[] | null {
+/** The subject owns the test: the one its test file as a whole exercises (`fileSubject`), else
+ *  its own top-ranked subject. Other units it exercises get one non-counting reference each. */
+function exercisedAttachments(
+  node: AttachNode,
+  context: AttachmentContext,
+  fileSubject?: string,
+): AttachedMember[] | null {
   if (!node.isTest) return null;
   const { testsByTest, walk } = context;
   const exercised = rankExercised(node, testsByTest.get(node.stableId) ?? new Map<string, number>(), context);
-  if (exercised.length === 0) return null;
-  const parent = exercised[0];
-  if (!parent) return [];
+  const parent = fileSubject ?? exercised[0];
+  if (!parent) return null;
   const members: AttachedMember[] = [
     { stableId: node.stableId, parentStableId: parent, reason: "tested-by", counted: true },
   ];
   const refUnits = new Set([walk.get(parent)!.unitIndex]);
-  for (const other of exercised.slice(1)) {
+  for (const other of exercised) {
     const unitIndex = walk.get(other)!.unitIndex;
     if (refUnits.has(unitIndex)) continue;
     refUnits.add(unitIndex);
     members.push({ stableId: node.stableId, parentStableId: other, reason: "tested-by", counted: false });
   }
   return members;
+}
+
+/** The subject one test file exercises, ranked over the summed references of all its nodes, so a
+ *  fixture helper stays with its suite instead of following the one builder it calls. */
+function fileSubjectOf(testIds: string[], context: AttachmentContext): string | undefined {
+  const merged = new Map<string, number>();
+  for (const id of testIds) {
+    for (const [target, count] of context.testsByTest.get(id) ?? []) {
+      merged.set(target, (merged.get(target) ?? 0) + count);
+    }
+  }
+  return rankExercised(context.byStable.get(testIds[0]!)!, merged, context)[0];
 }
 
 /** Match the first covered node of this file, including module-scope residuals. */
@@ -202,13 +218,23 @@ function appendAttachments(attached: AttachedMember[][], members: AttachedMember
 }
 
 /** The four ordered rules for one node, first match wins. */
-function attachmentsFor(node: AttachNode, context: AttachmentContext): AttachedMember[] {
+function attachmentsFor(node: AttachNode, context: AttachmentContext, fileSubject?: string): AttachedMember[] {
   return (
-    exercisedAttachments(node, context) ??
+    exercisedAttachments(node, context, fileSubject) ??
     sameFileAttachments(node, context) ??
     consumerAttachments(node, context) ??
     importedTestAttachments(node, context)
   );
+}
+
+/** Ids grouped by their node's file, groups and ids in input order. */
+function groupByFile(ids: string[], byStable: Map<string, AttachNode>): string[][] {
+  const groups = new Map<string, string[]>();
+  for (const id of ids) {
+    const file = byStable.get(id)!.file;
+    groups.set(file, [...(groups.get(file) ?? []), id]);
+  }
+  return [...groups.values()];
 }
 
 function partition<T>(items: T[], predicate: (item: T) => boolean): [T[], T[]] {
@@ -251,7 +277,12 @@ export function deriveAttachments(
     appendAttachments(attached, members, walk);
     for (const m of members) if (m.counted) context.ownerOf.set(m.stableId, m.parentStableId);
   }
-  for (const stableId of tests) appendAttachments(attached, attachmentsFor(byStable.get(stableId)!, context), walk);
+  for (const group of groupByFile(tests, byStable)) {
+    const subject = fileSubjectOf(group, context);
+    for (const stableId of group) {
+      appendAttachments(attached, attachmentsFor(byStable.get(stableId)!, context, subject), walk);
+    }
+  }
   return attached;
 }
 
