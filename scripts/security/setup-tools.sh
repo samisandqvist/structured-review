@@ -53,7 +53,7 @@ install_gitleaks() {
     "$sha256"
   tar -xzf "$archive" -C "$BIN_DIR" gitleaks
   chmod 0755 "$BIN_DIR/gitleaks"
-  "$BIN_DIR/gitleaks" version | grep -Fq "$GITLEAKS_VERSION" || die "Gitleaks version verification failed"
+  grep -Fq "$GITLEAKS_VERSION" <<<"$("$BIN_DIR/gitleaks" version)" || die "Gitleaks version verification failed"
 }
 
 install_osv_scanner() {
@@ -76,7 +76,7 @@ install_osv_scanner() {
     "$BIN_DIR/osv-scanner" \
     "$sha256"
   chmod 0755 "$BIN_DIR/osv-scanner"
-  "$BIN_DIR/osv-scanner" --version | grep -Fq "osv-scanner version: $OSV_SCANNER_VERSION" || die "OSV-Scanner version verification failed"
+  grep -Fq "osv-scanner version: $OSV_SCANNER_VERSION" <<<"$("$BIN_DIR/osv-scanner" --version)" || die "OSV-Scanner version verification failed"
 }
 
 install_semgrep() {
@@ -111,7 +111,7 @@ install_semgrep() {
     --no-input \
     --constraint "$SEMGREP_CONSTRAINTS" \
     "$DOWNLOAD_DIR/$wheel"
-  "$venv/bin/semgrep" --version | grep -Fxq "$SEMGREP_VERSION" || die "Semgrep version verification failed"
+  grep -Fxq "$SEMGREP_VERSION" <<<"$("$venv/bin/semgrep" --version)" || die "Semgrep version verification failed"
   ln -sfn -- "../semgrep-venv/bin/semgrep" "$BIN_DIR/semgrep"
 }
 
