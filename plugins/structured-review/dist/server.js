@@ -188,6 +188,44 @@ function changedFilesStrict(baseRef, root = repoRoot()) {
     throw new GitError("list-files", `git diff --name-only ${baseRef} failed: ${e.message}`);
   }
 }
+function changedFileStatuses(baseRef, root = repoRoot()) {
+  try {
+    const raw2 = execFileSync("git", ["diff", "--name-status", "-M", "-z", baseRef], {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+      ...QUIET
+    });
+    return parseNameStatus(raw2);
+  } catch {
+    return null;
+  }
+}
+function parseNameStatus(raw2) {
+  const fields = raw2.split("\0");
+  const changes = [];
+  for (let i = 0; i < fields.length && fields[i]; ) {
+    const code = fields[i].charAt(0);
+    if (code === "R" || code === "C") {
+      const [oldPath, path] = [fields[i + 1], fields[i + 2]];
+      changes.push(code === "R" ? { path, status: "renamed", oldPath } : { path, status: "added" });
+      i += 3;
+    } else {
+      changes.push({ path: fields[i + 1], status: NAME_STATUS[code] ?? "modified" });
+      i += 2;
+    }
+  }
+  return changes;
+}
+function directoryExistsAt(ref, dir, root = repoRoot()) {
+  if (!dir) return true;
+  try {
+    const type = execFileSync("git", ["cat-file", "-t", `${ref}:${dir}`], { cwd: root, encoding: "utf8", ...QUIET });
+    return type.trim() === "tree";
+  } catch {
+    return false;
+  }
+}
 function subtractRanges(ranges, spans) {
   const out = [];
   for (const range of ranges) {
@@ -470,7 +508,7 @@ function readSlice(root, file2, startLine, endLine) {
     return "";
   }
 }
-var GitError, QUIET, cachedRoot, MARKER_CHAR;
+var GitError, QUIET, NAME_STATUS, cachedRoot, MARKER_CHAR;
 var init_diff = __esm({
   "packages/server/src/diff.ts"() {
     "use strict";
@@ -483,6 +521,7 @@ var init_diff = __esm({
       phase;
     };
     QUIET = { stdio: ["ignore", "pipe", "pipe"] };
+    NAME_STATUS = { A: "added", M: "modified", D: "deleted", R: "renamed" };
     MARKER_CHAR = { context: " ", added: "+", removed: "-" };
   }
 });
@@ -15820,9 +15859,9 @@ __export(flows_exports, {
   readFlows: () => readFlows
 });
 import { DatabaseSync as DatabaseSync2 } from "node:sqlite";
-import { join as join9 } from "node:path";
+import { join as join10 } from "node:path";
 function readFlows(root = repoRoot(), changedStableIds) {
-  const dbPath = process.env.CRG_GRAPH_DB || join9(root, ".code-review-graph", "graph.db");
+  const dbPath = process.env.CRG_GRAPH_DB || join10(root, ".code-review-graph", "graph.db");
   let db2;
   try {
     db2 = new DatabaseSync2(dbPath, { readOnly: true });
@@ -15879,7 +15918,7 @@ var init_flows = __esm({
 
 // packages/server/src/index.ts
 import { existsSync as existsSync5 } from "node:fs";
-import { dirname as dirname2, join as join10 } from "node:path";
+import { dirname as dirname2, join as join11 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // node_modules/.pnpm/@hono+node-server@2.1.3_hono@4.13.13/node_modules/@hono/node-server/dist/constants-BLSFu_RU.mjs
@@ -17217,7 +17256,7 @@ var serve = (options, listeningListener) => {
 
 // packages/server/src/app.ts
 import { existsSync as existsSync4 } from "node:fs";
-import { join as join8 } from "node:path";
+import { join as join9 } from "node:path";
 
 // node_modules/.pnpm/hono@4.13.13/node_modules/hono/dist/request/constants.js
 var GET_MATCH_RESULT = /* @__PURE__ */ Symbol();
@@ -19262,14 +19301,18 @@ function languagePathspecs(language, root) {
 }
 var SKIP_DIRS = /* @__PURE__ */ new Set(["node_modules", "dist", "build", "out", "target", "coverage", "venv", "__pycache__", "obj"]);
 function discoverLanguageRoots(repoRoot2) {
-  const candidates = [];
-  walk(repoRoot2, "", candidates);
+  const candidates = findMarkerRoots(repoRoot2);
   const kept = candidates.filter(
     (c) => !candidates.some((o) => o.language === c.language && o.root !== c.root && isInside(c.root, o.root))
   );
   return kept.map((c) => ({ ...c, hasSources: rootHasSources(c.root ? join3(repoRoot2, c.root) : repoRoot2, c.language) })).sort(
     (a, b) => a.root < b.root ? -1 : a.root > b.root ? 1 : a.language < b.language ? -1 : a.language > b.language ? 1 : 0
   );
+}
+function findMarkerRoots(repoRoot2) {
+  const found = [];
+  walk(repoRoot2, "", found);
+  return found;
 }
 function isInside(child, parent) {
   return parent === "" ? child !== "" : child.startsWith(parent + "/");
@@ -40993,6 +41036,195 @@ function createChangesRoute(ctx) {
   return router;
 }
 
+// packages/server/src/routes/shape.ts
+init_diff();
+
+// packages/server/src/component-map.ts
+import { readFileSync as readFileSync5 } from "node:fs";
+import { join as join8 } from "node:path";
+var MANIFEST_FILE = ".review-components.json";
+var globList = external_exports.array(external_exports.string().min(1)).min(1);
+var componentSchema = external_exports.object({
+  id: external_exports.string().trim().min(1),
+  description: external_exports.string().optional(),
+  paths: globList,
+  criticality: external_exports.enum(["high", "normal", "low"]).default("normal"),
+  contracts: external_exports.array(external_exports.object({ kind: external_exports.string().trim().min(1), paths: globList })).default([]),
+  consumers: external_exports.array(external_exports.string().min(1)).default([])
+});
+var manifestSchema = external_exports.object({ components: external_exports.array(external_exports.unknown()) });
+function parseManifest(text) {
+  let json3;
+  try {
+    json3 = JSON.parse(text);
+  } catch (e) {
+    return { components: [], warnings: [`${MANIFEST_FILE} is not valid JSON: ${e.message}`] };
+  }
+  const top2 = manifestSchema.safeParse(json3);
+  if (!top2.success) return { components: [], warnings: [`${MANIFEST_FILE} needs a "components" array`] };
+  const warnings = [];
+  const components = [];
+  top2.data.components.forEach((entry, index) => {
+    const parsed = componentSchema.safeParse(entry);
+    if (!parsed.success) {
+      warnings.push(`${MANIFEST_FILE}: component ${index + 1} skipped: ${describeIssue(parsed.error.issues[0])}`);
+    } else if (components.some((c) => c.id === parsed.data.id)) {
+      warnings.push(`${MANIFEST_FILE}: duplicate component id "${parsed.data.id}" skipped`);
+    } else {
+      components.push(withoutUndefined(parsed.data));
+    }
+  });
+  return { components: dropUnknownConsumers(components, warnings), warnings };
+}
+function describeIssue(issue2) {
+  if (!issue2) return "invalid entry";
+  const path = issue2.path.length > 0 ? `${issue2.path.join(".")}: ` : "";
+  return `${path}${issue2.message}`;
+}
+function withoutUndefined(spec) {
+  const { description, ...rest } = spec;
+  return description === void 0 ? rest : { ...rest, description };
+}
+function dropUnknownConsumers(components, warnings) {
+  const ids = new Set(components.map((c) => c.id));
+  return components.map((c) => {
+    const unknown2 = c.consumers.filter((id) => !ids.has(id));
+    for (const id of unknown2) warnings.push(`${MANIFEST_FILE}: "${c.id}" lists unknown consumer "${id}"`);
+    return { ...c, consumers: c.consumers.filter((id) => ids.has(id) && id !== c.id) };
+  });
+}
+function loadComponentMap(repoRoot2) {
+  let text = null;
+  try {
+    text = readFileSync5(join8(repoRoot2, MANIFEST_FILE), "utf8");
+  } catch {
+  }
+  if (text !== null) {
+    const { components, warnings } = parseManifest(text);
+    if (components.length > 0) return { source: "manifest", components, warnings };
+    return { source: "inferred", components: inferComponents(repoRoot2), warnings: [...warnings, fallbackNotice()] };
+  }
+  return { source: "inferred", components: inferComponents(repoRoot2), warnings: [] };
+}
+function fallbackNotice() {
+  return `${MANIFEST_FILE} has no usable component; components are inferred from project roots`;
+}
+function inferComponents(repoRoot2) {
+  const roots = [...new Set(findMarkerRoots(repoRoot2).map((found) => found.root))].filter(Boolean);
+  roots.sort((a, b) => b.split("/").length - a.split("/").length || a.localeCompare(b));
+  return roots.map((root) => ({
+    id: root,
+    paths: [`${root}/**`],
+    criticality: "normal",
+    contracts: [],
+    consumers: []
+  }));
+}
+function componentFor(file2, map2) {
+  const owner = map2.components.find((c) => c.paths.some((glob) => matchGlob(file2, glob)));
+  if (owner) return owner.id;
+  if (map2.source === "manifest") return null;
+  const slash = file2.indexOf("/");
+  return slash === -1 ? REPOSITORY_ROOT : file2.slice(0, slash);
+}
+var REPOSITORY_ROOT = "(repository root)";
+function contractKindFor(file2, spec) {
+  const contract = spec?.contracts.find((c) => c.paths.some((glob) => matchGlob(file2, glob)));
+  return contract?.kind ?? null;
+}
+
+// packages/server/src/change-shape.ts
+import { posix as posix2 } from "node:path";
+var RANK = { high: 0, normal: 1, low: 2 };
+function buildChangeShape(changes, map2, existedAtBase) {
+  const specs = new Map(map2.components.map((c) => [c.id, c]));
+  const grouped = /* @__PURE__ */ new Map();
+  const unassigned = [];
+  for (const change of changes) {
+    const id = componentFor(change.path, map2);
+    const contract = id === null ? null : contractKindFor(change.path, specs.get(id));
+    const file2 = contract ? { ...change, contract } : change;
+    if (id === null) unassigned.push(file2);
+    else grouped.set(id, [...grouped.get(id) ?? [], file2]);
+  }
+  const newDirs = newDirectories(changes, existedAtBase);
+  const components = [...grouped].map(([id, files]) => {
+    const spec = specs.get(id);
+    const changedContracts = [...new Set(files.flatMap((f) => f.contract ? [f.contract] : []))];
+    const consumers = changedContracts.length ? (spec?.consumers ?? []).map((c) => ({ id: c, inChange: grouped.has(c) })) : [];
+    return {
+      id,
+      ...spec?.description !== void 0 && { description: spec.description },
+      criticality: spec?.criticality ?? "normal",
+      files,
+      newDirectories: newDirs.filter((dir) => files.some((f) => f.path.startsWith(`${dir}/`))),
+      changedContracts,
+      consumers
+    };
+  });
+  components.sort(
+    (a, b) => RANK[a.criticality] - RANK[b.criticality] || b.files.length - a.files.length || a.id.localeCompare(b.id)
+  );
+  return {
+    source: map2.source,
+    warnings: map2.warnings,
+    components,
+    unassigned,
+    outsideConsumers: outsideConsumers(components, specs)
+  };
+}
+function newDirectories(changes, existedAtBase) {
+  const found = /* @__PURE__ */ new Set();
+  const checked = /* @__PURE__ */ new Map();
+  const exists = (dir) => {
+    if (!checked.has(dir)) checked.set(dir, existedAtBase(dir));
+    return checked.get(dir);
+  };
+  for (const change of changes) {
+    if (change.status !== "added" && change.status !== "renamed") continue;
+    let topmost = null;
+    for (let dir = posix2.dirname(change.path); dir !== "." && !exists(dir); dir = posix2.dirname(dir)) topmost = dir;
+    if (topmost) found.add(topmost);
+  }
+  return [...found].sort();
+}
+function outsideConsumers(components, specs) {
+  const byId = /* @__PURE__ */ new Map();
+  for (const component of components) {
+    for (const consumer of component.consumers.filter((c) => !c.inChange)) {
+      const spec = specs.get(consumer.id);
+      const entry = byId.get(consumer.id) ?? {
+        id: consumer.id,
+        ...spec?.description !== void 0 && { description: spec.description },
+        criticality: spec?.criticality ?? "normal",
+        via: []
+      };
+      entry.via.push({ component: component.id, contracts: component.changedContracts });
+      byId.set(consumer.id, entry);
+    }
+  }
+  return [...byId.values()].sort((a, b) => RANK[a.criticality] - RANK[b.criticality] || a.id.localeCompare(b.id));
+}
+
+// packages/server/src/routes/shape.ts
+function createShapeRoute(ctx) {
+  const router = new Hono3();
+  router.get("/:id/shape", (c) => {
+    const session = getSession(ctx.db, c.req.param("id"));
+    if (!session) return c.json({ error: "not found" }, 404);
+    const root = ctx.repoRoot;
+    const changes = changedFileStatuses(session.baseRef, root);
+    if (!changes) return c.json({ error: `cannot list changes against ${session.baseRef}`, phase: "list-files" }, 500);
+    const shape = buildChangeShape(
+      changes,
+      loadComponentMap(root),
+      (dir) => directoryExistsAt(session.baseRef, dir, root)
+    );
+    return c.json(shape);
+  });
+  return router;
+}
+
 // node_modules/.pnpm/hono@4.13.13/node_modules/hono/dist/helper/factory/index.js
 var createMiddleware = (middleware) => middleware;
 
@@ -41035,7 +41267,8 @@ function createApp(ctx) {
   app2.route("/api/sessions", createEventsRoute(resolved));
   app2.route("/api/sessions", createFlowsRoute(resolved));
   app2.route("/api/sessions", createChangesRoute(resolved));
-  if (resolved.webDistPath && existsSync4(join8(resolved.webDistPath, "index.html"))) {
+  app2.route("/api/sessions", createShapeRoute(resolved));
+  if (resolved.webDistPath && existsSync4(join9(resolved.webDistPath, "index.html"))) {
     app2.route("/", createStaticRoute(resolved.webDistPath));
   }
   return app2;
@@ -45005,8 +45238,8 @@ switch (which) {
     graphProvider = new StubGraphProvider();
 }
 var here = dirname2(fileURLToPath2(import.meta.url));
-var webDistPath = [process.env.SREV_WEB_DIST, join10(here, "..", "..", "web", "dist"), join10(here, "..", "web")].find(
-  (p) => p && existsSync5(join10(p, "index.html"))
+var webDistPath = [process.env.SREV_WEB_DIST, join11(here, "..", "..", "web", "dist"), join11(here, "..", "web")].find(
+  (p) => p && existsSync5(join11(p, "index.html"))
 );
 var webBuilt = webDistPath !== void 0;
 var hostname3 = process.env.SREV_HOST || "127.0.0.1";

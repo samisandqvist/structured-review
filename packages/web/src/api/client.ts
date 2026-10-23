@@ -155,6 +155,37 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export type Criticality = "high" | "normal" | "low";
+
+export interface ShapeFile {
+  path: string;
+  status: "added" | "modified" | "deleted" | "renamed";
+  oldPath?: string;
+  contract?: string;
+}
+
+/** GET /:id/shape: the change against the repository's components. */
+export interface ChangeShape {
+  source: "manifest" | "inferred";
+  warnings: string[];
+  components: {
+    id: string;
+    description?: string;
+    criticality: Criticality;
+    files: ShapeFile[];
+    newDirectories: string[];
+    changedContracts: string[];
+    consumers: { id: string; inChange: boolean }[];
+  }[];
+  unassigned: ShapeFile[];
+  outsideConsumers: {
+    id: string;
+    description?: string;
+    criticality: Criticality;
+    via: { component: string; contracts: string[] }[];
+  }[];
+}
+
 export const api = {
   listSessions: () => fetchJson<{ sessions: ReviewSession[] }>("/sessions"),
   createSession: (branch: string, baseRef: string) =>
@@ -204,6 +235,7 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(patch),
     }),
+  getShape: (id: string) => fetchJson<ChangeShape>(`/sessions/${id}/shape`),
   getFlows: (id: string) => fetchJson<{ flows: Flow[]; orphans: Node[] }>(`/sessions/${id}/flows`),
   exportComments: (id: string) =>
     fetchJson<{ branch: string; baseRef: string; headSha: string; comments: Record<string, unknown>[] }>(

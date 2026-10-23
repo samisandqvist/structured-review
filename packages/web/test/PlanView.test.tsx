@@ -521,3 +521,17 @@ describe("unit header interaction boundaries", () => {
     expect(mockUpdateUnit).toHaveBeenCalledExactlyOnceWith({ unitId: "u1", position: 1 });
   });
 });
+
+describe("PlanView shape button", () => {
+  it("returns from the walk to the shape of the change", () => {
+    useUIStore.setState({ currentNodeId: "n1", walkPath: ["n0"] });
+    const { rerender } = render(<PlanView sessionId="s1" currentNodeId="n1" onSelectNode={() => {}} />);
+    const button = screen.getByTestId("show-shape");
+    expect(button).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(button);
+    expect(useUIStore.getState().currentNodeId).toBeNull();
+    expect(useUIStore.getState().walkPath).toEqual([]);
+    rerender(<PlanView sessionId="s1" currentNodeId={null} onSelectNode={() => {}} />);
+    expect(screen.getByTestId("show-shape")).toHaveAttribute("aria-pressed", "true");
+  });
+});

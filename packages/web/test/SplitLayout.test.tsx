@@ -64,6 +64,7 @@ vi.mock("../src/api/hooks.js", () => ({
     },
   }),
   useFlows: () => ({ data: { flows: [], orphans: [] } }),
+  useShape: () => ({ data: undefined }),
   useNodes: () => ({ data: { nodes, edges: [] } }),
   useNode: (_s: string, nodeId: string | null) => ({
     data: nodeId
@@ -159,5 +160,22 @@ describe("SplitLayout walk navigation", () => {
     input.focus();
     fireEvent.keyDown(input, { key: "Escape" });
     expect(container.querySelector(".keys-overlay")).not.toBeInTheDocument();
+  });
+});
+
+describe("Divider", () => {
+  it("resizes the panes while dragged and stops on release", () => {
+    useUIStore.setState({ splitRatio: 1 / 3 });
+    render(<SplitLayout sessionId="s1" currentNodeId={null} />);
+    const container = screen.getByRole("separator").parentElement!;
+    container.getBoundingClientRect = () => ({ left: 0, width: 1000 }) as DOMRect;
+    fireEvent.mouseDown(screen.getByRole("separator"));
+    expect(document.body.style.cursor).toBe("col-resize");
+    fireEvent.mouseMove(document, { clientX: 500 });
+    expect(useUIStore.getState().splitRatio).toBe(0.5);
+    fireEvent.mouseUp(document);
+    expect(document.body.style.cursor).toBe("");
+    fireEvent.mouseMove(document, { clientX: 800 });
+    expect(useUIStore.getState().splitRatio).toBe(0.5);
   });
 });

@@ -14,6 +14,7 @@ srev session create --branch <b> --base <ref|empty> [--open]   # "empty" = whole
 srev session list
 srev session delete --session <id>
 srev context --session <id> [--brief|--full]     # planning view: commit subjects, flows + merge suggestions, orphan groups, change summaries (--brief: no stableIds, numeric refs only; --full: raw dump)
+srev shape --session <id>                        # components touched, contracts changed, consumers outside the change, new directories
 srev plan --session <id> (--auto | --units <file.json>) [--open]
 srev diff --session <id> --node <stableId>       # a single node's diff
 srev status --session <id>                       # coverage, overview, per-unit reviewed/total, unreviewed list
@@ -141,6 +142,13 @@ accepts `{ "text" }` and leaves the anchor and snippet as they are;
 was the node's last one, moves a `reviewed-commented` node back to
 `reviewed-clean`. `srev comments` additionally joins each comment with its
 node's current review status.
+
+## Component manifest
+
+`.review-components.json` at the repository root names the repository's
+components, their contracts and the components that consume them. It is
+optional; without it, components are inferred from project roots. See
+[component manifest](component-manifest.md) for the format.
 
 ## Entry-point configuration
 

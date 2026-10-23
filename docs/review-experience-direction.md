@@ -1,8 +1,11 @@
 # Helping humans judge a change
 
 Status: product direction proposal, September 2026. The structural orientation
-in the skill, review notes, keyboard help and freshness fixes exist today. The
-views and review records described below are proposed additions.
+in the skill, review notes, keyboard help and freshness fixes exist today, as
+does part of section 1: the shape of the change, which lists touched components,
+changed contracts, consumers outside the change, renames and new directories
+(see [component manifest](component-manifest.md)). The rest of section 1 and
+the other views and review records described below are proposed additions.
 
 ## What the NestJS example reveals
 

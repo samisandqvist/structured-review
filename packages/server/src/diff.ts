@@ -279,6 +279,64 @@ export function changedFilesStrict(baseRef: string, root: string = repoRoot()): 
   }
 }
 
+type FileChangeStatus = "added" | "modified" | "deleted" | "renamed";
+
+export interface FileChange {
+  path: string;
+  status: FileChangeStatus;
+  /** Path at baseRef, for renames. */
+  oldPath?: string;
+}
+
+const NAME_STATUS: Record<string, FileChangeStatus> = { A: "added", M: "modified", D: "deleted", R: "renamed" };
+
+/**
+ * Changed files vs baseRef with their status, or null on git failure. Renames
+ * are detected; a copy counts as an addition and a type change as a modification.
+ */
+export function changedFileStatuses(baseRef: string, root: string = repoRoot()): FileChange[] | null {
+  try {
+    const raw = execFileSync("git", ["diff", "--name-status", "-M", "-z", baseRef], {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+      ...QUIET,
+    });
+    return parseNameStatus(raw);
+  } catch {
+    return null;
+  }
+}
+
+/** Parses `git diff --name-status -z` output: status, then one path (two for renames and copies). */
+export function parseNameStatus(raw: string): FileChange[] {
+  const fields = raw.split("\0");
+  const changes: FileChange[] = [];
+  for (let i = 0; i < fields.length && fields[i];) {
+    const code = fields[i]!.charAt(0);
+    if (code === "R" || code === "C") {
+      const [oldPath, path] = [fields[i + 1]!, fields[i + 2]!];
+      changes.push(code === "R" ? { path, status: "renamed", oldPath } : { path, status: "added" });
+      i += 3;
+    } else {
+      changes.push({ path: fields[i + 1]!, status: NAME_STATUS[code] ?? "modified" });
+      i += 2;
+    }
+  }
+  return changes;
+}
+
+/** True when `dir` is a directory in the tree of `ref` ("" is the root and always exists). */
+export function directoryExistsAt(ref: string, dir: string, root: string = repoRoot()): boolean {
+  if (!dir) return true;
+  try {
+    const type = execFileSync("git", ["cat-file", "-t", `${ref}:${dir}`], { cwd: root, encoding: "utf8", ...QUIET });
+    return type.trim() === "tree";
+  } catch {
+    return false;
+  }
+}
+
 /** Parts of `ranges` not covered by any of `spans`. */
 export function subtractRanges(ranges: LineRange[], spans: LineRange[]): LineRange[] {
   const out: LineRange[] = [];

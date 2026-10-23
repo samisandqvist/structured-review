@@ -16,6 +16,7 @@ import {
   getNodeDiff,
   getNodes,
   getSessionInfo,
+  getShape,
   launchUI,
   listSessions,
   parsePlanFile,
@@ -31,6 +32,7 @@ import {
 import { computeStatus, waitConditionMet, type SessionStatus } from "./status.js";
 import { ensureServer } from "./serve.js";
 import { gcRepo, gcSweep } from "./gc.js";
+import { prettyShape } from "./shape.js";
 
 const USAGE = `usage:
   srev serve [--repo <path>] [--port N]
@@ -38,6 +40,7 @@ const USAGE = `usage:
   srev session list
   srev session delete --session <id>
   srev context --session <id> [--brief|--full]
+  srev shape --session <id>
   srev plan --session <id> (--auto | --units <file.json>) [--open]
   srev diff --session <id> --node <stableId>
   srev status --session <id>
@@ -324,6 +327,11 @@ async function cmdDiff(base: string, flags: Record<string, string | boolean>): P
   return { json: await getNodeDiff(base, sessionId, node.id) };
 }
 
+async function cmdShape(base: string, flags: Record<string, string | boolean>): Promise<CommandResult> {
+  const shape = await getShape(base, required(flags, "session"));
+  return { json: shape, pretty: prettyShape(shape) };
+}
+
 async function cmdStatus(base: string, flags: Record<string, string | boolean>): Promise<CommandResult> {
   const status = await fetchStatus(base, required(flags, "session"));
   return { json: status, pretty: prettyStatus(status) };
@@ -390,54 +398,31 @@ function checkNodeVersion(): void {
   throw new Error(`srev requires Node >= 22.13 (found ${process.versions.node})`);
 }
 
+/** Command name (positionals joined by a space) to its handler. */
+const COMMANDS: Record<string, (base: string, flags: Record<string, string | boolean>) => Promise<CommandResult>> = {
+  serve: (_base, flags) => cmdServe(flags),
+  "session create": cmdSessionCreate,
+  "session list": (base) => cmdSessionList(base),
+  "session delete": cmdSessionDelete,
+  gc: cmdGc,
+  shutdown: (base) => cmdShutdown(base),
+  context: cmdContext,
+  shape: cmdShape,
+  plan: cmdPlan,
+  diff: cmdDiff,
+  status: cmdStatus,
+  comments: cmdComments,
+  wait: cmdWait,
+};
+
 export async function runCli(argv: string[]): Promise<void> {
   checkNodeVersion();
   const { command, flags } = parseCliArgs(argv);
   const base = baseUrlFor(flags);
 
-  let result: CommandResult;
-  switch (command) {
-    case "serve":
-      result = await cmdServe(flags);
-      break;
-    case "session create":
-      result = await cmdSessionCreate(base, flags);
-      break;
-    case "session list":
-      result = await cmdSessionList(base);
-      break;
-    case "session delete":
-      result = await cmdSessionDelete(base, flags);
-      break;
-    case "gc":
-      result = await cmdGc(base, flags);
-      break;
-    case "shutdown":
-      result = await cmdShutdown(base);
-      break;
-    case "context":
-      result = await cmdContext(base, flags);
-      break;
-    case "plan":
-      result = await cmdPlan(base, flags);
-      break;
-    case "diff":
-      result = await cmdDiff(base, flags);
-      break;
-    case "status":
-      result = await cmdStatus(base, flags);
-      break;
-    case "comments":
-      result = await cmdComments(base, flags);
-      break;
-    case "wait":
-      result = await cmdWait(base, flags);
-      break;
-    case "":
-      throw new Error(USAGE);
-    default:
-      throw new Error(`unknown command: ${command}\n${USAGE}`);
-  }
+  if (command === "") throw new Error(USAGE);
+  if (!Object.hasOwn(COMMANDS, command)) throw new Error(`unknown command: ${command}\n${USAGE}`);
+  const result = await COMMANDS[command]!(base, flags);
   console.log(flags.pretty && result.pretty ? result.pretty : JSON.stringify(result.json, null, 2));
 }
 

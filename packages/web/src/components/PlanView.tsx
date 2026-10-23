@@ -81,6 +81,7 @@ export function PlanView({
       <div style={head}>
         <h2 style={{ fontFamily: "var(--display)", fontWeight: 700, fontSize: 17, margin: 0 }}>Plan</h2>
         <span style={{ color: "var(--dim)", fontSize: 15 }}>{units.length} units</span>
+        <ShowShapeButton active={currentNodeId === null} />
       </div>
       {(sessionData?.session?.indexWarnings?.length ?? 0) > 0 && (
         <div style={warnBanner}>
@@ -113,6 +114,27 @@ export function PlanView({
         </div>
       </PlanScrollContext.Provider>
     </div>
+  );
+}
+
+/** Leaves the walk for the change-shape overview, which the diff pane shows
+ *  while no node is selected. */
+function ShowShapeButton({ active }: { active: boolean }) {
+  const setCurrentNode = useUIStore((s) => s.setCurrentNode);
+  const truncateWalkPath = useUIStore((s) => s.truncateWalkPath);
+  return (
+    <button
+      className="btn"
+      data-testid="show-shape"
+      style={{ marginLeft: "auto" }}
+      aria-pressed={active}
+      onClick={() => {
+        setCurrentNode(null);
+        truncateWalkPath(0);
+      }}
+    >
+      Shape of the change
+    </button>
   );
 }
 
@@ -696,6 +718,7 @@ const head: React.CSSProperties = {
   display: "flex",
   alignItems: "baseline",
   justifyContent: "space-between",
+  gap: 10,
   padding: "14px 16px 10px",
   borderBottom: "1px solid var(--line)",
 };

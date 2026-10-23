@@ -88,8 +88,7 @@ export function languagePathspecs(language: IndexerLanguage, root: string): stri
 const SKIP_DIRS = new Set(["node_modules", "dist", "build", "out", "target", "coverage", "venv", "__pycache__", "obj"]);
 
 export function discoverLanguageRoots(repoRoot: string): IndexerJob[] {
-  const candidates: { language: IndexerLanguage; root: string }[] = [];
-  walk(repoRoot, "", candidates);
+  const candidates = findMarkerRoots(repoRoot);
   const kept = candidates.filter(
     (c) => !candidates.some((o) => o.language === c.language && o.root !== c.root && isInside(c.root, o.root)),
   );
@@ -98,6 +97,13 @@ export function discoverLanguageRoots(repoRoot: string): IndexerJob[] {
     .sort((a, b) =>
       a.root < b.root ? -1 : a.root > b.root ? 1 : a.language < b.language ? -1 : a.language > b.language ? 1 : 0,
     );
+}
+
+/** Every directory holding a language marker file, nested ones included (workspace packages under a monorepo root). */
+export function findMarkerRoots(repoRoot: string): { language: IndexerLanguage; root: string }[] {
+  const found: { language: IndexerLanguage; root: string }[] = [];
+  walk(repoRoot, "", found);
+  return found;
 }
 
 /** True when `child` is strictly inside `parent` ("" = repo root contains everything else). */

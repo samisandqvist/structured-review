@@ -100,8 +100,11 @@ If the default port is busy, pass the same `--port N` to each command.
 
 ## Walking a review
 
-Start with the overview and unit names. Select a change to read its diff, or
-press `j` to begin. Follow a caller or callee when you need context; **Return to
+Start with the shape of the change, shown before you select anything: the
+components it touches, the contracts it changes, the consumers of those
+contracts it leaves untouched, and its renames and new directories. **Shape of
+the change** in the plan header brings it back. Then read the overview and unit
+names. Select a change to read its diff, or press `j` to begin. Follow a caller or callee when you need context; **Return to
 review walk** brings you back. Related tests and supporting changes appear with
 the code they belong to.
 
@@ -146,9 +149,12 @@ feature in an unexpected part of the project. Before following functions, look
 at the new directories, moved files, dependencies and public interfaces. Compare
 a new feature with an established one and with the project's documented conventions.
 
-The walkthrough helps with behavior and navigation. It doesn't yet provide a
-before/after directory view or check architectural conventions. Use review notes
-to keep those questions visible. [Ideas for improving this part of review](docs/review-experience-direction.md)
+The shape of the change shows where the change sits. Describe your repository's
+components, their contracts and their consumers in a
+[component manifest](docs/component-manifest.md) to name them; without one,
+components are inferred from project roots. The shape doesn't yet list new
+dependencies, compare a change with an existing feature, or check architectural
+conventions. Use review notes to keep those questions visible. [Ideas for improving this part of review](docs/review-experience-direction.md)
 describe possible additions; they are proposals, not shipped features.
 
 ## What the review includes

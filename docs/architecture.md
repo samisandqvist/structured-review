@@ -35,7 +35,10 @@ manage the browser's server data; Zustand holds local navigation/layout state.
    successful review.
 3. `srev context` provides flows, change summaries, orphan groups, merge
    suggestions, and commit subjects. Numeric flow references and file globs
-   avoid requiring an agent to transcribe long stable identifiers.
+   avoid requiring an agent to transcribe long stable identifiers. `srev shape`
+   groups the changed files by component, from the repository's
+   [component manifest](component-manifest.md) or from inferred project roots;
+   the browser shows the same shape before the walk.
 4. Plan submission resolves membership, derives supporting attachments, and
    places remaining changes in a visible unassigned group. Replacing the plan
    and its overview is transactional; replanning does not reset node review

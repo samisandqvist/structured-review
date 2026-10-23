@@ -166,6 +166,9 @@ async function getFlows(base, sessionId) {
 async function getChanges(base, sessionId) {
   return fetchJson(`${base}/api/sessions/${sessionId}/changes`);
 }
+async function getShape(base, sessionId) {
+  return fetchJson(`${base}/api/sessions/${sessionId}/shape`);
+}
 async function getNodes(base, sessionId) {
   return fetchJson(`${base}/api/sessions/${sessionId}/nodes`);
 }
@@ -401,6 +404,39 @@ function gcSweep(dataDir) {
   return result;
 }
 
+// packages/skill/src/shape.ts
+function fileSummary(files) {
+  const counts = /* @__PURE__ */ new Map();
+  for (const f of files) counts.set(f.status, (counts.get(f.status) ?? 0) + 1);
+  const parts = [...counts].map(([status, n]) => `${n} ${status}`).join(", ");
+  return `${files.length} file${files.length === 1 ? "" : "s"} (${parts})`;
+}
+function named(id, criticality, description) {
+  return `${id} [${criticality}]${description ? ` ${description}` : ""}`;
+}
+function prettyShape(shape) {
+  const lines = [`Components (${shape.source === "manifest" ? "from the component manifest" : "inferred"}):`];
+  for (const c of shape.components) {
+    lines.push(`  ${named(c.id, c.criticality, c.description)}: ${fileSummary(c.files)}`);
+    if (c.changedContracts.length) lines.push(`    contracts changed: ${c.changedContracts.join(", ")}`);
+    if (c.newDirectories.length) lines.push(`    new directories: ${c.newDirectories.join(", ")}`);
+    if (c.consumers.length) {
+      const consumers = c.consumers.map((x) => `${x.id} (${x.inChange ? "in the change" : "outside the change"})`);
+      lines.push(`    consumers: ${consumers.join(", ")}`);
+    }
+  }
+  if (shape.outsideConsumers.length) {
+    lines.push("Consumers outside the change:");
+    for (const o of shape.outsideConsumers) {
+      const via = o.via.map((v) => `${v.contracts.join("/")} of ${v.component}`).join("; ");
+      lines.push(`  ${named(o.id, o.criticality, o.description)}: uses ${via}`);
+    }
+  }
+  if (shape.unassigned.length) lines.push(`Unassigned: ${shape.unassigned.map((f) => f.path).join(", ")}`);
+  for (const w of shape.warnings) lines.push(`\u26A0 ${w}`);
+  return lines.join("\n");
+}
+
 // packages/skill/src/cli.ts
 var USAGE = `usage:
   srev serve [--repo <path>] [--port N]
@@ -408,6 +444,7 @@ var USAGE = `usage:
   srev session list
   srev session delete --session <id>
   srev context --session <id> [--brief|--full]
+  srev shape --session <id>
   srev plan --session <id> (--auto | --units <file.json>) [--open]
   srev diff --session <id> --node <stableId>
   srev status --session <id>
@@ -641,6 +678,10 @@ async function cmdDiff(base, flags) {
   if (!node) throw new Error(`no node with stableId ${stableId} in session ${sessionId}`);
   return { json: await getNodeDiff(base, sessionId, node.id) };
 }
+async function cmdShape(base, flags) {
+  const shape = await getShape(base, required(flags, "session"));
+  return { json: shape, pretty: prettyShape(shape) };
+}
 async function cmdStatus(base, flags) {
   const status = await fetchStatus(base, required(flags, "session"));
   return { json: status, pretty: prettyStatus(status) };
@@ -698,54 +739,29 @@ function checkNodeVersion() {
   if (major > 22 || major === 22 && minor >= 13) return;
   throw new Error(`srev requires Node >= 22.13 (found ${process.versions.node})`);
 }
+var COMMANDS = {
+  serve: (_base, flags) => cmdServe(flags),
+  "session create": cmdSessionCreate,
+  "session list": (base) => cmdSessionList(base),
+  "session delete": cmdSessionDelete,
+  gc: cmdGc,
+  shutdown: (base) => cmdShutdown(base),
+  context: cmdContext,
+  shape: cmdShape,
+  plan: cmdPlan,
+  diff: cmdDiff,
+  status: cmdStatus,
+  comments: cmdComments,
+  wait: cmdWait
+};
 async function runCli(argv) {
   checkNodeVersion();
   const { command, flags } = parseCliArgs(argv);
   const base = baseUrlFor(flags);
-  let result;
-  switch (command) {
-    case "serve":
-      result = await cmdServe(flags);
-      break;
-    case "session create":
-      result = await cmdSessionCreate(base, flags);
-      break;
-    case "session list":
-      result = await cmdSessionList(base);
-      break;
-    case "session delete":
-      result = await cmdSessionDelete(base, flags);
-      break;
-    case "gc":
-      result = await cmdGc(base, flags);
-      break;
-    case "shutdown":
-      result = await cmdShutdown(base);
-      break;
-    case "context":
-      result = await cmdContext(base, flags);
-      break;
-    case "plan":
-      result = await cmdPlan(base, flags);
-      break;
-    case "diff":
-      result = await cmdDiff(base, flags);
-      break;
-    case "status":
-      result = await cmdStatus(base, flags);
-      break;
-    case "comments":
-      result = await cmdComments(base, flags);
-      break;
-    case "wait":
-      result = await cmdWait(base, flags);
-      break;
-    case "":
-      throw new Error(USAGE);
-    default:
-      throw new Error(`unknown command: ${command}
+  if (command === "") throw new Error(USAGE);
+  if (!Object.hasOwn(COMMANDS, command)) throw new Error(`unknown command: ${command}
 ${USAGE}`);
-  }
+  const result = await COMMANDS[command](base, flags);
   console.log(flags.pretty && result.pretty ? result.pretty : JSON.stringify(result.json, null, 2));
 }
 function isConnRefused(e) {

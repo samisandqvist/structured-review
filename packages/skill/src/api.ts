@@ -2,6 +2,7 @@
 // Every function takes the hub base URL explicitly; no SQLite access anywhere,
 // so the CLI stays correct across schema migrations.
 import { spawn } from "node:child_process";
+import type { ChangeShape } from "./shape.js";
 
 export const DEFAULT_BASE_URL = process.env.SREV_SERVER_URL || "http://localhost:3456";
 
@@ -411,6 +412,10 @@ export async function getChanges(
   sessionId: string,
 ): Promise<{ changes: ChangeSummary[]; commitSubjects?: string[] }> {
   return fetchJson(`${base}/api/sessions/${sessionId}/changes`);
+}
+
+export async function getShape(base: string, sessionId: string): Promise<ChangeShape> {
+  return fetchJson(`${base}/api/sessions/${sessionId}/shape`) as Promise<ChangeShape>;
 }
 
 export async function getNodes(base: string, sessionId: string): Promise<{ nodes: SessionNode[] }> {

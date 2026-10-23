@@ -1,7 +1,7 @@
 // packages/skill/test/cli.test.ts — pure pieces of the CLI: arg parsing,
 // the serve reuse/spawn/conflict decision, and response shaping.
-import { describe, it, expect, afterEach } from "vitest";
-import { parseCliArgs, planOutput, prettyBrief } from "../src/cli.js";
+import { describe, it, expect, afterEach, vi } from "vitest";
+import { parseCliArgs, planOutput, prettyBrief, runCli } from "../src/cli.js";
 import { decideServe, statePaths } from "../src/serve.js";
 
 describe("parseCliArgs", () => {
@@ -128,5 +128,117 @@ describe("decideServe", () => {
   it("conflicts on an unknown /health responder", () => {
     const d = decideServe({ ok: true }, ROOT);
     expect(d.action).toBe("conflict");
+  });
+});
+
+describe("runCli", () => {
+  it("prints usage without a command and rejects an unknown one", async () => {
+    await expect(runCli([])).rejects.toThrow(/^usage:/);
+    await expect(runCli(["bogus"])).rejects.toThrow(/^unknown command: bogus\nusage:/);
+    await expect(runCli(["constructor"])).rejects.toThrow(/^unknown command: constructor/);
+  });
+});
+
+describe("runCli shape", () => {
+  const shape = { source: "inferred", warnings: [], components: [], unassigned: [], outsideConsumers: [] };
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("prints the session's shape as JSON, or as text with --pretty, from the hub on --port", async () => {
+    const fetchSpy = vi.fn(async () => ({ ok: true, status: 200, json: async () => shape }));
+    vi.stubGlobal("fetch", fetchSpy);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    await runCli(["shape", "--session", "s1", "--port", "4999"]);
+    expect(fetchSpy.mock.calls[0]![0]).toBe("http://127.0.0.1:4999/api/sessions/s1/shape");
+    expect(JSON.parse(log.mock.calls[0]![0] as string)).toEqual(shape);
+    await runCli(["shape", "--session", "s1", "--pretty"]);
+    expect(log.mock.calls[1]![0]).toBe("Components (inferred):");
+  });
+
+  it("requires --session", async () => {
+    await expect(runCli(["shape"])).rejects.toThrow(/^missing required flag --session/);
+  });
+});
+
+describe("runCli status --pretty", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("summarizes a stale session with a long overview, an auto unit and unreviewed changes", async () => {
+    const node = {
+      id: "n1",
+      stableId: "fn:a",
+      label: "a",
+      file: "a.ts",
+      changeStatus: "changed",
+      reviewStatus: "unreviewed",
+    };
+    const info = {
+      session: { id: "s1", status: "walking", overview: "x".repeat(120) },
+      units: [{ id: "u1", label: "Leftovers", kind: "orphans", memberStableIds: ["fn:a"], auto: true, attached: [] }],
+      coverage: { changedTotal: 1, covered: 1, unassigned: 0 },
+      stale: true,
+      staleReason: "working tree changed",
+    };
+    const bodies: Record<string, unknown> = {
+      "/api/sessions/s1": info,
+      "/api/sessions/s1/nodes": { nodes: [node] },
+      "/api/sessions/s1/flows": { flows: [], orphans: [] },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => ({ ok: true, status: 200, json: async () => bodies[new URL(url).pathname] })),
+    );
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    await runCli(["status", "--session", "s1", "--pretty"]);
+    expect(log.mock.calls[0]![0]).toBe(
+      [
+        "session s1 (walking) — STALE: working tree changed",
+        `overview: ${"x".repeat(100)}…`,
+        "coverage: 1/1 assigned, 0 unassigned",
+        "  [0/1] Leftovers (auto) — orphans",
+        "unreviewed (1):",
+        "  a — a.ts",
+      ].join("\n"),
+    );
+  });
+
+  it("summarizes a fresh, fully reviewed session in three lines", async () => {
+    const node = {
+      id: "n1",
+      stableId: "fn:a",
+      label: "a",
+      file: "a.ts",
+      changeStatus: "changed",
+      reviewStatus: "reviewed-clean",
+    };
+    const bodies: Record<string, unknown> = {
+      "/api/sessions/s1": {
+        session: { id: "s1", status: "complete", overview: "Short overview" },
+        units: [{ id: "u1", label: "Orders", kind: "orphans", memberStableIds: ["fn:a"], auto: false, attached: [] }],
+        coverage: { changedTotal: 1, covered: 1, unassigned: 0 },
+        stale: false,
+      },
+      "/api/sessions/s1/nodes": { nodes: [node] },
+      "/api/sessions/s1/flows": { flows: [], orphans: [] },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => ({ ok: true, status: 200, json: async () => bodies[new URL(url).pathname] })),
+    );
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    await runCli(["status", "--session", "s1", "--pretty"]);
+    expect(log.mock.calls[0]![0]).toBe(
+      [
+        "session s1 (complete)",
+        "overview: Short overview",
+        "coverage: 1/1 assigned, 0 unassigned",
+        "  [1/1] Orders — orphans",
+      ].join("\n"),
+    );
   });
 });

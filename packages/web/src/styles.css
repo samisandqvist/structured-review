@@ -1068,3 +1068,156 @@ textarea:focus {
 .statusbar__session-switcher:hover {
   border-color: var(--line-bright);
 }
+
+/* Change shape: orientation shown in the diff pane before the walk. */
+.shape {
+  flex: 1;
+  overflow: auto;
+  padding: 16px 18px 24px;
+}
+.shape__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.shape__title {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text);
+  margin: 0;
+}
+.shape__badge {
+  font-size: 12px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--dim);
+}
+.shape__summary {
+  margin: 6px 0 12px;
+  font-size: 15px;
+  color: var(--dim);
+}
+.shape__warning {
+  color: var(--warn);
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+.shape__section {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 16px;
+  color: var(--text);
+  margin: 18px 0 4px;
+}
+.shape__hint {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--dim);
+}
+.shape__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.shape__card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+.shape__card--outside {
+  background: transparent;
+  border-style: dashed;
+}
+.shape__card-title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.shape__id {
+  font-family: var(--mono);
+  font-size: 15px;
+  color: var(--text);
+}
+.shape__crit {
+  font-size: 12px;
+  padding: 0 6px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  color: var(--dim);
+}
+.shape__crit--high {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.shape__crit--low {
+  color: var(--faint);
+}
+.shape__desc {
+  font-size: 14px;
+  color: var(--dim);
+}
+.shape__line {
+  margin-top: 4px;
+  font-size: 14px;
+  color: var(--dim);
+}
+.shape__tag {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 13px;
+  margin: 0 6px 2px 0;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+.shape__tag--contract {
+  color: var(--trace);
+  border-color: var(--trace-deep);
+  margin-left: 6px;
+}
+.shape__tag--outside {
+  border-style: dashed;
+}
+.shape__files {
+  margin-top: 6px;
+  font-size: 14px;
+}
+.shape__files > summary {
+  cursor: pointer;
+  color: var(--dim);
+}
+.shape__file-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.shape__file-mark {
+  display: inline-block;
+  width: 1.6em;
+  color: var(--faint);
+}
+.shape__file--added .shape__file-mark {
+  color: var(--add);
+}
+.shape__file--deleted .shape__file-mark {
+  color: var(--remove);
+}
+.shape__start {
+  margin-top: 22px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  text-align: center;
+}
+.shape__start-title {
+  font-size: 17px;
+  margin: 0 0 4px;
+}

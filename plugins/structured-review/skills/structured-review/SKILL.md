@@ -46,6 +46,7 @@ Never touch the SQLite file or hand-roll `curl` — the CLI is the stable surfac
 srev serve [--repo <path>] [--port N]            # ensure the hub runs against a repo
 srev session create --branch <b> --base <ref|empty> [--open]   # base "empty" = whole-repo review
 srev context --session <id> [--brief|--full]     # planning view: commit subjects, flows + merge suggestions, orphan groups, change summaries (--brief: no stableIds, numeric refs only; --full: raw dump)
+srev shape --session <id>                        # components touched, contracts changed, consumers outside the change, new directories
 srev plan --session <id> (--auto | --units <file.json>) [--open]
 srev diff --session <id> --node <stableId>       # one node's diff, for grouping decisions
 srev status --session <id>                       # coverage, per-unit reviewed/total, unreviewed list
@@ -91,9 +92,15 @@ Harvest flow (after the reviewer walks the plan):
 ## Building the review plan
 
 Before grouping a substantial change, orient the reviewer to its shape.
-Use the PR description and the changed-file inventory (for example,
-`git diff --name-status <base> --`) to identify new directories, moved files,
-new dependencies and public entry points. Check the repo's documented
+`srev shape --session <id> --pretty` lists the components the change touches,
+the contracts it changes, the consumers of those contracts that sit outside
+the change, renames and new directories. Components come from the repository's
+`.review-components.json` when it has one, and are otherwise inferred from
+project roots. The reviewer sees the same shape in the UI before the walk, so
+the overview need not repeat it; point out what it means instead. A consumer
+outside the change is a question worth raising: does it still match the
+changed contract? Use the PR description to identify new dependencies and
+public entry points. Check the repo's documented
 conventions and a comparable existing feature when the change introduces a
 new layout or abstraction. Prefer local evidence over a generic framework
 template. Keep this pass brief and proportional to the change.

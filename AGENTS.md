@@ -3,8 +3,9 @@
 A code-structure-based review tool: Claude Code / Codex skill + local web UI. Walks a
 reviewer through changes along the call/dependency graph instead of a file tree.
 
-Current design: [architecture](docs/architecture.md) and
-[review model](docs/review-model.md). Candidate indexing work is recorded in
+Current design: [architecture](docs/architecture.md),
+[review model](docs/review-model.md) and the
+[component manifest](docs/component-manifest.md). Candidate indexing work is recorded in
 [indexing follow-ups](docs/indexing-follow-ups.md).
 
 ## Stack
@@ -48,6 +49,7 @@ stdout; `--pretty` for humans.
 srev serve [--repo <path>] [--port N]              # start or reuse the hub (checks /health repoRoot)
 srev session create --branch <b> --base <ref|empty># prints sessionId, uiUrl, counts, indexWarnings; "empty" = whole-repo
 srev context --session <id> [--brief|--full]       # planning view: commit subjects, flows + merge suggestions, orphan groups, change summaries (--brief: numeric refs, no stableIds)
+srev shape --session <id>                          # components touched, contracts changed, consumers outside the change
 srev plan --session <id> (--auto | --units <f>)    # mechanical or LLM-authored plan (flowIds/mergeGroup numeric refs, orphanFiles globs); always lists unassigned leftovers
 srev diff --session <id> --node <stableId>         # single node diff
 srev status --session <id>                         # coverage, overview, per-unit reviewed/total, unreviewed

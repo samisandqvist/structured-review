@@ -4,6 +4,7 @@ import { useFlows, useNode, useNodes, useSession, useUpdateNodeStatus } from "..
 import { buildWalkOrder, nextInWalk, nextUnreviewed } from "../walk-order.js";
 import { PlanView } from "./PlanView.js";
 import { DiffView } from "./DiffView.js";
+import { ChangeShapeView } from "./ChangeShape.js";
 import { CommentBox } from "./CommentBox.js";
 import { RelationsPanel } from "./RelationsPanel.js";
 
@@ -219,7 +220,7 @@ export function SplitLayout({ sessionId, currentNodeId }: { sessionId: string; c
               <CommentBox sessionId={sessionId} nodeId={currentNode.id} />
             </>
           ) : (
-            <EmptyState />
+            <ChangeShapeView sessionId={sessionId} />
           )}
         </div>
       </div>
@@ -277,28 +278,6 @@ function Divider({ onMouseDown }: { onMouseDown: () => void }) {
           background: "var(--line-bright)",
         }}
       />
-    </div>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div
-      style={{
-        flex: 1,
-        display: "grid",
-        placeItems: "center",
-        padding: 24,
-        textAlign: "center",
-      }}
-    >
-      <div style={{ maxWidth: 280 }}>
-        <div style={{ fontSize: 28, marginBottom: 12, opacity: 0.5 }}>⌖</div>
-        <h2 style={{ fontSize: 19, marginBottom: 6 }}>Pick a node to start the walk</h2>
-        <p style={{ color: "var(--dim)", fontSize: 17, lineHeight: 1.6, margin: 0 }}>
-          Pick a unit&apos;s node to read its diff and leave a comment.
-        </p>
-      </div>
     </div>
   );
 }
