@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { discoverLanguageRoots, languagePathspecs, rootHasSources } from "../src/graph/roots.js";
+import { discoverLanguageRoots, isSourceInRoot, languagePathspecs, rootHasSources } from "../src/graph/roots.js";
 
 /** Lay out files under a fresh temp dir; keys are relative paths. */
 function fixture(files: Record<string, string>): string {
@@ -191,5 +191,14 @@ describe("languagePathspecs (cs)", () => {
       ":(glob)dotnet/**/NuGet.config",
       ":(glob)dotnet/**/packages.lock.json",
     ]);
+  });
+});
+
+describe("isSourceInRoot", () => {
+  it("matches the language's sources under the root, and anywhere for the repo root", () => {
+    expect(isSourceInRoot("svc/a.py", "py", "svc")).toBe(true);
+    expect(isSourceInRoot("svc/a.ts", "py", "svc")).toBe(false);
+    expect(isSourceInRoot("svcx/a.py", "py", "svc")).toBe(false);
+    expect(isSourceInRoot("deep/b.java", "java", "")).toBe(true);
   });
 });

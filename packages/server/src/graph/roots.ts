@@ -106,6 +106,11 @@ export function findMarkerRoots(repoRoot: string): { language: IndexerLanguage; 
   return found;
 }
 
+/** True when a repo-relative `file` is a `language` source file under `root` ("" = the repo root). */
+export function isSourceInRoot(file: string, language: IndexerLanguage, root: string): boolean {
+  return (root === "" || file.startsWith(`${root}/`)) && SOURCE_EXTS[language].some((ext) => file.endsWith(ext));
+}
+
 /** True when `child` is strictly inside `parent` ("" = repo root contains everything else). */
 function isInside(child: string, parent: string): boolean {
   return parent === "" ? child !== "" : child.startsWith(parent + "/");

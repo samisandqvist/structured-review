@@ -1,9 +1,9 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ScipGraphProvider, type BuiltGraph, type ScipDocument } from "../src/graph/scip.js";
+import { resolveIndexerBin, ScipGraphProvider, type BuiltGraph, type ScipDocument } from "../src/graph/scip.js";
 import { type IndexerJob } from "../src/graph/roots.js";
 
 const EMPTY: BuiltGraph = {
@@ -140,14 +140,27 @@ describe("per-job cache", () => {
     expect(p.ran).toEqual(["ts:", "py:svc", "py:svc"]);
   });
 
-  it("a failed job is dropped from the job cache so the next build retries it", async () => {
+  it("a failed job leaves the other jobs' graph usable, warns, and is retried on the next build", async () => {
     const p = new MultiFake({ repoRoot: "/tmp" });
     p.failPy = true;
-    await expect(p.getNeighbors("x")).rejects.toThrow("py indexer died");
+    await p.getNeighbors("x");
+    expect(await p.getIndexWarnings()).toEqual([
+      "py indexing failed for root 'svc'; its code is missing from call context (py indexer died)",
+    ]);
     p.failPy = false;
-    p.state = { ...p.state }; // same keys: ts job cache must survive the failure
+    p.state = { ...p.state, py: "b" }; // the next build: ts job cache must survive the failure
     await p.getNeighbors("x");
     expect(p.ran).toEqual(["ts:", "py:svc", "py:svc"]);
+    expect(await p.getIndexWarnings()).toEqual([]);
+  });
+
+  it("a build where every job fails rejects", async () => {
+    class AllFail extends MultiFake {
+      protected override runIndexer(job: IndexerJob): Promise<ScipDocument[]> {
+        return Promise.reject(job.language === "ts" ? new Error("ts indexer died") : "py indexer died");
+      }
+    }
+    await expect(new AllFail({ repoRoot: "/tmp" }).getNeighbors("x")).rejects.toThrow("ts indexer died");
   });
 
   it("SCIP_NO_CACHE=1 bypasses the job cache too", async () => {
@@ -312,5 +325,73 @@ describe("repoStateKey", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("a failed root during session creation", () => {
+  class FailingSvc extends ScipGraphProvider {
+    protected override discoverJobs(): IndexerJob[] {
+      return [
+        { language: "ts", root: "", hasSources: true },
+        { language: "py", root: "svc", hasSources: true },
+      ];
+    }
+    protected override runIndexer(job: IndexerJob): Promise<ScipDocument[]> {
+      return job.language === "py" ? Promise.reject(new Error("py indexer died")) : Promise.resolve([]);
+    }
+  }
+
+  function repoWithChange(changedFile: string): string {
+    const dir = mkdtempSync(join(tmpdir(), "srev-failed-root-"));
+    const git = (...a: string[]) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
+    git("init", "-b", "main");
+    git("config", "user.email", "t@t");
+    git("config", "user.name", "t");
+    mkdirSync(join(dir, "svc"));
+    writeFileSync(join(dir, "svc/a.py"), "x = 1\n");
+    writeFileSync(join(dir, "README.md"), "one\n");
+    git("add", ".");
+    git("commit", "-m", "init");
+    writeFileSync(join(dir, changedFile), "changed\n");
+    return dir;
+  }
+
+  it("fails when the change touches the failed root's sources", async () => {
+    const dir = repoWithChange("svc/a.py");
+    try {
+      await expect(new FailingSvc({ repoRoot: dir }).getChangeSubgraph("HEAD", "main")).rejects.toThrow(
+        "py indexer died",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("degrades to a warning when the change is elsewhere", async () => {
+    const dir = repoWithChange("README.md");
+    try {
+      const p = new FailingSvc({ repoRoot: dir });
+      await expect(p.getChangeSubgraph("HEAD", "main")).resolves.toEqual({ nodes: [], edges: [] });
+      expect(await p.getIndexWarnings()).toHaveLength(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("resolveIndexerBin", () => {
+  afterEach(() => {
+    delete process.env.SREV_INDEXER_HOME;
+  });
+
+  it("names the launcher when an indexer package is not installed", () => {
+    expect(() => resolveIndexerBin("@srev/no-such-indexer", "x")).toThrow(
+      "indexer package '@srev/no-such-indexer' is not installed. " +
+        "In the plugin, run srev through scripts/srev.mjs, which installs the indexers; from source, run pnpm install.",
+    );
+    process.env.SREV_INDEXER_HOME = "/nonexistent-srev-home";
+    expect(() => resolveIndexerBin("@srev/no-such-indexer", "x")).toThrow(
+      "is not installed in SREV_INDEXER_HOME (/nonexistent-srev-home).",
+    );
   });
 });

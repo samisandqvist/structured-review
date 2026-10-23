@@ -45,6 +45,8 @@ test.afterAll(async () => {
 async function selectFirstChangedNode(page: Page): Promise<void> {
   await page.goto(session.uiUrl);
   await expect(page.getByText("Plan", { exact: true })).toBeVisible();
+  // The walk order needs flows and nodes too; an enabled changed chip means both have loaded.
+  await expect(page.locator("button.step--changed:not([disabled])").first()).toBeVisible();
   await page.keyboard.press("j");
   await expect(page.locator('tr[data-line-type="added"]').first()).toBeVisible();
 }

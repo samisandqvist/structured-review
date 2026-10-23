@@ -162,6 +162,19 @@ function currentBranch(root = repoRoot()) {
     return null;
   }
 }
+function changedFiles(baseRef, root = repoRoot()) {
+  try {
+    const raw2 = execFileSync("git", ["diff", "--name-only", "-z", baseRef], {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+      ...QUIET
+    });
+    return raw2.split("\0").filter(Boolean);
+  } catch {
+    return [];
+  }
+}
 function resolveRef(ref, root = repoRoot()) {
   for (const peel of ["commit", "tree"]) {
     try {
@@ -19314,6 +19327,9 @@ function findMarkerRoots(repoRoot2) {
   walk(repoRoot2, "", found);
   return found;
 }
+function isSourceInRoot(file2, language, root) {
+  return (root === "" || file2.startsWith(`${root}/`)) && SOURCE_EXTS[language].some((ext) => file2.endsWith(ext));
+}
 function isInside(child, parent) {
   return parent === "" ? child !== "" : child.startsWith(parent + "/");
 }
@@ -19713,12 +19729,25 @@ var ScipGraphProvider = class {
   }
   async getChangeSubgraph(_branch, baseRef) {
     const g = await this.buildGraph();
+    this.assertChangedRootsIndexed(g, baseRef);
     const changed = this.changedSymbols(g, baseRef);
     const scope = this.scopeAround(g, changed);
     const nodes = subgraphNodes(g, scope, changed);
     const edges = subgraphEdges(g, scope);
     markEntryPoints(nodes, edges);
     return { nodes, edges };
+  }
+  /**
+   * A failed root that holds changed sources of its language fails the session
+   * loudly: its changes would otherwise be reviewed without their call graph.
+   * A failed root the change does not touch only costs call context, which
+   * the build already reports as a warning.
+   */
+  assertChangedRootsIndexed(g, baseRef) {
+    if (!g.failures?.length) return;
+    const files = changedFiles(baseRef, this.repoRoot);
+    const failed = g.failures.find((f) => files.some((file2) => isSourceInRoot(file2, f.job.language, f.job.root)));
+    if (failed) throw failed.error;
   }
   /** Changed nodes = body span overlaps a git diff hunk. Diffs are cached per file. */
   changedSymbols(g, baseRef) {
@@ -19897,12 +19926,19 @@ var ScipGraphProvider = class {
   async indexAndBuild() {
     this.proto ??= await import_protobufjs.default.load(SCIP_PROTO);
     const { jobs, warnings } = this.planJobs();
-    const perJob = await Promise.all(jobs.map((j) => this.jobDocuments(j)));
-    const g = buildGraphFromIndex({ documents: perJob.flat() }, this.repoRoot);
-    if (warnings.length) {
-      for (const w of warnings) console.warn(`scip: ${w}`);
-      g.warnings = warnings;
+    const settled = await Promise.allSettled(jobs.map((j) => this.jobDocuments(j)));
+    const failures = settled.flatMap(
+      (r, i) => r.status === "rejected" ? [{ job: jobs[i], error: asError(r.reason) }] : []
+    );
+    if (failures.length > 0 && failures.length === jobs.length) throw failures[0].error;
+    const documents = settled.flatMap((r) => r.status === "fulfilled" ? r.value : []);
+    const g = buildGraphFromIndex({ documents }, this.repoRoot);
+    const notices = [...warnings, ...failures.map(failureWarning)];
+    if (notices.length) {
+      for (const w of notices) console.warn(`scip: ${w}`);
+      g.warnings = notices;
     }
+    if (failures.length) g.failures = failures;
     return g;
   }
   /** Language-scoped subtree cache key; any git failure yields a unique key (cache miss, never stale). */
@@ -20009,7 +20045,14 @@ ${String(err.stderr).slice(-2e3)}` : "";
 };
 function resolveIndexerBin(pkgName, binName) {
   const home = process.env.SREV_INDEXER_HOME;
-  const pkgPath = require2.resolve(`${pkgName}/package.json`, home ? { paths: [home] } : void 0);
+  let pkgPath;
+  try {
+    pkgPath = require2.resolve(`${pkgName}/package.json`, home ? { paths: [home] } : void 0);
+  } catch {
+    throw new IndexError(
+      `indexer package '${pkgName}' is not installed` + (home ? ` in SREV_INDEXER_HOME (${home})` : "") + `. In the plugin, run srev through scripts/srev.mjs, which installs the indexers; from source, run pnpm install.`
+    );
+  }
   const pkg = JSON.parse(readFileSync4(pkgPath, "utf8"));
   const rel = typeof pkg.bin === "string" ? pkg.bin : pkg.bin[binName];
   if (!rel) throw new Error(`package '${pkgName}' does not expose the '${binName}' executable`);
@@ -20082,6 +20125,13 @@ function assertIndexNotEmpty(docs, job) {
       `${job.language} indexer produced an empty index for root '${job.root || "."}', which contains ${job.language} sources`
     );
   }
+}
+function asError(reason) {
+  return reason instanceof Error ? reason : new Error(String(reason));
+}
+function failureWarning({ job, error: error62 }) {
+  const firstLine = error62.message.split("\n")[0];
+  return `${job.language} indexing failed for root '${job.root || "."}'; its code is missing from call context (${firstLine})`;
 }
 function rerootDocuments(docs, jobRoot, absRoot) {
   const absSlash = absRoot.endsWith("/") ? absRoot : `${absRoot}/`;

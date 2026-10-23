@@ -8,6 +8,7 @@ import protobuf from "protobufjs";
 import type { GraphProvider, GraphNode, GraphEdge, ChangeSubgraph, Flow, FileRequires } from "./provider.js";
 import type { ChangeStatus } from "../types.js";
 import {
+  changedFiles,
   fileChangedRanges,
   rangesOverlap,
   repoFingerprint,
@@ -17,6 +18,7 @@ import {
 } from "../diff.js";
 import {
   discoverLanguageRoots,
+  isSourceInRoot,
   languagePathspecs,
   rootHasSources,
   type IndexerJob,
@@ -81,6 +83,8 @@ export interface BuiltGraph {
   fileRequires: FileRequires;
   /** Per-language degradation notices from job planning (e.g. java toolchain missing). */
   warnings?: string[];
+  /** Jobs whose indexer failed while others succeeded; see indexAndBuild. */
+  failures?: { job: IndexerJob; error: Error }[];
 }
 
 export interface ScipOptions {
@@ -103,12 +107,26 @@ export class ScipGraphProvider implements GraphProvider {
 
   async getChangeSubgraph(_branch: string, baseRef: string): Promise<ChangeSubgraph> {
     const g = await this.buildGraph();
+    this.assertChangedRootsIndexed(g, baseRef);
     const changed = this.changedSymbols(g, baseRef);
     const scope = this.scopeAround(g, changed);
     const nodes = subgraphNodes(g, scope, changed);
     const edges = subgraphEdges(g, scope);
     markEntryPoints(nodes, edges);
     return { nodes, edges };
+  }
+
+  /**
+   * A failed root that holds changed sources of its language fails the session
+   * loudly: its changes would otherwise be reviewed without their call graph.
+   * A failed root the change does not touch only costs call context, which
+   * the build already reports as a warning.
+   */
+  private assertChangedRootsIndexed(g: BuiltGraph, baseRef: string): void {
+    if (!g.failures?.length) return;
+    const files = changedFiles(baseRef, this.repoRoot);
+    const failed = g.failures.find((f) => files.some((file) => isSourceInRoot(file, f.job.language, f.job.root)));
+    if (failed) throw failed.error;
   }
 
   /** Changed nodes = body span overlaps a git diff hunk. Diffs are cached per file. */
@@ -342,12 +360,22 @@ export class ScipGraphProvider implements GraphProvider {
   protected async indexAndBuild(): Promise<BuiltGraph> {
     this.proto ??= await protobuf.load(SCIP_PROTO);
     const { jobs, warnings } = this.planJobs();
-    const perJob = await Promise.all(jobs.map((j) => this.jobDocuments(j)));
-    const g = buildGraphFromIndex({ documents: perJob.flat() }, this.repoRoot);
-    if (warnings.length) {
-      for (const w of warnings) console.warn(`scip: ${w}`);
-      g.warnings = warnings;
+    // A failing job does not sink the others: the graph keeps the failure and
+    // getChangeSubgraph decides whether the change needs that root. When every
+    // job fails there is no graph worth keeping.
+    const settled = await Promise.allSettled(jobs.map((j) => this.jobDocuments(j)));
+    const failures = settled.flatMap((r, i) =>
+      r.status === "rejected" ? [{ job: jobs[i]!, error: asError(r.reason) }] : [],
+    );
+    if (failures.length > 0 && failures.length === jobs.length) throw failures[0]!.error;
+    const documents = settled.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+    const g = buildGraphFromIndex({ documents }, this.repoRoot);
+    const notices = [...warnings, ...failures.map(failureWarning)];
+    if (notices.length) {
+      for (const w of notices) console.warn(`scip: ${w}`);
+      g.warnings = notices;
     }
+    if (failures.length) g.failures = failures;
     return g;
   }
 
@@ -463,12 +491,22 @@ export class ScipGraphProvider implements GraphProvider {
   }
 }
 
-function resolveIndexerBin(pkgName: string, binName: string): string {
+export function resolveIndexerBin(pkgName: string, binName: string): string {
   // SREV_INDEXER_HOME points at a directory whose node_modules holds the
   // indexer packages (plugin mode: ${CLAUDE_PLUGIN_DATA}, npm-installed by the
   // SessionStart hook). Unset = resolve from our own node_modules (dev mode).
   const home = process.env.SREV_INDEXER_HOME;
-  const pkgPath = require.resolve(`${pkgName}/package.json`, home ? { paths: [home] } : undefined);
+  let pkgPath: string;
+  try {
+    pkgPath = require.resolve(`${pkgName}/package.json`, home ? { paths: [home] } : undefined);
+  } catch {
+    throw new IndexError(
+      `indexer package '${pkgName}' is not installed` +
+        (home ? ` in SREV_INDEXER_HOME (${home})` : "") +
+        `. In the plugin, run srev through scripts/srev.mjs, which installs the indexers; ` +
+        `from source, run pnpm install.`,
+    );
+  }
   const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { bin: string | Record<string, string> };
   const rel = typeof pkg.bin === "string" ? pkg.bin : pkg.bin[binName];
   if (!rel) throw new Error(`package '${pkgName}' does not expose the '${binName}' executable`);
@@ -598,6 +636,19 @@ export function assertIndexNotEmpty(docs: ScipDocument[], job: IndexerJob): void
       `${job.language} indexer produced an empty index for root '${job.root || "."}', which contains ${job.language} sources`,
     );
   }
+}
+
+function asError(reason: unknown): Error {
+  return reason instanceof Error ? reason : new Error(String(reason));
+}
+
+/** One-line notice for a failed root; the full error stays on the failure. */
+function failureWarning({ job, error }: { job: IndexerJob; error: Error }): string {
+  const firstLine = error.message.split("\n")[0]!;
+  return (
+    `${job.language} indexing failed for root '${job.root || "."}'; ` +
+    `its code is missing from call context (${firstLine})`
+  );
 }
 
 /**

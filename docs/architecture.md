@@ -78,6 +78,13 @@ reviewable as residuals. A launcher that is present but fails is an indexing
 error. The decoder also rejects an empty index for a root known to contain
 sources. Indexer absence and indexer failure have deliberately different outcomes.
 
+An indexing error fails session creation only when its root holds changed
+sources of its language, because those changes would otherwise be reviewed
+without their call graph. A root the change does not touch (a service needing
+a newer JDK, say) becomes an index warning: the session proceeds, and only that
+root's code is missing from call context. When every root fails, there is no
+graph and the error stands.
+
 C# indexing runs scip-dotnet over the root's solution file (or single project
 file) and lets it restore packages. scip-dotnet emits no enclosing ranges, so the
 provider derives method body spans from source before building the graph;
