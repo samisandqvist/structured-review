@@ -329,7 +329,7 @@ Skill content: when to use (an overview of an unfamiliar codebase or subsystem);
 
 ### Task 11: Validation
 
-Not committed: models and outputs for private codebases stay in `~/Projects/pareto/component-map-spike/validation/`.
+Not committed: models and outputs for private codebases stay outside this repository.
 
 - [ ] **Step 1: Spike service.** Hub on the private service (`srev serve --repo <path> --port 3470`), session `--base empty`, evidence, translate the spike model to the model format, `srev map check` until ok, compare: the three undeclared writes appear, all other cross-component references covered, the spike's 26 interfaces resolve. View the page in Chrome and compare with the artifact.
 - [ ] **Step 2: Fresh inference twice.** Two subagents each follow the generated `component-map` skill on the same commit from scratch; compare components and interface splits; write down the differences.
