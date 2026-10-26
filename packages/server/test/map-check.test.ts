@@ -378,3 +378,17 @@ describe("checkMap edge cases", () => {
     expect(map.components.find((c) => c.id === "app")!.fileCount).toBe(6);
   });
 });
+
+describe("checkMap unclaimed files outside the mapped tree", () => {
+  it("lists only unowned files under the top-level directories the model claims", () => {
+    const idx = index(REFS, [
+      ...DEFS,
+      ["other/service/x.ts", "x", "function", 1],
+      ["src/stray.ts", "stray", "function", 1],
+    ]);
+    const map = run((m) => {
+      m.components[0]!.paths = ["src/api/", "src/core/", "src/store/", "src/lib/", "src/main.ts"];
+    }, idx);
+    expect(map.report.unclaimedFiles).toContainEqual({ component: null, files: ["src/stray.ts"] });
+  });
+});

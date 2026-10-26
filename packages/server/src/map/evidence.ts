@@ -157,10 +157,15 @@ function implementations(index: ReferenceIndex, scope: Scope): MapEvidence["sign
   const out: MapEvidence["signals"]["implementations"] = [];
   for (const [abstract, impls] of index.implementations) {
     if (!abstract.endsWith("#")) continue;
+    const declared = index.definitions.get(abstract);
+    if (!declared) continue;
     const defs = impls.map((s) => index.definitions.get(s)).filter((d): d is SymbolDef => d !== undefined);
-    const file = index.definitions.get(abstract)?.file ?? "";
-    if (!scope.contains(file) && !defs.some((d) => scope.contains(d.file))) continue;
-    out.push({ type: symbolName(abstract), file, implementations: defs.map((d) => `${d.name} (${d.file})`) });
+    if (!scope.contains(declared.file) && !defs.some((d) => scope.contains(d.file))) continue;
+    out.push({
+      type: symbolName(abstract),
+      file: declared.file,
+      implementations: defs.map((d) => `${d.name} (${d.file})`),
+    });
   }
   return out;
 }

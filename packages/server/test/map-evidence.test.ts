@@ -200,6 +200,7 @@ describe("buildEvidence across layouts", () => {
     ],
     implementations: new Map([
       [defs[2]!.symbol, [defs[3]!.symbol]],
+      ["scip-typescript npm typescript 5.0 lib/`lib.es5.d.ts`/Error#", [defs[3]!.symbol]],
       [sym("app/deep/y.py", "Base#run()."), [sym("tools/z.py", "Impl#run().")]],
     ]),
     barrels: [],

@@ -83,6 +83,8 @@ describe("symbolName and symbolKind", () => {
     ["scip-python python app 0.1 `app.jobs`/Runner#run().", "Runner#run", "method"],
     ["scip-python python app 0.1 `app.jobs`/run_all().", "run_all", "function"],
     ["local 7", "local 7", "other"],
+    [sym("src/a.ts", "connect().(target)typeLiteral0:url."), "connect().(target)typeLiteral0:url", "field"],
+    [sym("src/a.ts", "save().Promise:typeLiteral0:version."), "save().Promise:typeLiteral0:version", "field"],
   ])("%s", (symbol, name, kind) => {
     expect(symbolName(symbol)).toBe(name);
     expect(symbolKind(symbol)).toBe(kind);

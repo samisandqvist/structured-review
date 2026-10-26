@@ -58,7 +58,7 @@ export function checkMap(
       components: model.components.map((c) => ({ ...c, fileCount: counts.get(c.id) ?? 0 })),
       interfaces,
       delegations: deriveDelegations(interfaces, tree),
-      report: report(allIssues, refs, interfaces, unclaimedFiles(index.files, tree), index.gaps),
+      report: report(allIssues, refs, interfaces, unclaimedFiles(index.files, tree, model.components), index.gaps),
     },
   };
 }

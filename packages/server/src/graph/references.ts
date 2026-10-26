@@ -63,7 +63,10 @@ export function symbolKind(symbol: string): SymbolKind {
   if (symbol.startsWith("local ")) return "other";
   if (symbol.endsWith("/")) return "module";
   if (symbol.endsWith("#")) return "type";
-  const member = symbolName(symbol).includes("#");
+  const name = symbolName(symbol);
+  // Object-literal and parameter properties (`fn().(arg)typeLiteral0:url`) are data, not API.
+  if (/[(:]/.test(name)) return symbol.endsWith(".") ? "field" : "other";
+  const member = name.includes("#");
   if (symbol.endsWith(").")) return member ? "method" : "function";
   if (symbol.endsWith(".")) return member ? "field" : "value";
   return "other";
