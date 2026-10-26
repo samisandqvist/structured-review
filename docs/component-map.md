@@ -59,8 +59,10 @@ status bar links to it once a map exists.
   `_` and `-`; `system` is reserved.
 - **Utility components** hold configuration, helpers and shared types. They are
   leaves, provide no interfaces and may not call visible components. References
-  into them are exempt from coverage and hidden from diagrams; the page lists
-  how many each one hides.
+  into a utility from its siblings and their parts are exempt from coverage and
+  hidden from diagrams; the page lists how many each one hides. A reference
+  from further out crosses the utility's parent and needs an interface of that
+  parent.
 - **In-process interfaces** bind provider symbols: `name`, `Type#member`,
   `Type#*` (the type and all its members) or `path/file.ts:name`. Requirers are
   siblings of the provider.
@@ -72,11 +74,12 @@ status bar links to it once a map exists.
 
 ## The check
 
-A reference is a function, method, class construction or value reference from
-one file to a definition in another. Type annotations and member accesses on
-data (object fields, literal properties) are not references; type-only
-dependencies between components are reported separately. Imports are not
-references. For each reference the hub finds the level where it crosses
+A reference is a use of a function, method or value defined in another file,
+or a use of a class as a value (construction, a call, static access,
+`instanceof`, passing it as an argument). Type annotations, generic arguments
+and member accesses on data (object fields, literal properties) are type-only;
+type-only dependencies between components are reported separately. Import
+statements and `export … from` re-exports are not references. For each reference the hub finds the level where it crosses
 between two sibling components.
 
 The hub stores a map only when the check finds no issue:
@@ -104,8 +107,9 @@ evidence) receive the socket.
 ## Languages and limits
 
 TypeScript/JavaScript and Python are mapped. Java and C# roots appear as index
-gaps marked "not yet mapped". Failed indexer roots and skipped toolchains are
-gaps too; the page shows every gap.
+gaps marked "not yet mapped". Failed indexer roots, skipped toolchains and
+tracked source files that no indexed project includes (a script outside every
+`tsconfig.json`) are gaps too; the page shows every gap.
 
 References come from SCIP indexes and are static: dynamic dispatch, dependency
 injection and string-keyed registries can hide calls. Cross-process interfaces

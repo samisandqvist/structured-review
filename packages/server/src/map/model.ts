@@ -8,25 +8,29 @@ import type { CheckIssue, MapComponent, MapInterface, MapModel } from "./types.j
 const ID = /^[a-z0-9][a-z0-9._-]*$/;
 const RESERVED_ID = "system";
 
-const componentSchema = z.object({
-  id: z.string(),
-  name: z.string().min(1),
-  parent: z.string().nullable(),
-  meaning: z.string(),
-  paths: z.array(z.string()).default([]),
-  external: z.boolean().default(false),
-  utility: z.boolean().default(false),
-});
-const interfaceSchema = z.object({
-  id: z.string(),
-  name: z.string().min(1),
-  provider: z.string(),
-  requirers: z.array(z.string()).default([]),
-  meaning: z.string(),
-  bind: z.array(z.string().min(1)).default([]),
-  kind: z.string().min(1).optional(),
-  evidence: z.array(z.string().min(1)).default([]),
-});
+const componentSchema = z
+  .object({
+    id: z.string(),
+    name: z.string().min(1),
+    parent: z.string().nullable(),
+    meaning: z.string(),
+    paths: z.array(z.string()).default([]),
+    external: z.boolean().default(false),
+    utility: z.boolean().default(false),
+  })
+  .strict();
+const interfaceSchema = z
+  .object({
+    id: z.string(),
+    name: z.string().min(1),
+    provider: z.string(),
+    requirers: z.array(z.string()).default([]),
+    meaning: z.string(),
+    bind: z.array(z.string().min(1)).default([]),
+    kind: z.string().min(1).optional(),
+    evidence: z.array(z.string().min(1)).default([]),
+  })
+  .strict();
 const modelSchema = z.object({
   title: z.string(),
   components: z.array(componentSchema),

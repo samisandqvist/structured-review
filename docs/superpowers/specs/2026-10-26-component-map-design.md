@@ -1,6 +1,6 @@
 # Component map design
 
-Status: draft design, not yet implemented. Written 2026-10-26 from a throwaway
+Status: implemented on the feature branch; validation in progress. Written from a throwaway
 spike on a private TypeScript service of 79 source files (a background job
 orchestrator with an operator API, a persistence facade and two upstream
 services): SCIP evidence extraction, a hand-run LLM inference, a mechanical

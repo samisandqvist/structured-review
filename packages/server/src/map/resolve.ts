@@ -53,7 +53,7 @@ class Resolver {
     const from = this.tree.ownerOf(ref.file);
     const to = this.tree.ownerOf(def.file);
     if (!from || !to || from === to) return;
-    if (this.tree.get(to)!.utility) {
+    if (this.exempt(from, to)) {
       this.out.utilityRefs.set(to, (this.out.utilityRefs.get(to) ?? 0) + 1);
       return;
     }
@@ -81,6 +81,14 @@ class Resolver {
     return this.out;
   }
 
+  /** References into a utility are exempt where the utility itself is the part they reach;
+   *  from further out they cross a visible ancestor and need that ancestor's interface. */
+  private exempt(from: string, to: string): boolean {
+    if (!this.tree.get(to)!.utility) return false;
+    const b = this.siblings(from, to)?.b;
+    return b === undefined || b === to;
+  }
+
   private siblings(from: string, to: string): { a: string; b: string } | undefined {
     const lca = this.tree.lca(from, to);
     const a = this.tree.childToward(lca, from);
@@ -101,7 +109,9 @@ class Resolver {
       requirer,
       undeclared,
     };
-    this.out.sites.set(iface, [...(this.out.sites.get(iface) ?? []), site]);
+    const list = this.out.sites.get(iface) ?? [];
+    list.push(site);
+    this.out.sites.set(iface, list);
   }
 
   private uncoveredRef(provider: string, requirer: string, ref: SymbolRef, def: SymbolDef): void {

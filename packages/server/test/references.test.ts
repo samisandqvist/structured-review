@@ -2,7 +2,14 @@
 // over: definitions with names and kinds, and cross-file references with
 // their enclosing caller and whether they only use a type.
 import { describe, it, expect } from "vitest";
-import { buildReferenceIndex, symbolKind, symbolName, type IndexedDocument } from "../src/graph/references.js";
+import {
+  buildReferenceIndex,
+  importLines,
+  unindexedGaps,
+  symbolKind,
+  symbolName,
+  type IndexedDocument,
+} from "../src/graph/references.js";
 
 const TS = "scip-typescript npm pkg 1.0";
 const sym = (file: string, desc: string) => {
@@ -54,7 +61,7 @@ function docs(): IndexedDocument[] {
     {
       file: "src/api/handler.ts",
       occurrences: [
-        { symbol: GET_JOB, symbolRoles: 2, range: [0, 9, 15] },
+        { symbol: GET_JOB, symbolRoles: 0, range: [0, 9, 15] },
         { symbol: GET_JOB, symbolRoles: 0, range: [1, 12, 18] },
         { symbol: HANDLE, symbolRoles: 1, range: [2, 16, 22], enclosingRange: [2, 0, 5, 1] },
         { symbol: JOB, symbolRoles: 0, range: [2, 28, 31] },
@@ -83,6 +90,9 @@ describe("symbolName and symbolKind", () => {
     ["scip-python python app 0.1 `app.jobs`/Runner#run().", "Runner#run", "method"],
     ["scip-python python app 0.1 `app.jobs`/run_all().", "run_all", "function"],
     ["local 7", "local 7", "other"],
+    ["scip-python python repo 5b60 httpie/__version__.", "__version__", "value"],
+    ["scip-python python repo 5b60 `httpie.manager.tasks`/__init__:", "__init__:", "other"],
+    ["scip-typescript npm @scope/pkg 1.0 lib/`a b.ts`/run().", "run", "function"],
     [sym("src/a.ts", "connect().(target)typeLiteral0:url."), "connect().(target)typeLiteral0:url", "field"],
     [sym("src/a.ts", "save().Promise:typeLiteral0:version."), "save().Promise:typeLiteral0:version", "field"],
   ])("%s", (symbol, name, kind) => {
@@ -170,6 +180,7 @@ describe("buildReferenceIndex signals and scope", () => {
         { symbol: GET_JOB, symbolRoles: 0, range: [0, 9, 15] },
         { symbol: LIMIT, symbolRoles: 0, range: [0, 17, 22] },
         { symbol: REPO, symbolRoles: 0, range: [1, 9, 13] },
+        { symbol: JOB_STATUS, symbolRoles: 0, range: [2, 0, 6] },
       ],
       symbols: [],
     };
@@ -182,6 +193,81 @@ describe("buildReferenceIndex signals and scope", () => {
           { from: "src/store/repo.ts", names: ["Repo"] },
         ],
       },
+    ]);
+  });
+});
+
+describe("value uses of a type", () => {
+  const T = sym("src/t.ts", "Formatter#");
+  const lines = [
+    "register(Formatter, Other);",
+    "if (e instanceof Formatter) {}",
+    "const x: Formatter = make();",
+    "function f(a: Map<string, Formatter>) {}",
+    "class A extends Formatter {}",
+    "Formatter.create();",
+    "const all = [Other, Formatter];",
+    "def f(x: Formatter) -> Formatter:",
+  ];
+  const doc: IndexedDocument = {
+    file: "src/use.ts",
+    occurrences: lines.map((text, i) => {
+      const at = text.lastIndexOf("Formatter");
+      return { symbol: T, symbolRoles: 0, range: [i, at, at + 9] };
+    }),
+    symbols: [],
+  };
+  const defs: IndexedDocument = {
+    file: "src/t.ts",
+    occurrences: [{ symbol: T, symbolRoles: 1, range: [0, 13, 22] }],
+    symbols: [],
+  };
+  const idx = buildReferenceIndex([defs, doc], () => lines.join("\n"), []);
+
+  it("treats arguments, instanceof, static access and list items as values and annotations as types", () => {
+    expect(idx.references.map((r) => r.typeOnly)).toEqual([false, false, true, true, true, false, false, true]);
+  });
+});
+
+describe("importLines", () => {
+  it("finds TypeScript import and re-export statements, including multi-line ones", () => {
+    const src = [
+      'import { a } from "./a.js";',
+      "import {",
+      "  b,",
+      "  type C,",
+      '} from "./b.js";',
+      'import "./side.js";',
+      'export { d } from "./d.js";',
+      'export * from "./e.js";',
+      "export const x = a(b);",
+      'import fs = require("fs");',
+    ].join("\n");
+    expect([...importLines(src, "src/x.ts")]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 9]);
+  });
+
+  it("finds Python import statements, including parenthesized ones", () => {
+    const src = ["import os", "from .a import (", "    b,", "    c,", ")", "from x import y", "z = b()"].join("\n");
+    expect([...importLines(src, "pkg/m.py")]).toEqual([0, 1, 2, 3, 4, 5]);
+  });
+});
+
+describe("unindexedGaps", () => {
+  it("reports tracked mapped-language sources missing from the index, by directory", () => {
+    const tracked = [
+      "src/a.ts",
+      "scripts/x.ts",
+      "scripts/y.mjs",
+      "tools/z.py",
+      "README.md",
+      "src/a.test.ts",
+      "Main.java",
+      "setup.py",
+    ];
+    expect(unindexedGaps(tracked, ["src/a.ts"])).toEqual([
+      "1 Python file in . is not in the index (outside every indexed project); the map does not cover it",
+      "2 TypeScript/JavaScript files in scripts/ are not in the index (outside every indexed project); the map does not cover them",
+      "1 Python file in tools/ is not in the index (outside every indexed project); the map does not cover it",
     ]);
   });
 });

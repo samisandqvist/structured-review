@@ -50,13 +50,29 @@ function spans(doc: NamespaceDocument): Span[] {
 
 class ModuleExports {
   private byFile = new Map<string, NamespaceDocument>();
+  private byBasename = new Map<string, string[]>();
   private lines = new Map<string, string[] | undefined>();
+  private spanCache = new Map<NamespaceDocument, Span[]>();
+  private resolved = new Map<string, string | undefined>();
 
   constructor(
     documents: NamespaceDocument[],
     private readSource: ReadSource,
   ) {
-    for (const d of documents) this.byFile.set(d.file, d);
+    for (const d of documents) {
+      this.byFile.set(d.file, d);
+      const base = d.file.slice(d.file.lastIndexOf("/") + 1);
+      this.byBasename.set(base, [...(this.byBasename.get(base) ?? []), d.file]);
+    }
+  }
+
+  spans(doc: NamespaceDocument): Span[] {
+    let cached = this.spanCache.get(doc);
+    if (!cached) {
+      cached = spans(doc);
+      this.spanCache.set(doc, cached);
+    }
+    return cached;
   }
 
   /** The document for a module symbol: exact path, else the one document whose path ends with it (multi-root repos). */
@@ -65,7 +81,8 @@ class ModuleExports {
     if (!path) return undefined;
     const exact = this.byFile.get(path);
     if (exact) return exact;
-    const matches = [...this.byFile.keys()].filter((f) => f.endsWith(`/${path}`));
+    const base = path.slice(path.lastIndexOf("/") + 1);
+    const matches = (this.byBasename.get(base) ?? []).filter((f) => f.endsWith(`/${path}`));
     return matches.length === 1 ? this.byFile.get(matches[0]!) : undefined;
   }
 
@@ -75,15 +92,23 @@ class ModuleExports {
   }
 
   /** The symbol `name` resolves to in a module, or undefined. */
-  resolve(moduleSymbol: string, name: string, seen = new Set<string>()): string | undefined {
+  resolve(moduleSymbol: string, name: string): string | undefined {
+    const key = `${moduleSymbol}\0${name}`;
+    if (!this.resolved.has(key)) this.resolved.set(key, this.lookup(moduleSymbol, name, new Set()));
+    return this.resolved.get(key);
+  }
+
+  private lookup(moduleSymbol: string, name: string, seen: Set<string>): string | undefined {
     const doc = this.document(moduleSymbol);
     if (!doc || seen.has(doc.file)) return undefined;
     seen.add(doc.file);
     const wanted = new Set([`${name}().`, `${name}.`, `${name}#`]);
-    const own = spans(doc).find((o) => !isLocal(o.symbol) && wanted.has(descriptor(o.symbol)));
+    const named = this.spans(doc).filter((o) => !isLocal(o.symbol) && wanted.has(descriptor(o.symbol)));
+    // The module's own definition wins over a same-named reference into another module.
+    const own = named.find((o) => ((o.occurrence.symbolRoles ?? 0) & 1) !== 0) ?? named[0];
     if (own) return own.symbol;
     for (const next of this.starExports(doc)) {
-      const found = this.resolve(next, name, seen);
+      const found = this.lookup(next, name, seen);
       if (found) return found;
     }
     return undefined;
@@ -92,7 +117,7 @@ class ModuleExports {
   /** Modules named on `export * from …` lines of a document. */
   private starExports(doc: NamespaceDocument): string[] {
     const lines = this.sourceLines(doc.file) ?? [];
-    return spans(doc)
+    return this.spans(doc)
       .filter((o) => isModule(o.symbol) && /^\s*export\s+\*/.test(lines[o.line]!))
       .map((o) => o.symbol);
   }
@@ -110,7 +135,7 @@ export function resolveNamespaceMembers(documents: NamespaceDocument[], readSour
   const modules = new ModuleExports(documents, readSource);
   let resolved = 0;
   for (const doc of documents) {
-    const ordered = spans(doc);
+    const ordered = modules.spans(doc);
     for (let i = 1; i < ordered.length; i++) {
       const prev = ordered[i - 1]!;
       const occ = ordered[i]!;

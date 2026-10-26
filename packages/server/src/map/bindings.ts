@@ -17,42 +17,58 @@ export interface ResolvedBindings {
   issues: CheckIssue[];
 }
 
-function entryMatches(entry: string, def: SymbolDef): boolean {
-  const qualified = entry.match(QUALIFIED);
-  if (qualified) return def.file === qualified[1] && def.name === qualified[2];
-  if (entry.endsWith("#*")) {
-    const type = entry.slice(0, -2);
-    return def.name === type || def.name.startsWith(`${type}#`);
-  }
-  return def.name === entry;
+interface BindEntry {
+  text: string;
+  file?: string;
+  name: string;
+  wildcard: boolean;
+}
+
+function parseEntry(text: string): BindEntry {
+  const qualified = text.match(QUALIFIED);
+  const target = qualified ? qualified[2]! : text;
+  const wildcard = target.endsWith("#*");
+  return {
+    text,
+    ...(qualified ? { file: qualified[1]! } : {}),
+    name: wildcard ? target.slice(0, -2) : target,
+    wildcard,
+  };
+}
+
+function entryMatches(entry: BindEntry, def: SymbolDef): boolean {
+  if (entry.file !== undefined && def.file !== entry.file) return false;
+  return def.name === entry.name || (entry.wildcard && def.name.startsWith(`${entry.name}#`));
 }
 
 /** Definitions a provider can bind, keyed by provider id. */
 function candidatesByProvider(model: MapModel, tree: ComponentTree, index: ReferenceIndex) {
   const providers = new Set(model.interfaces.filter((i) => i.kind === undefined).map((i) => i.provider));
-  const out = new Map<string, { def: SymbolDef; component: string }[]>();
+  const out = new Map<string, { def: SymbolDef; component: string }[]>([...providers].map((p) => [p, []]));
   for (const def of index.definitions.values()) {
     const component = BINDABLE.has(def.kind) ? tree.ownerOf(def.file) : undefined;
     if (!component) continue;
     for (const provider of providers) {
-      if (tree.within(component, provider)) out.set(provider, [...(out.get(provider) ?? []), { def, component }]);
+      if (tree.within(component, provider)) out.get(provider)!.push({ def, component });
     }
   }
   return out;
 }
 
-function entryIssue(i: MapInterface, entry: string, matched: { def: SymbolDef }[]): CheckIssue | undefined {
+function entryIssue(i: MapInterface, entry: BindEntry, matched: { def: SymbolDef }[]): CheckIssue | undefined {
   if (matched.length === 0) {
     return {
       rule: "binding",
-      message: `bind entry '${entry}' of interface '${i.id}' matches no symbol in '${i.provider}'`,
+      message: `bind entry '${entry.text}' of interface '${i.id}' matches no symbol in '${i.provider}'`,
     };
   }
-  const files = [...new Set(matched.map((m) => m.def.file))].sort();
-  if (files.length > 1 && !entry.endsWith("#*")) {
+  // A wildcard is ambiguous when its type is defined in several files; a name when it is.
+  const named = matched.filter((m) => m.def.name === entry.name);
+  const files = [...new Set((named.length ? named : matched).map((m) => m.def.file))].sort();
+  if (files.length > 1) {
     return {
       rule: "binding",
-      message: `bind entry '${entry}' of interface '${i.id}' matches symbols in ${files.join(", ")}; qualify it as '${files[0]}:${entry}'`,
+      message: `bind entry '${entry.text}' of interface '${i.id}' matches symbols in ${files.join(", ")}; qualify it as '${files[0]}:${entry.text}'`,
     };
   }
   return undefined;
@@ -66,8 +82,8 @@ export function resolveBindings(model: MapModel, tree: ComponentTree, index: Ref
     const owned = result.bySymbol.get(i.provider) ?? new Map<string, string>();
     result.bySymbol.set(i.provider, owned);
     const bound = new Map<string, Binding>();
-    for (const entry of i.bind) {
-      const matched = (candidates.get(i.provider) ?? []).filter((c) => entryMatches(entry, c.def));
+    for (const entry of i.bind.map(parseEntry)) {
+      const matched = candidates.get(i.provider)!.filter((c) => entryMatches(entry, c.def));
       const issue = entryIssue(i, entry, matched);
       if (issue) result.issues.push(issue);
       for (const { def, component } of matched) {

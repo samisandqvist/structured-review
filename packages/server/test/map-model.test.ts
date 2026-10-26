@@ -209,3 +209,12 @@ describe("parseMapModel structural rules for undeclared uses", () => {
     expect(issuesOf(mutate)).toContain(message);
   });
 });
+
+describe("parseMapModel unknown keys", () => {
+  it("reports a misspelled key", () => {
+    const m = example();
+    (m.components[4] as Record<string, unknown>).utlity = true;
+    const { issues } = parseMapModel(m);
+    expect(issues[0]!.message).toContain("utlity");
+  });
+});

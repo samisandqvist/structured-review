@@ -27,6 +27,11 @@ write(
   'import * as store from "../store/index.js";\n\nexport function handle(): number {\n  return store.getJob(1);\n}\n',
 );
 const git = (...a: string[]) => execFileSync("git", a, { cwd: repo, encoding: "utf8" });
+write("scripts/tool.ts", "export const tool = 1;\n");
+write(
+  "src/api/named.ts",
+  'import { getJob } from "../store/jobs.js";\n\nexport function named(): number {\n  return getJob(2);\n}\n',
+);
 git("init", "-q", "-b", "main");
 git("config", "user.email", "t@example.com");
 git("config", "user.name", "t");
@@ -39,13 +44,20 @@ describe("ScipGraphProvider.getReferenceIndex", () => {
     const ref = index.references.find((r) => r.file === "src/api/handler.ts" && r.symbol.endsWith("getJob()."));
     expect(ref).toMatchObject({ line: 4, caller: "handle", typeOnly: false });
     expect(index.definitions.get(ref!.symbol)?.file).toBe("src/store/jobs.ts");
-    expect(index.files).toEqual(["src/api/handler.ts", "src/store/index.ts", "src/store/jobs.ts"]);
+    expect(index.files).toEqual(["src/api/handler.ts", "src/api/named.ts", "src/store/index.ts", "src/store/jobs.ts"]);
+    expect(index.references.filter((r) => r.file === "src/api/named.ts").map((r) => r.line)).toEqual([4]);
+    expect(index.gaps).toEqual([
+      "1 TypeScript/JavaScript file in scripts/ is not in the index (outside every indexed project); the map does not cover it",
+    ]);
   }, 120_000);
 });
 
 class JobsProvider extends ScipGraphProvider {
-  constructor(private jobs: IndexerJob[]) {
-    super({ repoRoot: repo });
+  constructor(
+    private jobs: IndexerJob[],
+    root = repo,
+  ) {
+    super({ repoRoot: root });
   }
   protected override planJobs() {
     return { jobs: this.jobs, warnings: ["java indexing skipped"] };
@@ -62,9 +74,27 @@ describe("reference index gaps", () => {
       { language: "cs", root: "dotnet", hasSources: true },
     ]);
     const { gaps } = await provider.getReferenceIndex();
-    expect(gaps).toEqual([
+    expect(gaps.slice(0, 2)).toEqual([
       "java indexing skipped",
       "cs root 'dotnet' is not yet mapped; its code is missing from the component map",
     ]);
+  });
+});
+
+describe("reference index gaps for disabled languages", () => {
+  it("reports a Java root whose indexer is not enabled", async () => {
+    const other = mkdtempSync(join(tmpdir(), "srev-refs-java-"));
+    try {
+      mkdirSync(join(other, "svc/src"), { recursive: true });
+      writeFileSync(join(other, "svc/pom.xml"), "<project/>");
+      writeFileSync(join(other, "svc/src/A.java"), "class A {}");
+      const { gaps } = await new JobsProvider(
+        [{ language: "ts", root: "", hasSources: false }],
+        other,
+      ).getReferenceIndex();
+      expect(gaps).toContain("java root 'svc' is not yet mapped; its code is missing from the component map");
+    } finally {
+      rmSync(other, { recursive: true, force: true });
+    }
   });
 });

@@ -76,4 +76,15 @@ describe("entryPointReason", () => {
     expect(entryPointReason("main()\n", "app/__main__.py")).toBe("package entry point (__main__.py)");
     expect(entryPointReason("main()\n", "app/x.py")).toBeUndefined();
   });
+
+  it("detects TypeScript and JavaScript scripts", () => {
+    expect(entryPointReason("#!/usr/bin/env node\nrun();\n", "src/cli.ts")).toBe("runs as a script (shebang)");
+    expect(entryPointReason("if (import.meta.url === `file://${process.argv[1]}`) main();\n", "src/daemon.ts")).toBe(
+      "runs as a script (main-module check)",
+    );
+    expect(entryPointReason("if (require.main === module) main();\n", "src/a.js")).toBe(
+      "runs as a script (main-module check)",
+    );
+    expect(entryPointReason("export const x = 1;\n", "src/a.ts")).toBeUndefined();
+  });
 });

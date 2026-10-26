@@ -50,13 +50,36 @@ const REFERENCED_KINDS = new Set<SymbolKind>(["function", "method", "value", "ty
 
 const isMappedFile = (file: string) => MAPPED_FILE.test(file) && !isTestFile(file);
 
-/** Descriptor after the file segment, without the trailing suffix:
- *  `` src/`a.ts`/Registry#getAgent(). `` → `Registry#getAgent`. */
+/** The descriptors of a SCIP symbol: everything after its four header fields
+ *  (scheme, manager, package, version); a doubled space is an escaped space. */
+function descriptors(symbol: string): string {
+  let fields = 0;
+  for (let i = 0; i < symbol.length; i++) {
+    if (symbol[i] !== " ") continue;
+    if (symbol[i + 1] === " ") {
+      i++;
+      continue;
+    }
+    if (++fields === 4) return symbol.slice(i + 1);
+  }
+  return symbol;
+}
+
+/** The symbol's name inside its file or module, without the trailing suffix:
+ *  `` src/`a.ts`/Registry#getAgent(). `` → `Registry#getAgent`, `httpie/__version__.` → `__version__`. */
 export function symbolName(symbol: string): string {
   if (symbol.startsWith("local ")) return symbol;
-  const at = symbol.lastIndexOf("`/");
-  const desc = at < 0 ? symbol : symbol.slice(at + 2);
-  return desc.replace(/\([^)]*\)\.$/, "").replace(/[.#]$/, "");
+  const desc = descriptors(symbol);
+  let quoted = false;
+  let start = 0;
+  for (let i = 0; i < desc.length; i++) {
+    if (desc[i] === "`") quoted = !quoted;
+    else if (desc[i] === "/" && !quoted) start = i + 1;
+  }
+  return desc
+    .slice(start)
+    .replace(/\([^)]*\)\.$/, "")
+    .replace(/[.#]$/, "");
 }
 
 export function symbolKind(symbol: string): SymbolKind {
@@ -64,7 +87,7 @@ export function symbolKind(symbol: string): SymbolKind {
   if (symbol.endsWith("/")) return "module";
   if (symbol.endsWith("#")) return "type";
   const name = symbolName(symbol);
-  // Object-literal and parameter properties (`fn().(arg)typeLiteral0:url`) are data, not API.
+  // Object-literal and parameter properties (`fn().(arg)typeLiteral0:url`) are data members.
   if (/[(:]/.test(name)) return symbol.endsWith(".") ? "field" : "other";
   const member = name.includes("#");
   if (symbol.endsWith(").")) return member ? "method" : "function";
@@ -113,13 +136,68 @@ function callerSpans(doc: IndexedDocument): CallerSpan[] {
   return spans.sort((a, b) => a.end - a.start - (b.end - b.start));
 }
 
-/** A type reference that constructs or calls: `new Foo` or `Foo(`. */
-function constructs(lines: string[] | undefined, o: Occurrence): boolean {
-  const r = o.range;
-  const text = r && lines?.[r[0]!];
-  if (!r || !text) return false;
-  const end = r.length === 4 ? r[3]! : r[2]!;
-  return text[end] === "(" || /\bnew\s+$/.test(text.slice(0, r[1]));
+/** Text before a reference that marks a type position (annotations, generics, heritage, casts). */
+const TYPE_POSITION = /(?::|->|<|\||&|\bextends|\bimplements|\bas|\bsatisfies|\bkeyof|\btypeof)\s*$/;
+/** Text before and after a reference that marks a value position (arguments, list items, assignment, return). */
+const VALUE_BEFORE = /(?:[(,=]|\breturn|\bthrow|\binstanceof|\bnew)\s*$/;
+const VALUE_AFTER = /^\s*(?:[(.]|[,)\];]|$)/;
+
+/** Whether a reference to a type uses it as a value: `new Foo`, `Foo(`, `Foo.x`,
+ *  `x instanceof Foo`, `register(Foo)`, `[a, Foo]`. Annotations and generic
+ *  arguments stay type-only. Without source text a type reference is type-only. */
+function valueUse(lines: string[] | undefined, o: Occurrence): boolean {
+  const r = o.range!;
+  const text = lines?.[r[0]!];
+  if (!text) return false;
+  const before = text.slice(0, r[1]);
+  const after = text.slice(r.length === 4 ? r[3] : r[2]);
+  if (/^\s*[(.]/.test(after) || /\b(?:new|instanceof)\s*$/.test(before)) return true;
+  if (TYPE_POSITION.test(before)) return false;
+  return VALUE_BEFORE.test(before) && VALUE_AFTER.test(after);
+}
+
+const TS_IMPORT = /^(?:import\s*[\w*{"'$]|export\s+(?:\*|\{|type\s+\{))/;
+const PY_IMPORT = /^(?:import|from)\s/;
+
+/** Lines (0-based) of one statement starting at `start`: until braces or parentheses balance. */
+function statementEnd(lines: string[], start: number, open: string, close: string): number {
+  let depth = 0;
+  for (let i = start; i < lines.length; i++) {
+    const text = lines[i]!;
+    depth += text.split(open).length - text.split(close).length;
+    if (depth <= 0 && !text.trimEnd().endsWith("\\")) return i;
+  }
+  return lines.length - 1;
+}
+
+/** Lines holding import statements and `export … from` re-exports: names there are not references. */
+export function importLines(source: string, file: string): Set<number> {
+  const python = file.endsWith(".py");
+  const lines = source.split("\n");
+  const out = new Set<number>();
+  for (let i = 0; i < lines.length; i++) {
+    const text = lines[i]!.trimStart();
+    if (!(python ? PY_IMPORT : TS_IMPORT).test(text)) continue;
+    const end = python ? statementEnd(lines, i, "(", ")") : statementEnd(lines, i, "{", "}");
+    const statement = lines.slice(i, end + 1).join("\n");
+    if (!python && text.startsWith("export") && !/\bfrom\s*["']/.test(statement)) continue;
+    for (let j = i; j <= end; j++) out.add(j);
+    i = end;
+  }
+  return out;
+}
+
+/** The definition an occurrence references across files, or undefined for definitions, imports and same-file uses. */
+function referencedDefinition(
+  o: Occurrence,
+  file: string,
+  imports: Set<number>,
+  definitions: Map<string, SymbolDef>,
+): SymbolDef | undefined {
+  if (!o.symbol || hasRole(o, ROLE_DEFINITION) || hasRole(o, ROLE_IMPORT)) return undefined;
+  if (imports.has(o.range?.[0] ?? -1)) return undefined;
+  const def = definitions.get(o.symbol);
+  return def && def.file !== file && REFERENCED_KINDS.has(def.kind) ? def : undefined;
 }
 
 function documentReferences(
@@ -128,20 +206,17 @@ function documentReferences(
   readSource: ReadSource,
 ): SymbolRef[] {
   const spans = callerSpans(doc);
-  let lines: string[] | undefined | null = null;
+  const source = readSource(doc.file);
+  const lines = source?.split("\n");
+  const imports = source === undefined ? new Set<number>() : importLines(source, doc.file);
   const refs: SymbolRef[] = [];
   for (const o of doc.occurrences) {
-    if (!o.symbol || hasRole(o, ROLE_DEFINITION) || hasRole(o, ROLE_IMPORT)) continue;
-    const def = definitions.get(o.symbol);
-    if (!def || def.file === doc.file || !REFERENCED_KINDS.has(def.kind)) continue;
+    const def = referencedDefinition(o, doc.file, imports, definitions);
+    if (!def) continue;
     const line = o.range?.[0] ?? 0;
-    let typeOnly = false;
-    if (def.kind === "type") {
-      if (lines === null) lines = readSource(doc.file)?.split("\n");
-      typeOnly = !constructs(lines, o);
-    }
+    const typeOnly = def.kind === "type" && !valueUse(lines, o);
     const caller = spans.find((s) => line >= s.start && line <= s.end)?.name ?? "(module)";
-    refs.push({ symbol: o.symbol, file: doc.file, line: line + 1, caller, typeOnly });
+    refs.push({ symbol: def.symbol, file: doc.file, line: line + 1, caller, typeOnly });
   }
   return refs;
 }
@@ -164,7 +239,7 @@ function barrelExports(doc: IndexedDocument, definitions: Map<string, SymbolDef>
   for (const o of doc.occurrences) {
     if (!o.symbol || hasRole(o, ROLE_DEFINITION)) continue;
     const def = definitions.get(o.symbol);
-    if (!def || def.file === doc.file || def.kind === "module") continue;
+    if (!def || def.file === doc.file || !REFERENCED_KINDS.has(def.kind)) continue;
     const names = byFile.get(def.file) ?? [];
     if (!names.includes(def.name)) names.push(def.name);
     byFile.set(def.file, names);
@@ -172,6 +247,26 @@ function barrelExports(doc: IndexedDocument, definitions: Map<string, SymbolDef>
   if (byFile.size === 0) return undefined;
   const exports = [...byFile].map(([from, names]) => ({ from, names })).sort((a, b) => a.from.localeCompare(b.from));
   return { file: doc.file, exports };
+}
+
+/** One gap line per directory holding tracked, mapped-language sources the index does not contain. */
+export function unindexedGaps(tracked: string[], indexed: string[]): string[] {
+  const known = new Set(indexed);
+  const groups = new Map<string, number>();
+  for (const file of tracked) {
+    if (!isMappedFile(file) || known.has(file)) continue;
+    const dir = file.includes("/") ? `${file.slice(0, file.lastIndexOf("/"))}/` : ".";
+    const language = file.endsWith(".py") ? "Python" : "TypeScript/JavaScript";
+    const key = `${dir}\0${language}`;
+    groups.set(key, (groups.get(key) ?? 0) + 1);
+  }
+  return [...groups]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, n]) => {
+      const [dir, language] = key.split("\0") as [string, string];
+      const files = n === 1 ? `1 ${language} file in ${dir} is` : `${n} ${language} files in ${dir} are`;
+      return `${files} not in the index (outside every indexed project); the map does not cover ${n === 1 ? "it" : "them"}`;
+    });
 }
 
 export function buildReferenceIndex(

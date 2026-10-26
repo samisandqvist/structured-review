@@ -70,6 +70,20 @@ describe("resolveNamespaceMembers", () => {
     expect(docs[1]!.occurrences[1]!.symbol).toBe(GET_JOB);
   });
 
+  it("prefers the module's own definition over a same-named import", () => {
+    const own = `${PKG} src/store/\`index.ts\`/getJob().`;
+    const wrapper: NamespaceDocument = {
+      file: "src/store/index.ts",
+      occurrences: [
+        { symbol: GET_JOB, symbolRoles: 0, range: [0, 9, 15] },
+        { symbol: own, symbolRoles: 1, range: [1, 16, 22] },
+      ],
+    };
+    const docs = [jobs(), wrapper, caller(INDEX_MODULE, [3, 8, 14])];
+    expect(resolveNamespaceMembers(docs, readSource)).toBe(1);
+    expect(docs[2]!.occurrences[1]!.symbol).toBe(own);
+  });
+
   it("follows export * chains", () => {
     const starModule = `${PKG} src/store/\`star.ts\`/`;
     const star: NamespaceDocument = {

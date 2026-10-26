@@ -293,7 +293,7 @@ describe("checkMap requirer, undeclared, evidence and utility rules", () => {
           provider: "app",
           requirers: ["api"],
           meaning: "",
-          bind: ["src/store/jobs.ts:getJob", "saveJob"],
+          bind: ["src/store/jobs.ts:getJob", "saveJob", "log"],
         },
         { id: "handling", name: "Handling", provider: "api", requirers: ["app"], meaning: "", bind: ["handle"] },
       ];
@@ -301,7 +301,7 @@ describe("checkMap requirer, undeclared, evidence and utility rules", () => {
     });
     expect(map.report.issues).toEqual([]);
     const appApi = map.interfaces.find((i) => i.id === "app-api")!;
-    expect(appApi.sites.map((s) => s.requirer)).toEqual(["api", "api"]);
+    expect(appApi.sites.map((s) => s.requirer)).toEqual(["api", "api", "api"]);
     expect(map.delegations).toContainEqual({ interface: "app-api", side: "provided", outer: "app", inner: "store" });
     expect(map.report.unattributedReferences).toBe(0);
   });
@@ -390,5 +390,93 @@ describe("checkMap unclaimed files outside the mapped tree", () => {
       m.components[0]!.paths = ["src/api/", "src/core/", "src/store/", "src/lib/", "src/main.ts"];
     }, idx);
     expect(map.report.unclaimedFiles).toContainEqual({ component: null, files: ["src/stray.ts"] });
+  });
+});
+
+describe("checkMap utilities nested below the crossing level", () => {
+  it("exempts references from the utility's siblings and covers references from further out", () => {
+    const UTIL = S("src/core/util.ts", "fmt");
+    const idx = index(
+      [...REFS, ["src/core/engine/run.ts", UTIL, "run", 7], ["src/api/handler.ts", UTIL, "handle", 9]],
+      [...DEFS, ["src/core/util.ts", "fmt", "function", 1]],
+    );
+    const map = run((m) => {
+      m.components.push({
+        id: "core-util",
+        name: "Core util",
+        parent: "core",
+        paths: ["src/core/util.ts"],
+        utility: true,
+        meaning: "",
+      } as (typeof m.components)[number]);
+    }, idx);
+    expect(map.report.utilities).toContainEqual({ id: "core-util", references: 1 });
+    expect(map.report.issues.map((i) => i.message)).toContain(
+      "'core' symbol 'fmt' (src/core/util.ts:1) is used by api but bound by no interface of 'core' (1 reference)",
+    );
+  });
+});
+
+describe("checkMap type wildcards", () => {
+  const defs = [
+    ...DEFS,
+    ["src/store/jobs.ts", "Repo", "type", 20],
+    ["src/store/jobs.ts", "Repo#find", "function", 21],
+    ["src/store/legacy.ts", "Repo", "type", 20],
+  ] as typeof DEFS;
+  const widen = (m: Model) => (m.components[2]!.paths = ["src/store/"]);
+
+  it("reports a Type#* that matches types in several files", () => {
+    const issues = messages(
+      (m) => {
+        widen(m);
+        m.interfaces[0]!.bind = ["src/store/jobs.ts:getJob", "Repo#*"];
+      },
+      index(REFS, defs),
+    );
+    expect(issues).toContain(
+      "binding: bind entry 'Repo#*' of interface 'reads' matches symbols in src/store/jobs.ts, src/store/legacy.ts; qualify it as 'src/store/jobs.ts:Repo#*'",
+    );
+  });
+
+  it("binds a qualified Type#* in one file only", () => {
+    const map = run(
+      (m) => {
+        widen(m);
+        m.interfaces[0]!.bind = ["src/store/jobs.ts:getJob", "src/store/jobs.ts:Repo#*"];
+      },
+      index(REFS, defs),
+    );
+    expect(map.interfaces[0]!.bindings.map((b) => `${b.file}:${b.name}`)).toEqual([
+      "src/store/jobs.ts:getJob",
+      "src/store/jobs.ts:Repo",
+      "src/store/jobs.ts:Repo#find",
+    ]);
+  });
+});
+
+describe("checkMap paths", () => {
+  it("rejects evidence paths outside the repository", () => {
+    expect(messages((m) => (m.interfaces[3]!.evidence = ["../secrets.ts", "/etc/hosts"]))).toEqual(
+      expect.arrayContaining([
+        "evidence: evidence file '../secrets.ts' of interface 'feed-hook' must be a repository-relative path",
+        "evidence: evidence file '/etc/hosts' of interface 'feed-hook' must be a repository-relative path",
+      ]),
+    );
+  });
+
+  it("scopes unclaimed files by slashless and glob paths", () => {
+    const idx = index(REFS, [...DEFS, ["other/x.ts", "x", "function", 1], ["src/stray.ts", "stray", "function", 1]]);
+    const slashless = run((m) => (m.components[0]!.paths = ["src"]), idx);
+    expect(slashless.report.unclaimedFiles.find((u) => u.component === null)).toBeUndefined();
+    const glob = run((m) => {
+      m.components[0]!.paths = ["src/**/*.ts"];
+      m.components[2]!.paths = ["src/store/jobs.ts"];
+    }, idx);
+    expect(glob.report.unclaimedFiles.find((u) => u.component === null)).toBeUndefined();
+    const narrow = run((m) => (m.components[0]!.paths = ["src/api/", "src/core/", "src/lib/", "src/main.ts"]), idx);
+    expect(narrow.report.unclaimedFiles.find((u) => u.component === null)!.files).toEqual(
+      ["src/stray.ts", "src/store/legacy.ts"].sort(),
+    );
   });
 });

@@ -38,10 +38,10 @@ const EVIDENCE: MapEvidence = {
     { candidate: "src/store/", symbols: 1, groups: [{ usedBy: ["src/api/"], symbols: ["getJob (src/store/a.ts:1)"] }] },
   ],
   signals: {
-    implementations: [],
-    barrels: [],
+    implementations: [{ type: "Store", file: "src/store/a.ts", implementations: ["MemoryStore (src/store/m.ts)"] }],
+    barrels: [{ file: "src/store/index.ts", exports: [{ from: "src/store/a.ts", names: ["getJob"] }] }],
     headers: [{ file: "src/store/a.ts", comment: "Persistence." }],
-    entryPoints: [],
+    entryPoints: [{ file: "src/cli.ts", reason: "runs as a script (shebang)" }],
     registrations: [{ file: "src/api/a.ts", line: 2, text: 'app.get("/x")' }],
   },
   gaps: [],
@@ -90,7 +90,7 @@ describe("pretty output", () => {
   it("lists issues by rule with locations and the coverage line", () => {
     const text = prettyReport(REPORT);
     expect(text).toContain("fidelity check: FAILED (2 issues)");
-    expect(text).toContain("coverage: 8/10 cross-component references (1 undeclared)");
+    expect(text).toContain("coverage: 8/10 cross-component references are call sites (1 undeclared call site)");
     expect(text).toContain("  [coverage] 'store' symbol 'getJob' is unbound\n      src/api/a.ts:3 (handle)");
     expect(text).toContain("unclaimed files under app: src/main.ts");
     expect(text).toContain("unattributed references: 2");
@@ -110,6 +110,10 @@ describe("pretty output", () => {
     expect(text).toContain("  used by src/api/: getJob (src/store/a.ts:1)");
     expect(text).toContain("  src/store/a.ts: Persistence.");
     expect(text).toContain('  src/api/a.ts:2 app.get("/x")');
+    expect(text).toContain("  Store (src/store/a.ts): MemoryStore (src/store/m.ts)");
+    expect(text).toContain("  src/store/index.ts: getJob from src/store/a.ts");
+    expect(text).toContain("  src/cli.ts: runs as a script (shebang)");
+    expect(text).toContain("(outside) = files outside the scope");
   });
 });
 

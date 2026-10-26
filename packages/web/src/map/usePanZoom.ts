@@ -1,6 +1,6 @@
 // Wheel zoom, drag pan and fit for the map canvas. The first fit after a
-// layout keeps text readable: a wide level starts at the left edge instead of
-// shrinking below 0.6.
+// layout keeps text readable: a wide level starts at the left edge at
+// scale 0.6.
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type RefObject } from "react";
 
 interface Transform {

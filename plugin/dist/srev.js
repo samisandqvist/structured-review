@@ -473,7 +473,7 @@ var plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 function prettyReport(report) {
   return [
     report.ok ? "fidelity check: passed" : `fidelity check: FAILED (${plural(report.issues.length, "issue")})`,
-    `coverage: ${report.coverage.covered}/${report.coverage.references} cross-component references (${report.coverage.undeclared} undeclared)`,
+    `coverage: ${report.coverage.covered}/${report.coverage.references} cross-component references are call sites (${plural(report.coverage.undeclared, "undeclared call site")})`,
     ...report.issues.map((i) => [`  [${i.rule}] ${i.message}`, ...(i.where ?? []).map((w) => `      ${w}`)].join("\n")),
     ...report.unclaimedFiles.map(
       (u) => `unclaimed files ${u.component ? `under ${u.component}` : "in no component"}: ${u.files.join(", ")}`
@@ -481,7 +481,7 @@ function prettyReport(report) {
     `unattributed references: ${report.unattributedReferences}`,
     ...report.utilities.map((u) => `utility ${u.id} hides ${plural(u.references, "reference")}`),
     ...report.typeDependencies.map((t) => `type-only: ${t.from} -> ${t.to} (${t.count}: ${t.symbols.join(", ")})`),
-    ...report.gaps.map((g) => `! ${g}`)
+    ...report.gaps.length ? report.gaps.map((g) => `! ${g}`) : ["gaps: none"]
   ].join("\n");
 }
 function prettyEvidence(e) {
@@ -495,11 +495,18 @@ function prettyEvidence(e) {
       `surface of ${s.candidate} (${plural(s.symbols, "symbol")}):`,
       ...s.groups.map((g) => `  used by ${g.usedBy.join(", ")}: ${g.symbols.join(", ")}`)
     ]),
+    "(outside) = files outside the scope; run without --within to see them",
+    "implementations:",
+    ...e.signals.implementations.map((i) => `  ${i.type} (${i.file}): ${i.implementations.join(", ")}`),
+    "barrels:",
+    ...e.signals.barrels.flatMap((b) => b.exports.map((x) => `  ${b.file}: ${x.names.join(", ")} from ${x.from}`)),
+    "entry points:",
+    ...e.signals.entryPoints.map((p) => `  ${p.file}: ${p.reason}`),
     "headers:",
     ...e.signals.headers.map((h) => `  ${h.file}: ${h.comment}`),
     "registrations:",
     ...e.signals.registrations.map((r) => `  ${r.file}:${r.line} ${r.text}`),
-    ...e.gaps.map((g) => `! ${g}`)
+    ...e.gaps.length ? e.gaps.map((g) => `! ${g}`) : ["gaps: none"]
   ].join("\n");
 }
 function flag(flags, name) {
@@ -669,7 +676,7 @@ async function cmdSessionCreate(base, flags) {
       `session ${out.sessionId}`,
       `ui: ${out.uiUrl}`,
       `nodes: ${out.changedNodes} changed / ${out.totalNodes} total; flows: ${out.affectedFlows} affected / ${out.totalFlows} total`,
-      ...out.indexWarnings.length ? ["index warnings:", ...out.indexWarnings.map((w) => `  ! ${w}`)] : []
+      ...out.indexWarnings.length ? ["index warnings:", ...out.indexWarnings.map((w) => `  ! ${w}`)] : ["index warnings: none"]
     ].join("\n")
   };
 }

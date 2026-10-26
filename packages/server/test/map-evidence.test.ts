@@ -156,6 +156,30 @@ describe("buildEvidence modes", () => {
     expect(buildEvidence(index, { ...ctx, manifest: inferred }, { full: false }).manifest).toBeUndefined();
   });
 
+  it("lists package entry points for the nearest enclosing package and packages inside the scope", () => {
+    const nestedSources: Record<string, string> = {
+      ...sources,
+      "src/store/package.json": JSON.stringify({ main: "index.js" }),
+      "lib/package.json": JSON.stringify({ main: "lib.js" }),
+    };
+    const nested = {
+      readSource: (f: string) => nestedSources[f],
+      roots: [
+        { language: "ts", root: "" },
+        { language: "ts", root: "src/store" },
+        { language: "ts", root: "lib" },
+      ],
+    };
+    expect(buildEvidence(index, nested, { within: "src", full: false }).signals.entryPoints).toEqual([
+      { file: "package.json", reason: "bin: ./dist/cli.js" },
+      { file: "package.json", reason: "main: dist/index.js" },
+      { file: "src/store/package.json", reason: "main: index.js" },
+    ]);
+    expect(buildEvidence(index, nested, { within: "src/store", full: false }).signals.entryPoints).toEqual([
+      { file: "src/store/package.json", reason: "main: index.js" },
+    ]);
+  });
+
   it("ignores an unreadable package.json and a missing one", () => {
     const broken = { ...ctx, readSource: (f: string) => (f === "package.json" ? "{" : sources[f]) };
     expect(buildEvidence(index, broken, { full: false }).signals.entryPoints).toEqual([]);

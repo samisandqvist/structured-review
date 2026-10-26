@@ -61,9 +61,11 @@ srev map get --session <id>                         # stored model, URL, stalene
      and route/tool registrations (the cross-process surface);
    - `manifest`: the repository's own `.review-components.json`, when present;
    - `gaps`: index gaps.
+   `(outside)` stands for files outside the scope (with `--within`, the rest of
+   the repository). The brief form caps symbol lists (`+N more`); run `--full`
+   before writing bind entries so you see every symbol a surface needs.
    For a large codebase, model the top level first, then run
    `--within <dir>` for each component you nest, so each level stays readable.
-   `--full` removes the brief caps.
 3. Write the model file (format below) and run `srev map check`. Read every
    issue and fix the model, then check again, until it prints
    `fidelity check: passed`.
@@ -81,21 +83,38 @@ srev map get --session <id>                         # stored model, URL, stalene
   an `id` (lowercase, digits, `.`, `_`, `-`; `system` is reserved), a short
   `name` and a one-line `meaning` taken from header comments where possible.
   `paths` are repository-relative prefixes ending in `/`, files, or globs. A
-  file belongs to the deepest component whose path matches it.
+  file belongs to the deepest component whose path matches it; between
+  components at the same depth the longer pattern wins, so a single file path
+  beats a sibling's directory prefix.
 - **One root component** claims the code (`"paths": [""]` for a whole
   repository, or the service directory in a monorepo). External systems
   (other services, people, model providers) are root-level components with
   `"external": true` and no paths.
-- **Nest** when a level has more than about 15 visible parts: group siblings
-  into a parent component and give the parent interfaces of its own.
+- **Nest** when a level has more than about 15 visible parts (external systems
+  do not count): group siblings into a parent component and give the parent
+  interfaces of its own. When you nest a directory that has a barrel or facade
+  module (`index.ts`, `__init__.py`), give that module a part of its own or put
+  it in a part; otherwise its re-exports show up as unclaimed files and
+  unattributed references.
+- **Code around the product**: scripts, docs, packaging and setup files can be
+  one `tooling` component beside the main one, or stay outside the root's
+  paths. Test support that is not named like a test (fixtures, harnesses) is
+  mapped like any code; give it its own component so its calls do not blur
+  the production parts.
 - **Interfaces** are named responsibilities ("Job lifecycle", "Read models"),
   not file names. Start from the `usedBy` groups of a surface: symbols used by
   the same set of components usually form one interface; split a group when it
   mixes responsibilities. An interface has one `provider` and `requirers` that
   are siblings of the provider. `bind` lists provider symbols: `name`,
-  `Type#method`, `Type#*` (a type and all its members) or `path/file.ts:name`
-  when a name exists in several files. A symbol may be bound by only one
-  interface of the same provider.
+  `Type#method`, `Type#*` (a type, its constructor and all its members) or
+  `path/file.ts:name` when a name exists in several files. A symbol may be
+  bound by only one interface of the same provider.
+- **Granularity is your job.** The check proves every call is covered; it
+  does not stop one broad interface (one `Type#*` with seven requirers) from
+  hiding which parts use what. Split reads from writes, and split a group
+  whose requirers use different symbols. Splitting is also how a violation
+  becomes visible: if the API writes state that only the core should write,
+  a separate "state writes" interface lets that use show as undeclared.
 - **Bind at every level the call crosses.** A call from one top-level part
   into a nested part must be bound by an interface of the top-level provider;
   the hub derives which inner part handles it (delegation).
@@ -107,12 +126,22 @@ srev map get --session <id>                         # stored model, URL, stalene
   use undeclared entries to silence coverage you could model.
 - **Utilities** (`"utility": true`) are only for configuration, helpers and
   shared types. A utility is a leaf, provides no interfaces, and may not call
-  visible components. References into utilities are exempt from coverage and
-  hidden from diagrams, so keep them small and honest.
+  visible components (a configuration module that validates against other
+  components is a visible component). References into a utility from its
+  siblings are exempt from coverage and hidden from diagrams; references from
+  further out cross its parent and need an interface of that parent. If a
+  utility hides a large share of all references, look for responsibilities in
+  it that deserve a visible part (a wrapper around a model provider, a client).
 - **Cross-process interfaces** (HTTP routes, MCP tools, webhooks, queues,
-  databases, clients of other services) set `kind` and list `evidence` files
-  inside the components they connect. They have no `bind`. Use the
-  registrations and client modules from the signals.
+  databases, clients of other services) set `kind` (free text such as `http`,
+  `mcp`, `webhook`, `queue`, `database`) and list `evidence` files. They have
+  no `bind`. Use the registrations and client modules from the signals.
+  External systems are root-level, so connect them to the root component that
+  contains your code (provider or requirer), and list as evidence the files
+  that serve or call them, wherever they sit inside. The hub delegates the
+  connection from the root's boundary down to the parts holding those files,
+  so opening the root shows which part talks to Postgres or serves the
+  webhook. In a monorepo, other services you do not map are external systems.
 
 ## Model format
 
@@ -169,7 +198,17 @@ srev map get --session <id>                         # stored model, URL, stalene
 - `[utility]`: a utility calling a visible component. Make it a visible
   component or move the code.
 
-Not blocking, but tell the user: `unclaimed files` (files that fall through to
-a component that has parts: give them a part), `unattributed references`
-(calls from those files), hidden utility references, type-only dependencies,
-and gaps.
+Coverage counts call sites (references), so one undeclared entry can stand
+for several undeclared call sites.
+
+Not blocking, but tell the user: `unclaimed files` (files under the mapped
+directories that no component claims, or that fall through to a component
+that has parts: give them a part), `unattributed references` (calls from
+those files), hidden utility references, type-only dependencies, and gaps
+(the report says `gaps: none` when there are none). Test files (`*.test.ts`,
+`test_*.py` and similar) are never mapped.
+
+Known limit: a call that bypasses a facade (importing `store/artifacts.ts`
+directly although the store's header says callers go through its index)
+looks like any other use of the store's interface. Mention such bypasses to
+the user when you see them; the map cannot show them yet.

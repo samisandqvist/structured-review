@@ -14,6 +14,7 @@ import {
   repoFingerprint,
   repoRoot,
   subtreeFingerprint,
+  trackedFiles,
   type LineRange,
 } from "../diff.js";
 import {
@@ -32,7 +33,7 @@ import {
 } from "./scip-dotnet.js";
 import { synthesizeCsharpSpans } from "./csharp-spans.js";
 import { resolveNamespaceMembers } from "./namespace-members.js";
-import { buildReferenceIndex, type ReferenceIndex } from "./references.js";
+import { buildReferenceIndex, unindexedGaps, type ReferenceIndex } from "./references.js";
 import { isTestFile } from "../util.js";
 import { findOnPath, parseCommandOverride, type ToolCommand } from "./toolchain.js";
 import { buildFlowTree, makeFlow, reachesChanged } from "./flow-tree.js";
@@ -364,7 +365,7 @@ export class ScipGraphProvider implements GraphProvider {
     const g = await this.buildGraph();
     let index = this.referenceIndexes.get(g);
     if (!index) {
-      index = buildReferenceIndex(g.documents ?? [], sourceReader(this.repoRoot), mapGaps(g));
+      index = buildReferenceIndex(g.documents ?? [], sourceReader(this.repoRoot), mapGaps(g, this.repoRoot));
       this.referenceIndexes.set(g, index);
     }
     return index;
@@ -914,10 +915,17 @@ export function buildGraphFromIndex(
 
 const UNMAPPED_LANGUAGES = new Set<IndexerLanguage>(["java", "cs"]);
 
-/** Index warnings plus one line per root in a language the map does not cover. */
-function mapGaps(g: BuiltGraph): string[] {
-  const unmapped = (g.jobs ?? [])
-    .filter((j) => UNMAPPED_LANGUAGES.has(j.language))
-    .map((j) => `${j.language} root '${j.root || "."}' is not yet mapped; its code is missing from the component map`);
-  return [...(g.warnings ?? []), ...unmapped];
+/** Index warnings plus one line per root in a language the map does not cover,
+ *  whether or not its indexer ran. */
+function mapGaps(g: BuiltGraph, repoRoot: string): string[] {
+  const roots = [...(g.jobs ?? []), ...discoverLanguageRoots(repoRoot).filter((r) => r.hasSources)];
+  const unmapped = new Set(
+    roots
+      .filter((j) => UNMAPPED_LANGUAGES.has(j.language))
+      .map(
+        (j) => `${j.language} root '${j.root || "."}' is not yet mapped; its code is missing from the component map`,
+      ),
+  );
+  const indexed = (g.documents ?? []).map((d) => d.file);
+  return [...(g.warnings ?? []), ...unmapped, ...unindexedGaps(trackedFiles(repoRoot) ?? [], indexed)];
 }

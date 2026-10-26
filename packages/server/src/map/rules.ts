@@ -25,7 +25,9 @@ export function undeclaredIssues(model: MapModel, interfaces: ResolvedInterface[
   for (const i of interfaces) {
     const byRequirer = new Map<string, string[]>();
     for (const s of i.sites.filter((x) => x.undeclared)) {
-      byRequirer.set(s.requirer, [...(byRequirer.get(s.requirer) ?? []), `${s.file}:${s.line} (${s.caller})`]);
+      const where = byRequirer.get(s.requirer) ?? [];
+      where.push(`${s.file}:${s.line} (${s.caller})`);
+      byRequirer.set(s.requirer, where);
     }
     for (const [requirer, where] of byRequirer) {
       if (i.reasons.some((r) => r.requirer === requirer)) continue;
@@ -67,7 +69,12 @@ export function resolveEvidence(
   const issues: CheckIssue[] = [];
   for (const file of i.evidence) {
     const owner = tree.ownerOf(file);
-    if (!fileExists(file)) {
+    if (file.startsWith("/") || file.split("/").includes("..")) {
+      issues.push({
+        rule: "evidence",
+        message: `evidence file '${file}' of interface '${i.id}' must be a repository-relative path`,
+      });
+    } else if (!fileExists(file)) {
       issues.push({ rule: "evidence", message: `evidence file '${file}' of interface '${i.id}' does not exist` });
     } else if (!owner || !connected.some((c) => tree.within(owner, c))) {
       issues.push({
@@ -103,10 +110,11 @@ export function deriveDelegations(interfaces: ResolvedInterface[], tree: Compone
   return out;
 }
 
-/** Top-level directories the model's paths reach; files elsewhere are outside the map. */
+/** The top-level directories the model's paths reach; files elsewhere are outside the map. */
 function mappedTopLevels(components: { paths: string[] }[]): (file: string) => boolean {
-  const tops = new Set(components.flatMap((c) => c.paths).map((p) => (p.includes("/") ? `${p.split("/")[0]}/` : "")));
-  return (file) => [...tops].some((t) => file.startsWith(t));
+  const tops = components.flatMap((c) => c.paths).map((p) => p.split(/[*?[]/)[0]!.split("/")[0]!);
+  if (tops.includes("")) return () => true;
+  return (file) => tops.some((t) => file === t || file.startsWith(`${t}/`));
 }
 
 /** Files under the mapped directories that no component claims, and files that fall through to a component with parts. */
@@ -121,7 +129,9 @@ export function unclaimedFiles(
     const owner = tree.ownerOf(file) ?? null;
     if (owner === null && !mapped(file)) continue;
     if (owner !== null && !tree.childrenOf(owner).some((c) => !c.external)) continue;
-    groups.set(owner, [...(groups.get(owner) ?? []), file]);
+    const group = groups.get(owner) ?? [];
+    group.push(file);
+    groups.set(owner, group);
   }
   return [...groups].map(([component, list]) => ({ component, files: list }));
 }

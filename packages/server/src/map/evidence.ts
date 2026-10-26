@@ -178,9 +178,17 @@ function parsePackage(text: string): { bin?: string | Record<string, string>; ma
   }
 }
 
-function packageEntries(ctx: EvidenceContext): { file: string; reason: string }[] {
-  return ctx.roots
-    .filter((r) => r.language === "ts")
+/** TypeScript package roots that describe the scope: the nearest one enclosing it and those inside it. */
+function scopePackages(ctx: EvidenceContext, scope: Scope): string[] {
+  const roots = ctx.roots.filter((r) => r.language === "ts").map((r) => r.root);
+  const encloses = (root: string) => root === "" || scope.path === root || scope.path.startsWith(`${root}/`);
+  const nearest = roots.filter(encloses).sort((a, b) => b.length - a.length)[0];
+  return roots.filter((root) => root === nearest || (root !== "" && scope.contains(`${root}/`)));
+}
+
+function packageEntries(ctx: EvidenceContext, scope: Scope): { file: string; reason: string }[] {
+  return scopePackages(ctx, scope)
+    .map((root) => ({ root }))
     .flatMap((r) => {
       const file = r.root ? `${r.root}/package.json` : "package.json";
       const text = ctx.readSource(file);
@@ -247,7 +255,7 @@ export function buildEvidence(index: ReferenceIndex, ctx: EvidenceContext, opts:
       implementations: implementations(index, scope),
       barrels: index.barrels.filter((b) => scope.contains(b.file)),
       headers: signals.headers,
-      entryPoints: [...packageEntries(ctx), ...signals.entryPoints],
+      entryPoints: [...packageEntries(ctx, scope), ...signals.entryPoints],
       registrations: signals.registrations,
     },
     gaps: index.gaps,

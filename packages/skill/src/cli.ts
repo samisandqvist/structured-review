@@ -149,7 +149,9 @@ async function cmdSessionCreate(base: string, flags: Record<string, string | boo
       `session ${out.sessionId}`,
       `ui: ${out.uiUrl}`,
       `nodes: ${out.changedNodes} changed / ${out.totalNodes} total; flows: ${out.affectedFlows} affected / ${out.totalFlows} total`,
-      ...(out.indexWarnings.length ? ["index warnings:", ...out.indexWarnings.map((w: string) => `  ! ${w}`)] : []),
+      ...(out.indexWarnings.length
+        ? ["index warnings:", ...out.indexWarnings.map((w: string) => `  ! ${w}`)]
+        : ["index warnings: none"]),
     ].join("\n"),
   };
 }

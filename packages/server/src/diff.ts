@@ -724,3 +724,14 @@ function readSlice(root: string, file: string, startLine: number, endLine: numbe
     return "";
   }
 }
+
+/** Tracked files of the repository, repo-relative; undefined when git fails. */
+export function trackedFiles(root: string): string[] | undefined {
+  try {
+    return execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 })
+      .split("\0")
+      .filter(Boolean);
+  } catch {
+    return undefined;
+  }
+}

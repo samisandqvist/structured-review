@@ -78,7 +78,13 @@ export function registrations(source: string, file: string): { line: number; tex
 }
 
 export function entryPointReason(source: string, file: string): string | undefined {
-  if (!isPython(file)) return undefined;
+  if (!isPython(file)) {
+    if (source.startsWith("#!")) return "runs as a script (shebang)";
+    if (/import\.meta\.url\s*===[^\n]*process\.argv\[1\]|require\.main\s*===\s*module/.test(source)) {
+      return "runs as a script (main-module check)";
+    }
+    return undefined;
+  }
   if (file === "__main__.py" || file.endsWith("/__main__.py")) return "package entry point (__main__.py)";
   if (/^if __name__ == ["']__main__["']:/m.test(source)) return "runs as a script (__main__ guard)";
   return undefined;
