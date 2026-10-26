@@ -5,7 +5,9 @@ reviewer through changes along the call/dependency graph instead of a file tree.
 
 Current design: [architecture](docs/architecture.md),
 [review model](docs/review-model.md) and the
-[component manifest](docs/component-manifest.md). Candidate indexing work is recorded in
+[component manifest](docs/component-manifest.md). The
+[component map](docs/component-map.md) describes a codebase as nested UML
+components checked against its references. Candidate indexing work is recorded in
 [indexing follow-ups](docs/indexing-follow-ups.md).
 
 ## Stack
@@ -57,11 +59,17 @@ srev comments --session <id>                       # exported comments + review 
 srev wait --session <id> [--until reviewed|commented]
 srev gc [--repo <path>] [--all]                    # remove a repo's DB/logs (stops the hub first)
 srev shutdown                                      # stop the hub over HTTP
+srev map evidence --session <id> [--within <path>] [--full]  # evidence for writing a component model
+srev map check --session <id> --model <f>          # fidelity check (exit 1 until it passes)
+srev map submit --session <id> --model <f> [--open]  # store the map (refused unless the check passes)
+srev map get --session <id>                        # stored model, URL, staleness, report
 ```
 
 ## Plugin packages
 
 - `plugin/`: Claude Code package; marketplace at `.claude-plugin/marketplace.json`.
+- Both packages carry two skills generated from `packages/skill/skill.md`
+  (structured-review) and `packages/skill/component-map.md` (component-map).
 - `plugins/structured-review/`: Codex package; marketplace at `.agents/plugins/marketplace.json`.
 - `scripts/build-plugin.mjs` generates both runtime bundles and skill copies from
   one source. `scripts/plugin-launcher.mjs` is copied into both packages and

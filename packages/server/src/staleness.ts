@@ -6,7 +6,7 @@ export type StaleReason = "head-moved" | "working-tree-changed";
  * Stale = a recorded snapshot no longer matches the working tree, either
  * because HEAD moved or a tracked/untracked file changed content (the
  * fingerprint catches edits that leave HEAD untouched). Empty when git (or
- * the recorded state) is unavailable — degrade silently.
+ * the recorded state) is unavailable; callers degrade silently.
  */
 export function staleness(
   root: string,

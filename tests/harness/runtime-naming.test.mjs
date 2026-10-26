@@ -42,6 +42,7 @@ it("builds installable host packages whose renamed CLI and launcher both execute
     const result = spawnSync(process.execPath, [launcher, "--help"], { encoding: "utf8" });
     expect(result.stderr).toContain("srev session create");
     expect(existsSync(join(output, host, "skills/structured-review/SKILL.md"))).toBe(true);
+    expect(readFileSync(join(output, host, "skills/component-map/SKILL.md"), "utf8")).toContain("scripts/srev.mjs");
   }
 });
 
