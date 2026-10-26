@@ -29,6 +29,7 @@ import { computeCoverage, flowEntries, type PlanUnitInput } from "../coverage.js
 import { deriveAttachments, countedAttachmentIds, type AttachNode } from "../attach.js";
 import { parseBody, sessionCreateSchema, planSchema, unitPatchSchema } from "../validate.js";
 import { resolvePlanMembership } from "../plan-membership.js";
+import { staleness } from "../staleness.js";
 
 /**
  * Turn a provider subgraph into the nodes we actually store:
@@ -204,29 +205,11 @@ export function createSessionsRoute(ctx: AppContext) {
     const changed = getNodesBySession(ctx.db, session.id).filter((n) => n.changeStatus === "changed");
     const autoMembers = new Set(units.filter((u) => u.auto).flatMap((u) => u.memberStableIds));
     const unassigned = changed.filter((n) => autoMembers.has(n.stableId)).length;
-    // Stale = the session snapshot no longer matches the working tree, either
-    // because HEAD moved or a tracked/untracked file changed content (the
-    // fingerprint catches edits that leave HEAD untouched). Omitted when git
-    // (or the recorded state) is unavailable — degrade silently.
-    const currentHead = gitHeadSha(ctx.repoRoot);
-    const currentFp = repoFingerprint(ctx.repoRoot);
-    let stale: boolean | undefined;
-    let staleReason: "head-moved" | "working-tree-changed" | undefined;
-    if (currentHead && session.headSha) {
-      if (currentHead !== session.headSha) {
-        stale = true;
-        staleReason = "head-moved";
-      } else if (currentFp && session.repoFingerprint) {
-        stale = currentFp !== session.repoFingerprint;
-        if (stale) staleReason = "working-tree-changed";
-      }
-    }
     return c.json({
       session,
       units,
       coverage: { changedTotal: changed.length, covered: changed.length - unassigned, unassigned },
-      ...(stale === undefined ? {} : { stale }),
-      ...(staleReason ? { staleReason } : {}),
+      ...staleness(ctx.repoRoot!, session.headSha, session.repoFingerprint),
     });
   });
 

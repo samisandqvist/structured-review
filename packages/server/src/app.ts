@@ -12,6 +12,7 @@ import { createEventsRoute } from "./routes/events.js";
 import { createFlowsRoute } from "./routes/flows.js";
 import { createChangesRoute } from "./routes/changes.js";
 import { createShapeRoute } from "./routes/shape.js";
+import { createMapRoute } from "./routes/map.js";
 import { localRequestsOnly } from "./request-security.js";
 
 export function createApp(ctx: AppContext) {
@@ -38,6 +39,7 @@ export function createApp(ctx: AppContext) {
   app.route("/api/sessions", createFlowsRoute(resolved));
   app.route("/api/sessions", createChangesRoute(resolved));
   app.route("/api/sessions", createShapeRoute(resolved));
+  app.route("/api/sessions", createMapRoute(resolved));
   // Static SPA is mounted LAST so its /* catch-all never shadows /health or /api/*.
   if (resolved.webDistPath && existsSync(join(resolved.webDistPath, "index.html"))) {
     app.route("/", createStaticRoute(resolved.webDistPath));
