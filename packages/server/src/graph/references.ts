@@ -139,8 +139,31 @@ function callerSpans(doc: IndexedDocument): CallerSpan[] {
 /** Text before a reference that marks a type position (annotations, generics, heritage, casts). */
 const TYPE_POSITION = /(?::|->|<|\||&|\bextends|\bimplements|\bas|\bsatisfies|\bkeyof|\btypeof)\s*$/;
 /** Text before and after a reference that marks a value position (arguments, list items, assignment, return). */
-const VALUE_BEFORE = /(?:[(,=]|\breturn|\bthrow|\binstanceof|\bnew)\s*$/;
+const VALUE_BEFORE = /(?:[[(,=]|\breturn|\bthrow|\binstanceof|\bnew)\s*$/;
 const VALUE_AFTER = /^\s*(?:[(.]|[,)\];]|$)/;
+
+const CLOSERS = new Set(["]", ")", ">"]);
+const OPENERS = new Set(["[", "(", "<"]);
+
+/** Whether text ends inside type arguments: an open `<` right after a name
+ *  (`Map<string, `, `cast<A, `), or an open `[` whose subscripted name sits
+ *  in a type position (`x: Union[List[str], `). An open `(` is a call. */
+function inTypeArguments(before: string): boolean {
+  let depth = 0;
+  for (let i = before.length - 1; i >= 0; i--) {
+    const ch = before[i]!;
+    if (CLOSERS.has(ch)) depth++;
+    else if (OPENERS.has(ch) && depth > 0) depth--;
+    else if (OPENERS.has(ch)) {
+      if (ch === "(") return false;
+      const head = before.slice(0, i);
+      if (ch === "<") return /[\w$]$/.test(head);
+      const outer = head.replace(/[\w.$]+\s*$/, "");
+      return TYPE_POSITION.test(outer) || inTypeArguments(outer);
+    }
+  }
+  return false;
+}
 
 /** Whether a reference to a type uses it as a value: `new Foo`, `Foo(`, `Foo.x`,
  *  `x instanceof Foo`, `register(Foo)`, `[a, Foo]`. Annotations and generic
@@ -152,7 +175,7 @@ function valueUse(lines: string[] | undefined, o: Occurrence): boolean {
   const before = text.slice(0, r[1]);
   const after = text.slice(r.length === 4 ? r[3] : r[2]);
   if (/^\s*[(.]/.test(after) || /\b(?:new|instanceof)\s*$/.test(before)) return true;
-  if (TYPE_POSITION.test(before)) return false;
+  if (TYPE_POSITION.test(before) || inTypeArguments(before)) return false;
   return VALUE_BEFORE.test(before) && VALUE_AFTER.test(after);
 }
 

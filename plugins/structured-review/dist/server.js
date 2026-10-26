@@ -19828,8 +19828,26 @@ function callerSpans(doc) {
   return spans2.sort((a, b) => a.end - a.start - (b.end - b.start));
 }
 var TYPE_POSITION = /(?::|->|<|\||&|\bextends|\bimplements|\bas|\bsatisfies|\bkeyof|\btypeof)\s*$/;
-var VALUE_BEFORE = /(?:[(,=]|\breturn|\bthrow|\binstanceof|\bnew)\s*$/;
+var VALUE_BEFORE = /(?:[[(,=]|\breturn|\bthrow|\binstanceof|\bnew)\s*$/;
 var VALUE_AFTER = /^\s*(?:[(.]|[,)\];]|$)/;
+var CLOSERS = /* @__PURE__ */ new Set(["]", ")", ">"]);
+var OPENERS = /* @__PURE__ */ new Set(["[", "(", "<"]);
+function inTypeArguments(before) {
+  let depth = 0;
+  for (let i = before.length - 1; i >= 0; i--) {
+    const ch = before[i];
+    if (CLOSERS.has(ch)) depth++;
+    else if (OPENERS.has(ch) && depth > 0) depth--;
+    else if (OPENERS.has(ch)) {
+      if (ch === "(") return false;
+      const head = before.slice(0, i);
+      if (ch === "<") return /[\w$]$/.test(head);
+      const outer = head.replace(/[\w.$]+\s*$/, "");
+      return TYPE_POSITION.test(outer) || inTypeArguments(outer);
+    }
+  }
+  return false;
+}
 function valueUse(lines, o) {
   const r = o.range;
   const text = lines?.[r[0]];
@@ -19837,7 +19855,7 @@ function valueUse(lines, o) {
   const before = text.slice(0, r[1]);
   const after = text.slice(r.length === 4 ? r[3] : r[2]);
   if (/^\s*[(.]/.test(after) || /\b(?:new|instanceof)\s*$/.test(before)) return true;
-  if (TYPE_POSITION.test(before)) return false;
+  if (TYPE_POSITION.test(before) || inTypeArguments(before)) return false;
   return VALUE_BEFORE.test(before) && VALUE_AFTER.test(after);
 }
 var TS_IMPORT = /^(?:import\s*[\w*{"'$]|export\s+(?:\*|\{|type\s+\{))/;

@@ -1,6 +1,6 @@
 # Component map design
 
-Status: implemented on the feature branch; validation in progress. Written from a throwaway
+Status: implemented on the feature branch and validated on four codebases. Written from a throwaway
 spike on a private TypeScript service of 79 source files (a background job
 orchestrator with an operator API, a persistence facade and two upstream
 services): SCIP evidence extraction, a hand-run LLM inference, a mechanical

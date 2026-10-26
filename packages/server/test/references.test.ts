@@ -208,6 +208,10 @@ describe("value uses of a type", () => {
     "Formatter.create();",
     "const all = [Other, Formatter];",
     "def f(x: Formatter) -> Formatter:",
+    "    prettify: Union[List[str], Formatter] = DEFAULT",
+    "def g(x: Optional[Formatter], y=[Formatter]):",
+    "const m: Map<string, Formatter> = new Map();",
+    "use(cast<Other, Formatter>(x));",
   ];
   const doc: IndexedDocument = {
     file: "src/use.ts",
@@ -225,7 +229,20 @@ describe("value uses of a type", () => {
   const idx = buildReferenceIndex([defs, doc], () => lines.join("\n"), []);
 
   it("treats arguments, instanceof, static access and list items as values and annotations as types", () => {
-    expect(idx.references.map((r) => r.typeOnly)).toEqual([false, false, true, true, true, false, false, true]);
+    expect(idx.references.map((r) => r.typeOnly)).toEqual([
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+    ]);
   });
 });
 
