@@ -31,6 +31,7 @@ import {
   SCIP_DOTNET_INSTALL_HINT,
 } from "./scip-dotnet.js";
 import { synthesizeCsharpSpans } from "./csharp-spans.js";
+import { resolveNamespaceMembers } from "./namespace-members.js";
 import { isTestFile } from "../util.js";
 import { findOnPath, parseCommandOverride, type ToolCommand } from "./toolchain.js";
 import { buildFlowTree, makeFlow, reachesChanged } from "./flow-tree.js";
@@ -854,7 +855,24 @@ function callAdjacency(calls: CallWeights) {
   return { callAdj, callRev, callWeights: calls };
 }
 
-export function buildGraphFromIndex(idx: ScipIndex, root: string): BuiltGraph {
+/** Source text of a repo-relative file, or undefined when it cannot be read. */
+export function sourceReader(root: string): (file: string) => string | undefined {
+  return (file) => {
+    try {
+      return readFileSync(join(root, file), "utf8");
+    } catch {
+      return undefined;
+    }
+  };
+}
+
+const NAMESPACE_LANGUAGE = /\.[cm]?[jt]sx?$/;
+
+export function buildGraphFromIndex(
+  idx: ScipIndex,
+  root: string,
+  readSource: (file: string) => string | undefined = sourceReader(root),
+): BuiltGraph {
   const rootSlash = root.endsWith("/") ? root : `${root}/`;
   const documents = idx.documents.map((document) => {
     const path = document.relativePath ?? "";
@@ -864,6 +882,10 @@ export function buildGraphFromIndex(idx: ScipIndex, root: string): BuiltGraph {
       symbols: document.symbols ?? [],
     };
   });
+  resolveNamespaceMembers(
+    documents.filter((d) => NAMESPACE_LANGUAGE.test(d.file)),
+    readSource,
+  );
   const { nodes, definitionFiles } = collectDefinitions(documents);
   const fileRequires = collectFileRequires(documents, definitionFiles);
   const implementations = collectImplementations(documents);
