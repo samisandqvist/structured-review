@@ -4,7 +4,7 @@
 // the same line); its name is read from the source line and resolved through
 // the names the module defines or re-exports, following `export *` chains.
 
-export interface ScipOccurrenceLike {
+interface ScipOccurrenceLike {
   range?: number[];
   symbol?: string;
   symbolRoles?: number;

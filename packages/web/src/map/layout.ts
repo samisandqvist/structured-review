@@ -11,9 +11,9 @@ import type { ResolvedMap } from "./types.js";
 
 export const PORT_TOP = 50;
 export const PORT_PITCH = 22;
-export const NAME_FONT = '500 13px "IBM Plex Sans"';
-export const SUB_FONT = '400 11px "IBM Plex Mono"';
-export const PORT_FONT = '400 11.5px "IBM Plex Sans"';
+const NAME_FONT = '500 13px "IBM Plex Sans"';
+const SUB_FONT = '400 11px "IBM Plex Mono"';
+const PORT_FONT = '400 11.5px "IBM Plex Sans"';
 
 export interface ElkLike {
   layout(graph: ElkNode): Promise<ElkNode>;

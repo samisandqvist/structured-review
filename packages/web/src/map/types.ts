@@ -1,7 +1,7 @@
 // The resolved component map as served by GET /api/sessions/:id/map (mirrors
 // the hub's map types; the web package never imports server code).
 
-export interface MapComponent {
+interface MapComponent {
   id: string;
   name: string;
   parent: string | null;
@@ -12,7 +12,7 @@ export interface MapComponent {
   utility: boolean;
 }
 
-export interface MapInterface {
+interface MapInterface {
   id: string;
   name: string;
   provider: string;
@@ -26,29 +26,29 @@ export interface MapInterface {
   evidence: string[];
 }
 
-export interface UndeclaredUse {
+interface UndeclaredUse {
   interface: string;
   requirer: string;
   reason: string;
 }
 
-export interface MapModel {
+interface MapModel {
   title: string;
   components: MapComponent[];
   interfaces: MapInterface[];
   undeclared: UndeclaredUse[];
 }
 
-export type CheckRule = "model" | "coverage" | "binding" | "requirer" | "undeclared" | "evidence" | "utility";
+type CheckRule = "model" | "coverage" | "binding" | "requirer" | "undeclared" | "evidence" | "utility";
 
-export interface CheckIssue {
+interface CheckIssue {
   rule: CheckRule;
   message: string;
   /** Sample locations, `file:line (caller)`. */
   where?: string[];
 }
 
-export interface Binding {
+interface Binding {
   symbol: string;
   name: string;
   file: string;
@@ -66,7 +66,7 @@ export interface CallSite {
   undeclared: boolean;
 }
 
-export interface Delegation {
+interface Delegation {
   interface: string;
   side: "provided" | "required";
   outer: string;

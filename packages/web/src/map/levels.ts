@@ -5,7 +5,7 @@
 // root components (null) shows the roots and the external systems.
 import type { CallSite, ResolvedComponent, ResolvedInterface, ResolvedMap } from "./types.js";
 
-export type PortRole = "provide" | "require";
+type PortRole = "provide" | "require";
 export interface LevelPort {
   id: string;
   node: string;
@@ -13,8 +13,8 @@ export interface LevelPort {
   role: PortRole;
   boundary: boolean;
 }
-export type EdgeKind = "assembly" | "delegate" | "undeclared";
-export interface LevelEdge {
+type EdgeKind = "assembly" | "delegate" | "undeclared";
+interface LevelEdge {
   id: string;
   from: string;
   to: string;

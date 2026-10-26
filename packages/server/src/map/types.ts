@@ -26,7 +26,7 @@ export interface MapInterface {
   evidence: string[];
 }
 
-export interface UndeclaredUse {
+interface UndeclaredUse {
   interface: string;
   requirer: string;
   reason: string;
@@ -39,7 +39,7 @@ export interface MapModel {
   undeclared: UndeclaredUse[];
 }
 
-export type CheckRule = "model" | "coverage" | "binding" | "requirer" | "undeclared" | "evidence" | "utility";
+type CheckRule = "model" | "coverage" | "binding" | "requirer" | "undeclared" | "evidence" | "utility";
 
 export interface CheckIssue {
   rule: CheckRule;
@@ -80,7 +80,7 @@ export interface ResolvedInterface extends MapInterface {
   reasons: { requirer: string; reason: string }[];
 }
 
-export interface ResolvedComponent extends MapComponent {
+interface ResolvedComponent extends MapComponent {
   fileCount: number;
 }
 

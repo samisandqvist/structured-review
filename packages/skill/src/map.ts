@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { openInBrowser } from "./api.js";
 
-export interface MapCheckIssue {
+interface MapCheckIssue {
   rule: string;
   message: string;
   where?: string[];
@@ -60,7 +60,7 @@ async function request(url: string, init?: RequestInit): Promise<{ status: numbe
 
 const mapPath = (base: string, sessionId: string) => `${base}/api/sessions/${encodeURIComponent(sessionId)}/map`;
 
-export async function getMapEvidence(
+async function getMapEvidence(
   base: string,
   sessionId: string,
   opts: { within?: string; full?: boolean },
@@ -72,7 +72,7 @@ export async function getMapEvidence(
   return (await request(`${mapPath(base, sessionId)}/evidence${qs}`)).body as MapEvidence;
 }
 
-export async function checkMap(base: string, sessionId: string, model: unknown): Promise<MapCheckReport> {
+async function checkMap(base: string, sessionId: string, model: unknown): Promise<MapCheckReport> {
   const { body } = await request(`${mapPath(base, sessionId)}/check`, { method: "POST", body: JSON.stringify(model) });
   return (body as { report: MapCheckReport }).report;
 }
@@ -86,7 +86,7 @@ export async function submitMap(
   return { ok: status === 200, report: (body as { report: MapCheckReport }).report };
 }
 
-export async function getMap(base: string, sessionId: string): Promise<StoredMap> {
+async function getMap(base: string, sessionId: string): Promise<StoredMap> {
   return (await request(mapPath(base, sessionId))).body as StoredMap;
 }
 
