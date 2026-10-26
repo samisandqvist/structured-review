@@ -465,6 +465,10 @@ export function uiUrl(base: string, sessionId: string): string {
 }
 
 export function launchUI(base: string, sessionId: string): void {
+  openInBrowser(uiUrl(base, sessionId));
+}
+
+export function openInBrowser(url: string): void {
   const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
-  spawn(cmd, [uiUrl(base, sessionId)], { detached: true, stdio: "ignore" }).unref();
+  spawn(cmd, [url], { detached: true, stdio: "ignore" }).unref();
 }

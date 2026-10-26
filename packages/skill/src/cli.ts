@@ -33,6 +33,7 @@ import { computeStatus, waitConditionMet, type SessionStatus } from "./status.js
 import { ensureServer } from "./serve.js";
 import { gcRepo, gcSweep } from "./gc.js";
 import { prettyShape } from "./shape.js";
+import { MAP_COMMANDS } from "./map.js";
 
 const USAGE = `usage:
   srev serve [--repo <path>] [--port N]
@@ -46,6 +47,10 @@ const USAGE = `usage:
   srev status --session <id>
   srev comments --session <id>
   srev wait --session <id> [--until reviewed|commented] [--interval sec] [--timeout sec]
+  srev map evidence --session <id> [--within <path>] [--full]
+  srev map check --session <id> --model <file.json>
+  srev map submit --session <id> --model <file.json> [--open]
+  srev map get --session <id>
   srev gc [--repo <path>] [--all]
   srev shutdown
 global flags: --port N (hub port), --pretty (human-readable output)`;
@@ -413,6 +418,7 @@ const COMMANDS: Record<string, (base: string, flags: Record<string, string | boo
   status: cmdStatus,
   comments: cmdComments,
   wait: cmdWait,
+  ...MAP_COMMANDS,
 };
 
 export async function runCli(argv: string[]): Promise<void> {
