@@ -1,7 +1,14 @@
 // One level of the component map: the opened component's parts, its boundary
 // ports, the neighbours it connects to and the connectors between them.
 import { describe, it, expect } from "vitest";
-import { buildLevel, defaultLevel, undeclaredFindings, visibleChildren, levelTrail } from "../src/map/levels.js";
+import {
+  buildLevel,
+  defaultLevel,
+  highlighted,
+  undeclaredFindings,
+  visibleChildren,
+  levelTrail,
+} from "../src/map/levels.js";
 import { fixtureMap } from "./map-fixture.js";
 
 const map = fixtureMap();
@@ -84,5 +91,32 @@ describe("buildLevel", () => {
     expect(undeclaredFindings(map).map((f) => `${f.requirer} ${f.iface.id} ${f.sites.length}`)).toEqual([
       "api writes 1",
     ]);
+  });
+});
+
+describe("highlighted", () => {
+  const level = buildLevel(map, "orchestrator");
+
+  it("highlights an interface's ports and edges and keeps their nodes", () => {
+    const { hl, keep } = highlighted(level, { type: "iface", id: "reads" });
+    expect([...hl].sort()).toEqual([
+      "api|reads|require",
+      "api|reads|require>store|reads|provide",
+      "core|reads|require",
+      "core|reads|require>store|reads|provide",
+      "store|reads|provide",
+    ]);
+    expect([...keep].sort()).toEqual(["api", "core", "store"]);
+  });
+
+  it("highlights a node's connectors and keeps the nodes on their other end", () => {
+    const { hl, keep } = highlighted(level, { type: "node", id: "api" });
+    expect(hl.has("api")).toBe(true);
+    expect(hl.has("orchestrator|job-api|provide>api|job-api|provide")).toBe(true);
+    expect([...keep].sort()).toEqual(["api", "orchestrator", "store"]);
+  });
+
+  it("highlights nothing without a selection", () => {
+    expect(highlighted(level, null).hl.size).toBe(0);
   });
 });

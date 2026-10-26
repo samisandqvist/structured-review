@@ -18,6 +18,7 @@ vi.mock("../src/api/hooks.js", () => ({
   useCreateComment: () => ({ mutate: vi.fn() }),
   useFlows: () => ({ data: { flows: [] }, isLoading: false }),
   useShape: () => ({ data: undefined }),
+  useMap: () => ({ data: undefined, error: undefined }),
 }));
 
 import { App } from "../src/App.js";

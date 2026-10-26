@@ -1,3 +1,5 @@
+import type { StoredMapResponse } from "../map/types.js";
+
 export interface ReviewSession {
   id: string;
   branch: string;
@@ -146,12 +148,19 @@ export type UnitInput =
 
 const API_BASE = "/api";
 
+/** A failed API call; `status` lets callers tell "not there" from "broken". */
+export class ApiError extends Error {
+  constructor(readonly status: number) {
+    super(`API error: ${status}`);
+  }
+}
+
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: { "Content-Type": "application/json", ...init?.headers },
   });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  if (!res.ok) throw new ApiError(res.status);
   return res.json() as Promise<T>;
 }
 
@@ -236,6 +245,7 @@ export const api = {
       body: JSON.stringify(patch),
     }),
   getShape: (id: string) => fetchJson<ChangeShape>(`/sessions/${id}/shape`),
+  getMap: (id: string) => fetchJson<StoredMapResponse>(`/sessions/${id}/map`),
   getFlows: (id: string) => fetchJson<{ flows: Flow[]; orphans: Node[] }>(`/sessions/${id}/flows`),
   exportComments: (id: string) =>
     fetchJson<{ branch: string; baseRef: string; headSha: string; comments: Record<string, unknown>[] }>(

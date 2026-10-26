@@ -171,3 +171,36 @@ class LevelBuilder {
 export function buildLevel(map: ResolvedMap, id: string | null): Level {
   return new LevelBuilder(map, id).build();
 }
+
+export type Selection = { type: "iface" | "node"; id: string } | null;
+
+type Highlight = { hl: Set<string>; keep: Set<string> };
+
+function interfaceHighlight(level: Level, iface: string): Highlight {
+  const out: Highlight = { hl: new Set(), keep: new Set() };
+  for (const p of level.ports.values()) {
+    if (p.iface !== iface) continue;
+    out.hl.add(p.id);
+    out.keep.add(p.node);
+  }
+  for (const e of level.edges.values()) if (e.iface === iface) out.hl.add(e.id);
+  return out;
+}
+
+function nodeHighlight(level: Level, node: string): Highlight {
+  const out: Highlight = { hl: new Set([node]), keep: new Set() };
+  for (const e of level.edges.values()) {
+    const a = level.ports.get(e.from)!.node;
+    const b = level.ports.get(e.to)!.node;
+    if (a !== node && b !== node) continue;
+    out.hl.add(e.id);
+    out.keep.add(a).add(b);
+  }
+  return out;
+}
+
+/** Elements to highlight for a selection, and nodes kept undimmed around them. */
+export function highlighted(level: Level, selection: Selection): Highlight {
+  if (!selection) return { hl: new Set(), keep: new Set() };
+  return selection.type === "iface" ? interfaceHighlight(level, selection.id) : nodeHighlight(level, selection.id);
+}

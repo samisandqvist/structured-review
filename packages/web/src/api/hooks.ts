@@ -23,6 +23,10 @@ export function useComments(sessionId: string) {
 export function useShape(sessionId: string) {
   return useQuery({ queryKey: ["shape", sessionId], queryFn: () => api.getShape(sessionId) });
 }
+/** The session's component map; a 404 (no map yet) is not retried. */
+export function useMap(sessionId: string) {
+  return useQuery({ queryKey: ["map", sessionId], queryFn: () => api.getMap(sessionId), retry: false });
+}
 export function useFlows(sessionId: string) {
   return useQuery({ queryKey: ["flows", sessionId], queryFn: () => api.getFlows(sessionId) });
 }

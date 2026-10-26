@@ -17,10 +17,12 @@ vi.mock("../src/api/hooks.js", () => ({
   }),
   useNodes: () => ({ data: { nodes: [] } }),
   useSessions: () => ({ data: { sessions: sessionList } }),
+  useMap: () => ({ data: { map: {} } }),
 }));
 
 vi.mock("../src/navigation.js", () => ({
   navigateToSession: vi.fn(),
+  mapUrl: (id: string) => `/?session=${id}&view=map`,
 }));
 
 import { StatusBar } from "../src/App.js";
@@ -55,5 +57,12 @@ describe("StatusBar session switcher", () => {
     render(<StatusBar sessionId="s1" />);
     fireEvent.change(screen.getByTestId("session-switcher"), { target: { value: "s2" } });
     expect(navigateToSession).toHaveBeenCalledWith("s2");
+  });
+});
+
+describe("StatusBar map link", () => {
+  it("links to the component map when the session has one", () => {
+    render(<StatusBar sessionId="s1" />);
+    expect(screen.getByTestId("map-link").getAttribute("href")).toBe("/?session=s1&view=map");
   });
 });
