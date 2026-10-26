@@ -32,6 +32,7 @@ import {
 } from "./scip-dotnet.js";
 import { synthesizeCsharpSpans } from "./csharp-spans.js";
 import { resolveNamespaceMembers } from "./namespace-members.js";
+import { buildReferenceIndex, type ReferenceIndex } from "./references.js";
 import { isTestFile } from "../util.js";
 import { findOnPath, parseCommandOverride, type ToolCommand } from "./toolchain.js";
 import { buildFlowTree, makeFlow, reachesChanged } from "./flow-tree.js";
@@ -86,6 +87,10 @@ export interface BuiltGraph {
   warnings?: string[];
   /** Jobs whose indexer failed while others succeeded; see indexAndBuild. */
   failures?: { job: IndexerJob; error: Error }[];
+  /** Decoded documents with repo-relative paths, for the reference index. */
+  documents?: GraphDocument[];
+  /** Indexer jobs the build ran (Java and C# roots are map gaps). */
+  jobs?: IndexerJob[];
 }
 
 export interface ScipOptions {
@@ -100,6 +105,7 @@ export class ScipGraphProvider implements GraphProvider {
   private proto?: protobuf.Root;
   private cache: { key: string; graph: Promise<BuiltGraph> } | undefined;
   private jobCache = new Map<string, { key: string; docs: Promise<ScipDocument[]> }>();
+  private referenceIndexes = new WeakMap<BuiltGraph, ReferenceIndex>();
 
   constructor(opts: ScipOptions = {}) {
     this.repoRoot = opts.repoRoot ?? process.env.SCIP_REPO_ROOT ?? repoRoot();
@@ -353,6 +359,17 @@ export class ScipGraphProvider implements GraphProvider {
     return (await this.buildGraph()).warnings ?? [];
   }
 
+  /** Symbol-level references for the component map, built once per graph. */
+  async getReferenceIndex(): Promise<ReferenceIndex> {
+    const g = await this.buildGraph();
+    let index = this.referenceIndexes.get(g);
+    if (!index) {
+      index = buildReferenceIndex(g.documents ?? [], sourceReader(this.repoRoot), mapGaps(g));
+      this.referenceIndexes.set(g, index);
+    }
+    return index;
+  }
+
   async getFileRequires(): Promise<FileRequires> {
     return (await this.buildGraph()).fileRequires;
   }
@@ -377,6 +394,7 @@ export class ScipGraphProvider implements GraphProvider {
       g.warnings = notices;
     }
     if (failures.length) g.failures = failures;
+    g.jobs = jobs;
     return g;
   }
 
@@ -891,5 +909,15 @@ export function buildGraphFromIndex(
   const implementations = collectImplementations(documents);
   const calls: CallWeights = new Map();
   for (const document of documents) collectDocumentCalls(document, nodes, implementations, calls);
-  return { nodes, ...callAdjacency(calls), fileRequires };
+  return { nodes, ...callAdjacency(calls), fileRequires, documents };
+}
+
+const UNMAPPED_LANGUAGES = new Set<IndexerLanguage>(["java", "cs"]);
+
+/** Index warnings plus one line per root in a language the map does not cover. */
+function mapGaps(g: BuiltGraph): string[] {
+  const unmapped = (g.jobs ?? [])
+    .filter((j) => UNMAPPED_LANGUAGES.has(j.language))
+    .map((j) => `${j.language} root '${j.root || "."}' is not yet mapped; its code is missing from the component map`);
+  return [...(g.warnings ?? []), ...unmapped];
 }

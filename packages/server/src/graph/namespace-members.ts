@@ -25,17 +25,27 @@ function modulePath(symbol: string): string | undefined {
 }
 
 /** Descriptor after the file segment: `` …`jobs.ts`/getJob(). `` → `getJob().`. */
-function descriptor(symbol: string): string {
-  const at = symbol.lastIndexOf("`/");
-  return at < 0 ? symbol : symbol.slice(at + 2);
+const descriptor = (symbol: string) => symbol.slice(symbol.lastIndexOf("`/") + 2);
+
+/** A named occurrence on one source line. */
+interface Span {
+  occurrence: ScipOccurrenceLike;
+  symbol: string;
+  line: number;
+  start: number;
+  end: number;
 }
 
-function lineCol(o: ScipOccurrenceLike): { line: number; start: number; end: number } | undefined {
-  const r = o.range;
-  if (!r || r.length < 3) return undefined;
-  const end = r.length === 4 ? (r[0] === r[2] ? r[3] : undefined) : r[2];
-  if (end === undefined) return undefined;
-  return { line: r[0]!, start: r[1]!, end };
+/** Occurrences with a symbol and a single-line range, in source order. */
+function spans(doc: NamespaceDocument): Span[] {
+  const out: Span[] = [];
+  for (const occurrence of doc.occurrences) {
+    const r = occurrence.range ?? [];
+    const end = r.length === 4 && r[0] === r[2] ? r[3] : r.length === 3 ? r[2] : undefined;
+    if (!occurrence.symbol || end === undefined) continue;
+    out.push({ occurrence, symbol: occurrence.symbol, line: r[0]!, start: r[1]!, end });
+  }
+  return out.sort((a, b) => a.line - b.line || a.start - b.start);
 }
 
 class ModuleExports {
@@ -70,8 +80,8 @@ class ModuleExports {
     if (!doc || seen.has(doc.file)) return undefined;
     seen.add(doc.file);
     const wanted = new Set([`${name}().`, `${name}.`, `${name}#`]);
-    const own = doc.occurrences.find((o) => o.symbol && !isLocal(o.symbol) && wanted.has(descriptor(o.symbol)));
-    if (own?.symbol) return own.symbol;
+    const own = spans(doc).find((o) => !isLocal(o.symbol) && wanted.has(descriptor(o.symbol)));
+    if (own) return own.symbol;
     for (const next of this.starExports(doc)) {
       const found = this.resolve(next, name, seen);
       if (found) return found;
@@ -81,28 +91,18 @@ class ModuleExports {
 
   /** Modules named on `export * from …` lines of a document. */
   private starExports(doc: NamespaceDocument): string[] {
-    const lines = this.sourceLines(doc.file);
-    if (!lines) return [];
-    return doc.occurrences
-      .filter((o) => o.symbol && isModule(o.symbol) && /^\s*export\s+\*/.test(lines[o.range?.[0] ?? -1] ?? ""))
-      .map((o) => o.symbol!);
+    const lines = this.sourceLines(doc.file) ?? [];
+    return spans(doc)
+      .filter((o) => isModule(o.symbol) && /^\s*export\s+\*/.test(lines[o.line]!))
+      .map((o) => o.symbol);
   }
 }
 
-function sortedOccurrences(doc: NamespaceDocument): ScipOccurrenceLike[] {
-  return [...doc.occurrences].sort(
-    (a, b) => (a.range?.[0] ?? 0) - (b.range?.[0] ?? 0) || (a.range?.[1] ?? 0) - (b.range?.[1] ?? 0),
-  );
-}
-
-/** The member name when `occ` is `ns.<member>` right after the module occurrence `prev`. */
-function memberName(prev: ScipOccurrenceLike, occ: ScipOccurrenceLike, lines: string[]): string | undefined {
-  const a = lineCol(prev);
-  const b = lineCol(occ);
-  if (!a || !b || a.line !== b.line || a.end + 1 !== b.start) return undefined;
-  const text = lines[b.line];
-  if (text?.[a.end] !== ".") return undefined;
-  return text.slice(b.start, b.end) || undefined;
+/** The member name when `b` is `ns.<member>` right after the module occurrence `a`. */
+function memberName(a: Span, b: Span, lines: string[]): string | undefined {
+  const text = lines[b.line] ?? "";
+  if (a.line !== b.line || a.end + 1 !== b.start || text[a.end] !== ".") return undefined;
+  return text.slice(b.start, b.end);
 }
 
 /** Rewrites resolvable namespace member locals in place; returns how many were resolved. */
@@ -110,16 +110,15 @@ export function resolveNamespaceMembers(documents: NamespaceDocument[], readSour
   const modules = new ModuleExports(documents, readSource);
   let resolved = 0;
   for (const doc of documents) {
-    const occurrences = sortedOccurrences(doc);
-    for (let i = 1; i < occurrences.length; i++) {
-      const prev = occurrences[i - 1]!;
-      const occ = occurrences[i]!;
-      if (!occ.symbol || !isLocal(occ.symbol) || !prev.symbol || !isModule(prev.symbol)) continue;
-      const lines = modules.sourceLines(doc.file);
-      const name = lines && memberName(prev, occ, lines);
-      const symbol = name && modules.resolve(prev.symbol, name);
+    const ordered = spans(doc);
+    for (let i = 1; i < ordered.length; i++) {
+      const prev = ordered[i - 1]!;
+      const occ = ordered[i]!;
+      if (!isLocal(occ.symbol) || !isModule(prev.symbol)) continue;
+      const lines = modules.sourceLines(doc.file) ?? [];
+      const symbol = modules.resolve(prev.symbol, memberName(prev, occ, lines) ?? "");
       if (!symbol) continue;
-      occ.symbol = symbol;
+      occ.occurrence.symbol = symbol;
       resolved++;
     }
   }

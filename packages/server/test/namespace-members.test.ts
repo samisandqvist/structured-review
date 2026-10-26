@@ -100,7 +100,9 @@ describe("resolveNamespaceMembers", () => {
     expect(resolveNamespaceMembers(docs, (f) => src[f])).toBe(0);
     expect(docs[2]!.occurrences[1]!.symbol).toBe("local 4");
   });
+});
 
+describe("resolveNamespaceMembers leaves what it cannot resolve", () => {
   it("leaves locals that do not follow a module occurrence", () => {
     const doc: NamespaceDocument = {
       file: "src/api/handler.ts",
@@ -127,6 +129,34 @@ describe("resolveNamespaceMembers", () => {
 
   it("leaves a member of a module that is not indexed", () => {
     const docs = [caller(`${PKG} node_modules/\`x.ts\`/`, [3, 8, 14])];
+    expect(resolveNamespaceMembers(docs, readSource)).toBe(0);
+  });
+
+  it("accepts four-element single-line ranges and skips multi-line or missing ranges", () => {
+    const doc = caller(INDEX_MODULE, [3, 8, 3, 14]);
+    doc.occurrences.push({ symbol: "local 9", symbolRoles: 0, range: [3, 8, 4, 2] }, { symbolRoles: 0 });
+    const docs = [jobs(), barrel(), doc];
+    expect(resolveNamespaceMembers(docs, readSource)).toBe(1);
+    expect(doc.occurrences[1]!.symbol).toBe(GET_JOB);
+  });
+
+  it("leaves members of package-level module symbols", () => {
+    const docs = [jobs(), caller(`${PKG} lodash/`, [3, 8, 14])];
+    expect(resolveNamespaceMembers(docs, readSource)).toBe(0);
+  });
+
+  it("finds a module in another indexer root by its path suffix", () => {
+    const rooted = { ...jobs(), file: "services/api/src/store/jobs.ts" };
+    const docs = [rooted, caller(JOBS_MODULE, [3, 8, 14])];
+    expect(resolveNamespaceMembers(docs, readSource)).toBe(1);
+  });
+
+  it("does not guess between two roots with the same module path", () => {
+    const docs = [
+      { ...jobs(), file: "a/src/store/jobs.ts" },
+      { ...jobs(), file: "b/src/store/jobs.ts" },
+      caller(JOBS_MODULE, [3, 8, 14]),
+    ];
     expect(resolveNamespaceMembers(docs, readSource)).toBe(0);
   });
 
