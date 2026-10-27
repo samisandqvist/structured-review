@@ -19822,12 +19822,14 @@ function collectDefinitions(documents) {
       if (!o.symbol || !hasRole(o, ROLE_DEFINITION2) || o.symbol.startsWith("local ") || definitions.has(o.symbol)) {
         continue;
       }
+      const end = o.enclosingRange && o.enclosingRange.length === 4 ? o.enclosingRange[2] + 1 : void 0;
       definitions.set(o.symbol, {
         symbol: o.symbol,
         file: doc.file,
         line: line1(o),
         name: symbolName(o.symbol),
-        kind: symbolKind(o.symbol)
+        kind: symbolKind(o.symbol),
+        ...end ? { endLine: end } : {}
       });
     }
   }
@@ -42675,7 +42677,7 @@ function unresolvedMap(model, issues, gaps) {
 // packages/server/src/map/base.ts
 init_diff();
 import { execFileSync as execFileSync3 } from "node:child_process";
-import { existsSync as existsSync4, mkdirSync, rmSync as rmSync2 } from "node:fs";
+import { existsSync as existsSync4, mkdirSync, readFileSync as readFileSync6, rmSync as rmSync2, writeFileSync } from "node:fs";
 import { join as join9 } from "node:path";
 var QUIET2 = { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] };
 function objectType(sha, root) {
@@ -42685,21 +42687,22 @@ function objectType(sha, root) {
     return null;
   }
 }
-function headOf(dir) {
-  if (!existsSync4(join9(dir, ".git"))) return null;
+var READY = join9(".git", "srev-ready");
+function readyAt(dir) {
   try {
-    return execFileSync3("git", ["rev-parse", "HEAD"], { cwd: dir, ...QUIET2 }).trim();
+    return readFileSync6(join9(dir, READY), "utf8").trim();
   } catch {
     return null;
   }
 }
 function checkout(dir, repoRoot2, sha) {
-  if (headOf(dir) === sha) return;
+  if (readyAt(dir) === sha) return;
   rmSync2(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true, mode: 448 });
   try {
     execFileSync3("git", ["clone", "--shared", "--no-checkout", "-q", repoRoot2, dir], QUIET2);
     execFileSync3("git", ["checkout", "-q", "--detach", sha], { cwd: dir, ...QUIET2 });
+    writeFileSync(join9(dir, READY), sha);
   } catch (e) {
     rmSync2(dir, { recursive: true, force: true });
     throw new GitError("base-checkout", `cannot check out base commit ${sha}: ${e.message}`);
@@ -42743,6 +42746,8 @@ function compareVersions(input2, baseSha) {
   const bound = resolveBindings(input2.model, tree, input2.head);
   const declared = new Map(input2.model.interfaces.map((i) => [i.id, new Set(i.requirers)]));
   const refs = resolveReferences(input2.head, tree, bound, declared);
+  const changedPaths = new Set(input2.files.flatMap((f) => [f.path, ...f.oldPath ? [f.oldPath] : []]));
+  const keep = siteGuard(input2.base, bound, changedPaths);
   const headSites = input2.model.interfaces.map((i) => ({ id: i.id, sites: refs.sites.get(i.id) ?? [] }));
   const surfaces2 = refs.uncovered.map((u) => ({
     id: `new:${u.provider}:${u.def.file}:${u.def.name}`,
@@ -42753,39 +42758,55 @@ function compareVersions(input2, baseSha) {
     line: u.def.line,
     references: u.count,
     where: u.where.slice(0, MAX_SAMPLES2),
-    sites: u.sites
-  }));
+    sites: u.sites.filter((s) => changedPaths.has(s.file) || changedPaths.has(u.def.file))
+  })).filter((s) => s.sites.length > 0);
   const changed = input2.nodes.filter((n) => n.changed);
-  const crossed = crossings(input2.base.interfaces, headSites);
+  const crossed = crossings(input2.base.interfaces, headSites, keep);
   return {
     baseSha,
     ...placement(tree, changed, input2.files),
     crossings: crossed,
     surfaces: surfaces2,
-    delegations: newDelegations(tree, input2.base, crossed, surfaces2),
-    touched: touched(input2, bound, changed)
+    ...delegationChanges(tree, input2.base, bound, crossed, surfaces2),
+    touched: touched(input2, bound, changed, changedPaths)
   };
 }
-function newDelegations(tree, base, crossed, surfaces2) {
-  const shape = (id, provider, sites, bindings) => ({
-    id,
-    provider,
+function siteGuard(base, bound, changedPaths) {
+  const targets = /* @__PURE__ */ new Map();
+  const add = (iface, name, file2) => {
+    const key = `${iface}\0${name}`;
+    targets.set(key, (targets.get(key) ?? /* @__PURE__ */ new Set()).add(file2));
+  };
+  for (const i of base.interfaces) for (const b of i.bindings) add(i.id, b.name, b.file);
+  for (const [iface, list] of bound.bindings) for (const b of list) add(iface, b.name, b.file);
+  return (iface, site) => changedPaths.has(site.file) || [...targets.get(`${iface}\0${site.symbol}`) ?? []].some((f) => changedPaths.has(f));
+}
+var delegationKey = (d) => `${d.interface}\0${d.side}\0${d.outer}\0${d.inner}`;
+function delegationChanges(tree, base, bound, crossed, surfaces2) {
+  const removed = new Set(crossed.flatMap((c) => c.removed.map((s) => `${c.interface}\0${siteKey(s)}`)));
+  const head = base.interfaces.map((i) => ({
+    ...i,
+    bindings: bound.bindings.get(i.id) ?? [],
+    sites: [
+      ...i.sites.filter((s) => !removed.has(`${i.id}\0${siteKey(s)}`)),
+      ...crossed.filter((c) => c.interface === i.id).flatMap((c) => c.added)
+    ]
+  }));
+  const shapes = surfaces2.map((s) => ({
+    id: s.id,
+    provider: s.provider,
     requirers: [],
-    sites,
-    bindings,
-    evidenceFiles: []
-  });
-  const synthetic = [
-    ...crossed.map((c) => shape(c.interface, "", c.added, [])),
-    ...surfaces2.map(
-      (s) => shape(s.id, s.provider, s.sites, [
-        { symbol: s.id, name: s.symbol, file: s.file, line: s.line, component: tree.ownerOf(s.file) }
-      ])
-    )
-  ];
-  const key = (d) => `${d.interface}\0${d.side}\0${d.outer}\0${d.inner}`;
-  const known = new Set(base.delegations.map(key));
-  return deriveDelegations(synthetic, tree).filter((d) => !known.has(key(d)));
+    sites: s.sites,
+    evidenceFiles: [],
+    bindings: [{ symbol: s.id, name: s.symbol, file: s.file, line: s.line, component: tree.ownerOf(s.file) }]
+  }));
+  const after = deriveDelegations([...head, ...shapes], tree);
+  const afterKeys = new Set(after.map(delegationKey));
+  const beforeKeys = new Set(base.delegations.map(delegationKey));
+  return {
+    delegations: after.filter((d) => !beforeKeys.has(delegationKey(d))),
+    removedDelegations: base.delegations.filter((d) => !afterKeys.has(delegationKey(d)))
+  };
 }
 var crossingKey = (iface, requirer) => `${iface}\0${requirer}`;
 var siteKey = (s) => `${s.file}|${s.caller}|${s.symbol}`;
@@ -42799,7 +42820,7 @@ function byCrossing(interfaces) {
   }
   return out;
 }
-function crossings(base, head) {
+function crossings(base, head, keep) {
   const before = byCrossing(base);
   const after = byCrossing(head);
   const out = [];
@@ -42809,25 +42830,26 @@ function crossings(base, head) {
     const now = after.get(key) ?? [];
     const oldKeys = new Set(old.map(siteKey));
     const newKeys = new Set(now.map(siteKey));
-    const added = now.filter((s) => !oldKeys.has(siteKey(s)));
-    const removed = old.filter((s) => !newKeys.has(siteKey(s)));
+    const added = now.filter((s) => !oldKeys.has(siteKey(s)) && keep(iface, s));
+    const removed = old.filter((s) => !newKeys.has(siteKey(s)) && keep(iface, s));
     if (added.length === 0 && removed.length === 0) continue;
-    const status = old.length === 0 ? "new" : now.length === 0 ? "removed" : "changed";
+    const gone = removed.length === old.length && added.length === 0 && now.length === 0;
+    const status = old.length === 0 ? "new" : gone ? "removed" : "changed";
     out.push({ interface: iface, requirer, status, added, removed });
   }
   return out;
 }
-function touched(input2, bound, changed) {
+function touched(input2, bound, changed, changedPaths) {
   const spans2 = changed.filter((n) => !n.residual && !n.isTest);
-  const inBody = (file2, line) => spans2.some((n) => n.file === file2 && n.startLine <= line && line <= n.endLine) || input2.changedLines(file2).some((r) => r.start <= line && line <= r.end);
-  const changedPaths = new Set(input2.files.flatMap((f) => [f.path, ...f.oldPath ? [f.oldPath] : []]));
+  const overlaps2 = (file2, start, end) => spans2.some((n) => n.file === file2 && n.startLine <= end && start <= n.endLine) || input2.changedLines(file2).some((r) => r.start <= end && start <= r.end);
   const baseBindings = new Map(input2.base.interfaces.map((i) => [i.id, i.bindings]));
   const out = [];
   for (const iface of input2.model.interfaces) {
     const head = bound.bindings.get(iface.id) ?? [];
-    const headSymbols = new Set(head.map((b) => b.symbol));
-    const body = head.filter((b) => inBody(b.file, b.line)).map((b) => b.name);
-    const lost = (baseBindings.get(iface.id) ?? []).filter((b) => !headSymbols.has(b.symbol)).map((b) => b.name);
+    const headNames = new Set(head.map((b) => b.name));
+    const endOf = (b) => input2.head.definitions.get(b.symbol)?.endLine ?? b.line;
+    const body = head.filter((b) => overlaps2(b.file, b.line, endOf(b))).map((b) => b.name);
+    const lost = (baseBindings.get(iface.id) ?? []).filter((b) => !headNames.has(b.name)).map((b) => b.name);
     const evidence = iface.evidence.some((f) => changedPaths.has(f));
     const reasons = [
       ...body.length > 0 ? ["body"] : [],
@@ -42945,9 +42967,11 @@ function createMapRoute(ctx) {
 var headIndex = (ctx) => ctx.graphProvider.getReferenceIndex();
 async function mapSource(ctx, session) {
   const root = ctx.repoRoot;
-  const sha = diffBase(session);
-  const type = objectType(sha, root);
-  if (type === null) throw new GitError("base-checkout", `the session's base ${sha} is not in the repository`);
+  const sha = resolveRef(diffBase(session), root);
+  const type = sha && objectType(sha, root);
+  if (!sha || !type) {
+    throw new GitError("base-checkout", `the session's base ${diffBase(session)} is not in the repository`);
+  }
   if (ctx.bases && type === "commit") return { ...await ctx.bases.get(session.id, root, sha), baseSha: sha };
   return { root, index: await headIndex(ctx) };
 }

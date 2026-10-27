@@ -54,33 +54,60 @@ function delegationKey(level: Level, edge: { from: string; to: string; iface: st
   return undefined;
 }
 
-/** Change marks of a level's connectors, by edge id; unmarked connectors are absent. */
+/** Change marks of a level's connectors, by edge id; unmarked connectors are absent.
+ *  A delegation is new or removed when the head gained or lost it, and changed
+ *  when its inner part holds added or removed call sites; other connectors take
+ *  the status of the crossing their requirer side belongs to. */
 export function edgeChanges(map: ResolvedMap, level: Level): Map<string, ChangeStatus> {
   const out = new Map<string, ChangeStatus>();
   const change = map.change;
   if (!change) return out;
-  const crossing = new Map(change.crossings.map((c) => [key(c.interface, c.requirer), c.status]));
+  const crossings = new Map(change.crossings.map((c) => [key(c.interface, c.requirer), c]));
   const surfaces = new Set(change.surfaces.map((s) => s.id));
-  const delegated = new Set(change.delegations.map((d) => key(d.interface, d.side, d.outer, d.inner)));
+  const added = new Set(change.delegations.map((d) => key(d.interface, d.side, d.outer, d.inner)));
+  const removed = new Set(change.removedDelegations.map((d) => key(d.interface, d.side, d.outer, d.inner)));
   const up = ancestry(map);
+  const crossingOf = (iface: string, node: string) =>
+    up(node)
+      .map((a) => crossings.get(key(iface, a)))
+      .find(Boolean);
   for (const edge of level.edges.values()) {
     const from = level.ports.get(edge.from)!;
     const delegation = delegationKey(level, edge);
-    let status: ChangeStatus | undefined =
-      surfaces.has(edge.iface) || (delegation && delegated.has(delegation)) ? "new" : undefined;
-    if (!status && from.role === "require") {
-      status = up(from.node)
-        .map((a) => crossing.get(key(edge.iface, a)))
-        .find(Boolean);
-    }
+    let status: ChangeStatus | undefined;
+    if (surfaces.has(edge.iface) || (delegation && added.has(delegation))) status = "new";
+    else if (delegation && removed.has(delegation)) status = "removed";
+    else if (delegation)
+      status = innerChanged(crossingOf(edge.iface, from.node), from.node, up) ? "changed" : undefined;
+    else if (from.role === "require") status = crossingOf(edge.iface, from.node)?.status;
     if (status) out.set(edge.id, status);
   }
   return out;
 }
 
+function innerChanged(
+  crossing: MapChange["crossings"][number] | undefined,
+  inner: string,
+  up: (id: string) => string[],
+): boolean {
+  return !!crossing && [...crossing.added, ...crossing.removed].some((s) => up(s.component).includes(inner));
+}
+
 /** Changed review items by the component they sit in ("" for none), in walk
  *  order. A test sits with the item it is attached to in the plan. */
-export function placeItems(change: MapChange, nodes: Node[], units: Unit[], flows: Flow[]): Map<string, Node[]> {
+export function placeItems(
+  map: ResolvedMap,
+  change: MapChange,
+  nodes: Node[],
+  units: Unit[],
+  flows: Flow[],
+): Map<string, Node[]> {
+  const byId = new Map(map.components.map((c) => [c.id, c]));
+  // A utility has no box on the map: its items sit with its nearest visible ancestor.
+  const visible = (id: string): string => {
+    const c = byId.get(id);
+    return c?.utility && c.parent ? visible(c.parent) : id;
+  };
   const byStable = new Map(nodes.map((n) => [n.stableId, n]));
   const parentOf = new Map(units.flatMap((u) => (u.attached ?? []).map((a) => [a.stableId, a.parentStableId])));
   const walk = new Map(buildWalkOrder(units, flows, nodes).map((w, i) => [w.nodeId, i]));
@@ -91,7 +118,8 @@ export function placeItems(change: MapChange, nodes: Node[], units: Unit[], flow
   const out = new Map<string, Node[]>();
   for (const n of changed) {
     const parent = n.isTest ? byStable.get(parentOf.get(n.stableId) ?? "") : undefined;
-    const component = (parent && change.nodeComponents[parent.id]) ?? change.nodeComponents[n.id] ?? "";
+    const owner = (parent && change.nodeComponents[parent.id]) ?? change.nodeComponents[n.id];
+    const component = owner ? visible(owner) : "";
     out.set(component, [...(out.get(component) ?? []), n]);
   }
   return out;

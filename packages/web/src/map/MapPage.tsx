@@ -177,7 +177,7 @@ function useReview(sessionId: string, map: ResolvedMap): PanelReview | undefined
     if (!map.change || !nodes.data) return undefined;
     return {
       change: map.change,
-      placed: placeItems(map.change, nodes.data.nodes, session.data?.units ?? [], flows.data?.flows ?? []),
+      placed: placeItems(map, map.change, nodes.data.nodes, session.data?.units ?? [], flows.data?.flows ?? []),
       onReview: (nodeId: string) => {
         useUIStore.getState().setCurrentNode(nodeId, "walk");
         navigateToSession(sessionId);

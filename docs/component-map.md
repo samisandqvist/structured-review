@@ -131,7 +131,10 @@ item opens it in the review view, where marks and comments work as in the
 walk; the walk and the map share the same progress.
 
 Calls are compared by calling function and called symbol, so code that only
-moved within a file is not marked. A new or removed cross-process connection
+moved within a file is not marked. A call is marked only when its calling file
+or the called definition's file changed; a difference between files the change
+did not touch can only come from indexing the two checkouts (a workspace
+package that resolves in one of them) and is left out. A new or removed cross-process connection
 is not detected; only changes to its evidence files are.
 
 ## Languages and limits

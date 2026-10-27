@@ -109,6 +109,7 @@ describe("buildReferenceIndex", () => {
     expect(index.definitions.get(REPO_FIND)).toEqual({
       symbol: REPO_FIND,
       file: "src/store/repo.ts",
+      endLine: 4,
       line: 2,
       name: "Repo#find",
       kind: "method",

@@ -172,6 +172,7 @@ export function fixtureChange(): MapChange {
       },
     ],
     delegations: [{ interface: "new:store:src/store/cache.ts:warm", side: "required", outer: "core", inner: "engine" }],
+    removedDelegations: [],
     touched: [{ interface: "reads", reasons: ["body"], symbols: ["getJob"] }],
     unmapped: [{ component: "orchestrator", files: ["src/main.ts"] }],
   };

@@ -76,6 +76,13 @@ const MODEL = {
 
 const checked = checkMap(MODEL, index(BASE_REFS), () => true);
 
+/** The fixture's source files that hold calls or bound symbols, all changed: the
+ *  guard against index artefacts keeps sites whose caller or target changed. */
+const CHANGED_CODE = ["src/store/jobs.ts", "src/core/run.ts", "src/core/clock.ts"].map((path) => ({
+  path,
+  status: "modified",
+}));
+
 function compare(over: Partial<Omit<ChangeInput, "model" | "base">> = {}) {
   return compareVersions(
     {
@@ -83,7 +90,7 @@ function compare(over: Partial<Omit<ChangeInput, "model" | "base">> = {}) {
       base: checked.map,
       head: index(BASE_REFS),
       nodes: [],
-      files: [],
+      files: CHANGED_CODE,
       changedLines: () => [],
       ...over,
     },
@@ -94,13 +101,14 @@ function compare(over: Partial<Omit<ChangeInput, "model" | "base">> = {}) {
 describe("compareVersions", () => {
   it("starts from a base map that passes the check", () => {
     expect(checked.map.report.ok).toBe(true);
-    expect(compare()).toEqual({
+    expect(compare({ files: [] })).toEqual({
       baseSha: "abc123",
       components: [],
       nodeComponents: {},
       crossings: [],
       surfaces: [],
       delegations: [],
+      removedDelegations: [],
       touched: [],
       unmapped: [],
     });
@@ -286,7 +294,14 @@ describe("compareVersions delegations", () => {
     );
     expect(base.map.report.ok).toBe(true);
     const change = compareVersions(
-      { model: base.model, base: base.map, head, nodes: [], files: [], changedLines: () => [] },
+      {
+        model: base.model,
+        base: base.map,
+        head,
+        nodes: [],
+        files: [...CHANGED_CODE, { path: "src/store/cache.ts", status: "modified" }],
+        changedLines: () => [],
+      },
       "abc123",
     );
     expect(change.surfaces).toEqual([
@@ -300,5 +315,57 @@ describe("compareVersions delegations", () => {
       { interface: "writes", side: "required", outer: "core", inner: "clock" },
       { interface: "new:store:src/store/cache.ts:warm", side: "provided", outer: "store", inner: "cache" },
     ]);
+  });
+  it("reports delegations the head no longer has", () => {
+    const withClock: Ref[] = [...BASE_REFS, ["src/core/clock.ts", "src/store/jobs.ts:getJob", "tock", 2]];
+    const before = checkMap(nested, index(withClock, defs), () => true);
+    expect(before.map.report.ok).toBe(true);
+    const change = compareVersions(
+      {
+        model: before.model,
+        base: before.map,
+        head: index(BASE_REFS, defs),
+        nodes: [],
+        files: CHANGED_CODE,
+        changedLines: () => [],
+      },
+      "abc123",
+    );
+    expect(change.removedDelegations).toEqual([
+      { interface: "reads", side: "required", outer: "core", inner: "clock" },
+    ]);
+    expect(change.delegations).toEqual([]);
+  });
+});
+
+describe("compareVersions review fixes", () => {
+  const withVersion = (idx: ReferenceIndex, version: string): ReferenceIndex => {
+    const swap = (sym: string) => sym.replace("fx 1.0", `fx ${version}`);
+    return {
+      ...idx,
+      definitions: new Map([...idx.definitions].map(([k, d]) => [swap(k), { ...d, symbol: swap(k) }])),
+      references: idx.references.map((r) => ({ ...r, symbol: swap(r.symbol) })),
+    };
+  };
+
+  it("keeps bindings whose symbols only changed their package version", () => {
+    const change = compare({ head: withVersion(index(BASE_REFS), "2.0") });
+    expect(change.touched).toEqual([]);
+    expect(change.crossings).toEqual([]);
+    expect(change.surfaces).toEqual([]);
+  });
+
+  it("marks a contract touched when a line inside the bound definition changed", () => {
+    const head = index(BASE_REFS);
+    const save = head.definitions.get(S("src/store/jobs.ts", "saveJob"))!;
+    head.definitions.set(save.symbol, { ...save, endLine: 9 });
+    const change = compare({ head, changedLines: (f) => (f === "src/store/jobs.ts" ? [{ start: 8, end: 8 }] : []) });
+    expect(change.touched).toEqual([{ interface: "writes", reasons: ["body"], symbols: ["saveJob"] }]);
+  });
+
+  it("ignores call sites that appear or vanish where neither end changed", () => {
+    const head = index([...BASE_REFS, ["src/api/handler.ts", "src/store/jobs.ts:saveJob", "handle", 6]]);
+    const change = compare({ head, files: [{ path: "src/core/run.ts", status: "modified" }] });
+    expect(change.crossings).toEqual([]);
   });
 });

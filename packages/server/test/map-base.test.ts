@@ -99,6 +99,17 @@ describe("BaseIndexes", () => {
   });
 });
 
+describe("BaseIndexes after an interrupted checkout", () => {
+  it("does not reuse a clone whose checkout never finished", async () => {
+    const headSha = git("rev-parse", "HEAD");
+    const dir = join(baseDir, "ses_crash");
+    execFileSync("git", ["clone", "--shared", "--no-checkout", "-q", repo, dir]);
+    const bases = new BaseIndexes(baseDir, stubProviders().providerFor);
+    const { root } = await bases.get("ses_crash", repo, headSha);
+    expect(readFileSync(join(root, "src/a.ts"), "utf8")).toContain("head");
+  });
+});
+
 describe("objectType", () => {
   it("tells commits from the empty tree and unknown shas", () => {
     expect(objectType(baseSha, repo)).toBe("commit");

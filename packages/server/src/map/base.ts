@@ -4,7 +4,7 @@
 // it; it lives in the hub's per-user base directory as a cache that is
 // rebuilt when it is missing and removed with its session.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { GitError } from "../diff.js";
 import type { GraphProvider } from "../graph/provider.js";
@@ -26,22 +26,25 @@ export function objectType(sha: string, root: string): string | null {
   }
 }
 
-function headOf(dir: string): string | null {
-  if (!existsSync(join(dir, ".git"))) return null;
+/** Written after a checkout completes; a clone without it was interrupted. */
+const READY = join(".git", "srev-ready");
+
+function readyAt(dir: string): string | null {
   try {
-    return execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, ...QUIET }).trim();
+    return readFileSync(join(dir, READY), "utf8").trim();
   } catch {
     return null;
   }
 }
 
 function checkout(dir: string, repoRoot: string, sha: string): void {
-  if (headOf(dir) === sha) return;
+  if (readyAt(dir) === sha) return;
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   try {
     execFileSync("git", ["clone", "--shared", "--no-checkout", "-q", repoRoot, dir], QUIET);
     execFileSync("git", ["checkout", "-q", "--detach", sha], { cwd: dir, ...QUIET });
+    writeFileSync(join(dir, READY), sha);
   } catch (e) {
     rmSync(dir, { recursive: true, force: true });
     throw new GitError("base-checkout", `cannot check out base commit ${sha}: ${(e as Error).message}`);

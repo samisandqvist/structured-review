@@ -137,6 +137,8 @@ export interface MapChange {
   surfaces: NewSurface[];
   /** Delegations of new call sites and new surfaces that the base map lacks. */
   delegations: Delegation[];
+  /** Base delegations the head no longer has. */
+  removedDelegations: Delegation[];
   touched: TouchedContract[];
   /** Changed files no leaf claims: owned by no component (null) or by a component with parts. */
   unmapped: { component: string | null; files: string[] }[];

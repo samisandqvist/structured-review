@@ -8,7 +8,7 @@ import { getMap, saveMap } from "../repo/maps.js";
 import { IndexError, sourceReader } from "../graph/scip.js";
 import { findMarkerRoots } from "../graph/roots.js";
 import type { ReferenceIndex } from "../graph/references.js";
-import { changedFileStatuses, fileChangedRanges, GitError, type LineRange } from "../diff.js";
+import { changedFileStatuses, fileChangedRanges, GitError, resolveRef, type LineRange } from "../diff.js";
 import { loadComponentMap } from "../component-map.js";
 import { buildEvidence } from "../map/evidence.js";
 import { checkMap } from "../map/check.js";
@@ -117,9 +117,13 @@ const headIndex = (ctx: AppContext) => ctx.graphProvider.getReferenceIndex!();
 
 async function mapSource(ctx: AppContext, session: ReviewSession): Promise<MapSource> {
   const root = ctx.repoRoot!;
-  const sha = diffBase(session);
-  const type = objectType(sha, root);
-  if (type === null) throw new GitError("base-checkout", `the session's base ${sha} is not in the repository`);
+  // Resolved in the reviewed repository: a branch name means something else
+  // inside the base clone, and a tag peels to its commit.
+  const sha = resolveRef(diffBase(session), root);
+  const type = sha && objectType(sha, root);
+  if (!sha || !type) {
+    throw new GitError("base-checkout", `the session's base ${diffBase(session)} is not in the repository`);
+  }
   if (ctx.bases && type === "commit") return { ...(await ctx.bases.get(session.id, root, sha)), baseSha: sha };
   return { root, index: await headIndex(ctx) };
 }

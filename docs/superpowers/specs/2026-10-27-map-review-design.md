@@ -168,6 +168,11 @@ files were identical with and without the head's `node_modules` linked in.
 scip-python resolves packages from the interpreter environment, which base and
 head share. The copy is indexed bare.
 
+Calls between files the change did not touch are left out of the comparison:
+the code is identical in both checkouts, so any difference is an artefact of
+indexing (a workspace package that resolves through `node_modules` at the head
+and not in the bare copy).
+
 Both indexes are limited to tracked files. Indexers also pick up gitignored
 build output in the working tree, which a clean checkout of the base lacks;
 counting it would mark its references as new.

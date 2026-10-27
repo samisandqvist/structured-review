@@ -76,7 +76,7 @@ describe("edgeChanges", () => {
 });
 
 describe("placeItems", () => {
-  const placed = placeItems(fixtureChange(), NODES, UNITS, FLOWS);
+  const placed = placeItems(fixtureMap(), fixtureChange(), NODES, UNITS, FLOWS);
 
   it("puts changed items in their component in walk order, tests with what they test", () => {
     expect([...placed.keys()].sort()).toEqual(["engine", "orchestrator", "store"]);
@@ -86,7 +86,7 @@ describe("placeItems", () => {
   });
 
   it("places tests nothing attaches by their path", () => {
-    const loose = placeItems(fixtureChange(), NODES, [], []);
+    const loose = placeItems(fixtureMap(), fixtureChange(), NODES, [], []);
     expect(loose.get("")!.map((n) => n.id)).toEqual(["t1"]);
     expect(loose.get("engine")!.map((n) => n.id)).toEqual(["n1", "n5"]);
   });
@@ -98,5 +98,39 @@ describe("placeItems", () => {
     expect(counts.get("store")).toEqual({ changed: 1, reviewed: 1 });
     expect(counts.get("orchestrator")).toEqual({ changed: 5, reviewed: 2 });
     expect(counts.has("api")).toBe(false);
+  });
+});
+
+describe("review fixes", () => {
+  it("marks delegations inside a part by what changed in that part", () => {
+    const change = {
+      ...fixtureChange(),
+      crossings: [
+        {
+          interface: "writes",
+          requirer: "core",
+          status: "changed" as const,
+          added: [{ ...fixtureChange().crossings[1]!.added[0]!, component: "engine", requirer: "core" }],
+          removed: [],
+        },
+      ],
+      removedDelegations: [{ interface: "reads", side: "required" as const, outer: "core", inner: "engine" }],
+    };
+    const drawn = drawnMap({ ...fixtureMap(), change });
+    const level = buildLevel(drawn, "core");
+    const marks = edgeChanges(drawn, level);
+    const edge = (iface: string) =>
+      [...level.edges.values()].find((e) => e.iface === iface && e.from.startsWith("engine|"))!.id;
+    expect(marks.get(edge("reads"))).toBe("removed");
+    expect(marks.get(edge("writes"))).toBe("changed");
+    expect(marks.has(edge("item-feed"))).toBe(false);
+  });
+
+  it("places items of a hidden utility on its nearest visible ancestor", () => {
+    const nodes = [...NODES, { ...NODES[0]!, id: "n6", stableId: "s-n6", file: "src/infra/log.ts" }];
+    const change = { ...fixtureChange(), nodeComponents: { ...fixtureChange().nodeComponents, n6: "infra" } };
+    const placed = placeItems(fixtureMap(), change, nodes, [], []);
+    expect(placed.get("orchestrator")!.map((n) => n.id)).toEqual(["n6", "n3"]);
+    expect(placed.has("infra")).toBe(false);
   });
 });

@@ -132,6 +132,7 @@ export interface MapChange {
   crossings: CrossingChange[];
   surfaces: NewSurface[];
   delegations: Delegation[];
+  removedDelegations: Delegation[];
   touched: TouchedContract[];
   unmapped: { component: string | null; files: string[] }[];
 }

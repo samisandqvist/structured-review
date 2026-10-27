@@ -297,6 +297,14 @@ describe("component map routes in a review session", () => {
     expect(baseRoots).toEqual([join(baseDir, id)]);
   });
 
+  it("resolves the base ref of a session without a pinned commit in the reviewed repository", async () => {
+    const id = await session();
+    db.prepare("UPDATE review_sessions SET base_sha = '' WHERE id = ?").run(id);
+    const res = await app.request(`/api/sessions/${id}/map/evidence`);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { baseSha: string }).baseSha).toBe(baseSha);
+  });
+
   it("checks the model on the base and stores the change on submit", async () => {
     const id = await session();
     const check = await send(`/api/sessions/${id}/map/check`, "POST", REVIEW_MODEL);

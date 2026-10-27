@@ -11,6 +11,8 @@ export interface SymbolDef {
   symbol: string;
   file: string;
   line: number;
+  /** Last line of the definition's body, when the indexer records it. */
+  endLine?: number;
   name: string;
   kind: SymbolKind;
 }
@@ -105,12 +107,14 @@ function collectDefinitions(documents: IndexedDocument[]): Map<string, SymbolDef
       if (!o.symbol || !hasRole(o, ROLE_DEFINITION) || o.symbol.startsWith("local ") || definitions.has(o.symbol)) {
         continue;
       }
+      const end = o.enclosingRange && o.enclosingRange.length === 4 ? o.enclosingRange[2]! + 1 : undefined;
       definitions.set(o.symbol, {
         symbol: o.symbol,
         file: doc.file,
         line: line1(o),
         name: symbolName(o.symbol),
         kind: symbolKind(o.symbol),
+        ...(end ? { endLine: end } : {}),
       });
     }
   }
