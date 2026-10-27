@@ -2,7 +2,7 @@
   "name": "structured-review",
   "version": "0.15.2",
   "displayName": "Structured Review",
-  "description": "Walk a reviewer through code changes along the call/dependency graph instead of a file tree. Structured review plans, a local web UI, and exported line-anchored comments.",
+  "description": "Walk a reviewer through code changes along the call/dependency graph instead of a file tree. Structured review plans, a local web UI, exported line-anchored comments, and nested component maps of a codebase.",
   "author": {
     "name": "Sami Sandqvist"
   },

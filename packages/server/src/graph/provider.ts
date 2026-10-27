@@ -1,4 +1,5 @@
 import type { ChangeStatus, EdgeType } from "../types.js";
+import type { ReferenceIndex } from "./references.js";
 
 export interface GraphNode {
   stableId: string;
@@ -64,6 +65,9 @@ export interface GraphProvider {
    *  to filter test-import candidates (type-only edges are weak evidence,
    *  #12). Absent/empty = required-by pass finds nothing. */
   getFileRequires?(): Promise<FileRequires>;
+  /** Optional: symbol-level definitions and cross-file references for the
+   *  component map. Absent = the provider cannot back a map. */
+  getReferenceIndex?(): Promise<ReferenceIndex>;
 }
 
 /** consumer file -> defining file -> evidence strength of the edge. */

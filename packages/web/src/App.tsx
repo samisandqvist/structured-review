@@ -1,11 +1,14 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useUIStore } from "./store/ui.js";
-import { useNodes, useSession, useSessions } from "./api/hooks.js";
-import { navigateToSession, sessionUrl } from "./navigation.js";
+import { useMap, useNodes, useSession, useSessions } from "./api/hooks.js";
+import { mapUrl, navigateToSession, sessionUrl } from "./navigation.js";
 import { resolveSession } from "./session-resolution.js";
 import { SplitLayout } from "./components/SplitLayout.js";
 import { SessionPicker } from "./components/SessionPicker.js";
+
+// The map page carries the layout engine; load it only when a map is opened.
+const MapPage = lazy(() => import("./map/MapPage.js").then((m) => ({ default: m.MapPage })));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 1000, refetchOnWindowFocus: false } },
@@ -21,7 +24,8 @@ export function App() {
 
 function ReviewShell() {
   const currentNodeId = useUIStore((s) => s.currentNodeId);
-  const paramId = new URLSearchParams(window.location.search).get("session");
+  const params = new URLSearchParams(window.location.search);
+  const paramId = params.get("session");
   const { data, isError } = useSessions();
   const resolution = resolveSession(paramId, data?.sessions);
 
@@ -33,6 +37,13 @@ function ReviewShell() {
     }
   }, [paramId, resolution]);
 
+  if (resolution.kind === "session" && params.get("view") === "map") {
+    return (
+      <Suspense fallback={<div className="session-picker session-picker--loading">Loading the component map…</div>}>
+        <MapPage sessionId={resolution.sessionId} />
+      </Suspense>
+    );
+  }
   if (resolution.kind === "session") {
     return (
       <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
@@ -134,43 +145,60 @@ export function StatusBar({ sessionId }: { sessionId: string }) {
           </span>
         </div>
       )}
+      <MapLink sessionId={sessionId} />
       <div style={{ flex: 1, minWidth: 8 }} />
 
-      {total > 0 && (
-        <div className="statusbar__progress">
-          <span
-            className="statusbar__progress-label"
-            style={{ color: "var(--dim)", fontSize: 15, letterSpacing: "0.08em" }}
-          >
-            REVIEWED
-          </span>
-          <div
-            className="statusbar__meter"
-            style={{
-              height: 6,
-              borderRadius: 3,
-              background: "var(--surface-2)",
-              overflow: "hidden",
-              border: "1px solid var(--line)",
-            }}
-          >
-            <div
-              style={{
-                width: `${pct}%`,
-                height: "100%",
-                background: "var(--trace)",
-                boxShadow: "0 0 8px var(--trace-glow)",
-                transition: "width 0.3s ease",
-              }}
-            />
-          </div>
-          <span style={{ fontSize: 17, fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>
-            {reviewed}
-            <span style={{ color: "var(--dim)" }}>/{total}</span>
-          </span>
-        </div>
-      )}
+      {total > 0 && <ReviewProgress reviewed={reviewed} total={total} pct={pct} />}
     </header>
+  );
+}
+
+/** Review progress: a meter and reviewed/total changed nodes. */
+function ReviewProgress({ reviewed, total, pct }: { reviewed: number; total: number; pct: number }) {
+  return (
+    <div className="statusbar__progress">
+      <span
+        className="statusbar__progress-label"
+        style={{ color: "var(--dim)", fontSize: 15, letterSpacing: "0.08em" }}
+      >
+        REVIEWED
+      </span>
+      <div
+        className="statusbar__meter"
+        style={{
+          height: 6,
+          borderRadius: 3,
+          background: "var(--surface-2)",
+          overflow: "hidden",
+          border: "1px solid var(--line)",
+        }}
+      >
+        <div
+          style={{
+            width: `${pct}%`,
+            height: "100%",
+            background: "var(--trace)",
+            boxShadow: "0 0 8px var(--trace-glow)",
+            transition: "width 0.3s ease",
+          }}
+        />
+      </div>
+      <span style={{ fontSize: 17, fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>
+        {reviewed}
+        <span style={{ color: "var(--dim)" }}>/{total}</span>
+      </span>
+    </div>
+  );
+}
+
+/** Shown once the session has a component map. */
+function MapLink({ sessionId }: { sessionId: string }) {
+  const { data } = useMap(sessionId);
+  if (!data) return null;
+  return (
+    <a className="statusbar__field statusbar__map-link" data-testid="map-link" href={mapUrl(sessionId)}>
+      component map
+    </a>
   );
 }
 

@@ -99,18 +99,30 @@ add \`--pretty\` for humans. State stays in the plugin data directory. Relay
 installation errors; retry after the reported npm/network problem is fixed.
 Use this CLI for orchestration; never touch SQLite or hand-roll \`curl\`.`;
 
-const skillSrc = readFileSync(join(root, "packages/skill/skill.md"), "utf8");
-const generated = skillSrc
-  .replace(/^<!--[\s\S]*?-->\n/, "") // source-of-truth header comment
-  .replace(/<!-- srev-invocation:start[\s\S]*?srev-invocation:end -->/, PLUGIN_INVOCATION)
-  .replace(/<!-- plugin:language-support[^>]*-->\n/, `${LANGUAGE_SUPPORT}\n`);
-for (const marker of ["srev-invocation", "plugin:language-support"]) {
-  if (!generated.includes("scripts/srev.mjs") || generated.includes(marker)) {
-    console.error(`SKILL.md generation failed: marker '${marker}' did not resolve — check packages/skill/skill.md`);
-    process.exit(1);
+// Each skill's SKILL.md is generated from its source under packages/skill with
+// the same plugin-mode swaps, for both hosts.
+const SKILLS = [
+  { name: "structured-review", source: "packages/skill/skill.md" },
+  { name: "component-map", source: "packages/skill/component-map.md" },
+];
+function generateSkill({ name, source }) {
+  const generated = readFileSync(join(root, source), "utf8")
+    .replace(/^<!--[\s\S]*?-->\n/, "") // source-of-truth header comment
+    .replace(/<!-- srev-invocation:start[\s\S]*?srev-invocation:end -->/, PLUGIN_INVOCATION)
+    .replace(/<!-- plugin:language-support[^>]*-->\n/, `${LANGUAGE_SUPPORT}\n`);
+  for (const marker of ["srev-invocation", "plugin:language-support"]) {
+    if (!generated.includes("scripts/srev.mjs") || generated.includes(marker)) {
+      console.error(`${name} SKILL.md generation failed: marker '${marker}' did not resolve; check ${source}`);
+      process.exit(1);
+    }
   }
+  return generated;
 }
-writeFileSync(join(out, "skills/structured-review/SKILL.md"), generated.replace(PLUGIN_INVOCATION, CLAUDE_INVOCATION));
+const generatedSkills = SKILLS.map((skill) => ({ ...skill, text: generateSkill(skill) }));
+for (const { name, text } of generatedSkills) {
+  mkdirSync(join(out, "skills", name), { recursive: true });
+  writeFileSync(join(out, "skills", name, "SKILL.md"), text.replace(PLUGIN_INVOCATION, CLAUDE_INVOCATION));
+}
 
 // Codex has its own manifest and marketplace; executable payloads and skill
 // instructions are identical. No symlinks outside either installed package.
@@ -120,7 +132,7 @@ for (const dir of ["dist", "web", "skills"]) {
   cpSync(join(out, dir), join(codexOut, dir), { recursive: true });
 }
 copyFileSync(join(out, "package.json"), join(codexOut, "package.json"));
-writeFileSync(join(codexOut, "skills/structured-review/SKILL.md"), generated);
+for (const { name, text } of generatedSkills) writeFileSync(join(codexOut, "skills", name, "SKILL.md"), text);
 
 // The Codex manifest is generated too: shared identity fields come from the
 // hand-maintained Claude manifest, so a version bump there cannot leave the
@@ -143,7 +155,7 @@ writeFileSync(
         displayName: claudeManifest.displayName,
         shortDescription: "A guided review of your code changes.",
         longDescription:
-          "Create a review plan from inferred call relationships, walk the changes in a local browser, and export line-anchored comments. Requires local Node 22.13 or newer, npm, and Git. Experimental alpha.",
+          "Create a review plan from inferred call relationships, walk the changes in a local browser, export line-anchored comments, and map a codebase as nested components checked against its references. Requires local Node 22.13 or newer, npm, and Git. Experimental alpha.",
         developerName: claudeManifest.author.name,
         category: "Productivity",
         capabilities: ["Read", "Write"],

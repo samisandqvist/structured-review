@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 
 const state = vi.hoisted(() => ({
   sessions: undefined as undefined | Array<Record<string, unknown>>,
+  mapError: undefined as undefined | Error,
 }));
 
 vi.mock("../src/api/hooks.js", () => ({
@@ -18,6 +19,7 @@ vi.mock("../src/api/hooks.js", () => ({
   useCreateComment: () => ({ mutate: vi.fn() }),
   useFlows: () => ({ data: { flows: [] }, isLoading: false }),
   useShape: () => ({ data: undefined }),
+  useMap: () => ({ data: undefined, error: state.mapError }),
 }));
 
 import { App } from "../src/App.js";
@@ -66,5 +68,17 @@ describe("App without ?session", () => {
     state.sessions = [];
     render(<App />);
     expect(screen.getByTestId("session-empty")).toHaveTextContent(/no review sessions/i);
+  });
+});
+
+describe("App component map route", () => {
+  it("loads the map page for view=map", async () => {
+    state.sessions = [{ id: "s1", branch: "feat", baseRef: "main", status: "walking", createdAt: 1 }];
+    state.mapError = new Error("down");
+    window.history.replaceState(null, "", "/?session=s1&view=map");
+    render(<App />);
+    expect(await screen.findByTestId("map-empty")).toBeTruthy();
+    window.history.replaceState(null, "", "/");
+    state.mapError = undefined;
   });
 });

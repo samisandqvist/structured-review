@@ -14,6 +14,7 @@ import {
   repoFingerprint,
   repoRoot,
   subtreeFingerprint,
+  trackedFiles,
   type LineRange,
 } from "../diff.js";
 import {
@@ -31,6 +32,8 @@ import {
   SCIP_DOTNET_INSTALL_HINT,
 } from "./scip-dotnet.js";
 import { synthesizeCsharpSpans } from "./csharp-spans.js";
+import { resolveNamespaceMembers } from "./namespace-members.js";
+import { buildReferenceIndex, unindexedGaps, type ReferenceIndex } from "./references.js";
 import { isTestFile } from "../util.js";
 import { findOnPath, parseCommandOverride, type ToolCommand } from "./toolchain.js";
 import { buildFlowTree, makeFlow, reachesChanged } from "./flow-tree.js";
@@ -85,6 +88,10 @@ export interface BuiltGraph {
   warnings?: string[];
   /** Jobs whose indexer failed while others succeeded; see indexAndBuild. */
   failures?: { job: IndexerJob; error: Error }[];
+  /** Decoded documents with repo-relative paths, for the reference index. */
+  documents?: GraphDocument[];
+  /** Indexer jobs the build ran (Java and C# roots are map gaps). */
+  jobs?: IndexerJob[];
 }
 
 export interface ScipOptions {
@@ -99,6 +106,7 @@ export class ScipGraphProvider implements GraphProvider {
   private proto?: protobuf.Root;
   private cache: { key: string; graph: Promise<BuiltGraph> } | undefined;
   private jobCache = new Map<string, { key: string; docs: Promise<ScipDocument[]> }>();
+  private referenceIndexes = new WeakMap<BuiltGraph, ReferenceIndex>();
 
   constructor(opts: ScipOptions = {}) {
     this.repoRoot = opts.repoRoot ?? process.env.SCIP_REPO_ROOT ?? repoRoot();
@@ -352,6 +360,17 @@ export class ScipGraphProvider implements GraphProvider {
     return (await this.buildGraph()).warnings ?? [];
   }
 
+  /** Symbol-level references for the component map, built once per graph. */
+  async getReferenceIndex(): Promise<ReferenceIndex> {
+    const g = await this.buildGraph();
+    let index = this.referenceIndexes.get(g);
+    if (!index) {
+      index = buildReferenceIndex(g.documents ?? [], sourceReader(this.repoRoot), mapGaps(g, this.repoRoot));
+      this.referenceIndexes.set(g, index);
+    }
+    return index;
+  }
+
   async getFileRequires(): Promise<FileRequires> {
     return (await this.buildGraph()).fileRequires;
   }
@@ -376,6 +395,7 @@ export class ScipGraphProvider implements GraphProvider {
       g.warnings = notices;
     }
     if (failures.length) g.failures = failures;
+    g.jobs = jobs;
     return g;
   }
 
@@ -854,7 +874,24 @@ function callAdjacency(calls: CallWeights) {
   return { callAdj, callRev, callWeights: calls };
 }
 
-export function buildGraphFromIndex(idx: ScipIndex, root: string): BuiltGraph {
+/** Source text of a repo-relative file, or undefined when it cannot be read. */
+export function sourceReader(root: string): (file: string) => string | undefined {
+  return (file) => {
+    try {
+      return readFileSync(join(root, file), "utf8");
+    } catch {
+      return undefined;
+    }
+  };
+}
+
+const NAMESPACE_LANGUAGE = /\.[cm]?[jt]sx?$/;
+
+export function buildGraphFromIndex(
+  idx: ScipIndex,
+  root: string,
+  readSource: (file: string) => string | undefined = sourceReader(root),
+): BuiltGraph {
   const rootSlash = root.endsWith("/") ? root : `${root}/`;
   const documents = idx.documents.map((document) => {
     const path = document.relativePath ?? "";
@@ -864,10 +901,31 @@ export function buildGraphFromIndex(idx: ScipIndex, root: string): BuiltGraph {
       symbols: document.symbols ?? [],
     };
   });
+  resolveNamespaceMembers(
+    documents.filter((d) => NAMESPACE_LANGUAGE.test(d.file)),
+    readSource,
+  );
   const { nodes, definitionFiles } = collectDefinitions(documents);
   const fileRequires = collectFileRequires(documents, definitionFiles);
   const implementations = collectImplementations(documents);
   const calls: CallWeights = new Map();
   for (const document of documents) collectDocumentCalls(document, nodes, implementations, calls);
-  return { nodes, ...callAdjacency(calls), fileRequires };
+  return { nodes, ...callAdjacency(calls), fileRequires, documents };
+}
+
+const UNMAPPED_LANGUAGES = new Set<IndexerLanguage>(["java", "cs"]);
+
+/** Index warnings plus one line per root in a language the map does not cover,
+ *  whether or not its indexer ran. */
+function mapGaps(g: BuiltGraph, repoRoot: string): string[] {
+  const roots = [...(g.jobs ?? []), ...discoverLanguageRoots(repoRoot).filter((r) => r.hasSources)];
+  const unmapped = new Set(
+    roots
+      .filter((j) => UNMAPPED_LANGUAGES.has(j.language))
+      .map(
+        (j) => `${j.language} root '${j.root || "."}' is not yet mapped; its code is missing from the component map`,
+      ),
+  );
+  const indexed = (g.documents ?? []).map((d) => d.file);
+  return [...(g.warnings ?? []), ...unmapped, ...unindexedGaps(trackedFiles(repoRoot) ?? [], indexed)];
 }

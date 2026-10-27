@@ -181,6 +181,12 @@ Mutation evidence is current for seven days and must be rerun locally or through
 
 All selected tools run locally without paid/private-repository service requirements. Licenses from installed package metadata: ESLint/typescript-eslint/Prettier/dependency-cruiser/Vitest/fast-check MIT; Knip ISC; SonarJS LGPL-3.0-only; Stryker and Playwright Apache-2.0; axe integration MPL-2.0. They are development tools, not additions to the shipped runtime bundles. Typed ESLint complements TypeScript; dependency-cruiser covers architectural relationships and Knip covers unused code; Vitest V8 matches the existing 3.2.6 runner instead of replacing it. Hosted CodeQL/source-upload services and live agent evaluation tools were not selected within the local-only scope. The lockfile and pinned tool setup, not floating latest versions, define reproducibility.
 
+## Shipped runtime dependencies
+
+| Package | Version / license | Where it ships                                             | Notice                                                                                                                               |
+| ------- | ----------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| elkjs   | 0.9.3, EPL-2.0    | Bundled, unmodified, into the web UI's component map chunk | `packages/web/public/THIRD-PARTY-NOTICES.txt`, copied into both plugin packages' `web/`, names the license and the source repository |
+
 ## Deferred workflow practices and remaining gaps
 
 All five proposed workflow practices are deferred: coding-agent regression evaluations; an intent-to-evidence product documentation contract; mandatory independent semantic review; a formal learn-from-failures process; and periodic usefulness/telemetry review. Existing tests and Q-ABSTRACTION still require ordinary implementation review, but no new workflow policy or product spec/history files are part of this change. Revisit these practices only through a separate explicit decision with model budget, ownership, and maintenance cost identified.

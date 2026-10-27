@@ -11,7 +11,7 @@
   "interface": {
     "displayName": "Structured Review",
     "shortDescription": "A guided review of your code changes.",
-    "longDescription": "Create a review plan from inferred call relationships, walk the changes in a local browser, and export line-anchored comments. Requires local Node 22.13 or newer, npm, and Git. Experimental alpha.",
+    "longDescription": "Create a review plan from inferred call relationships, walk the changes in a local browser, export line-anchored comments, and map a codebase as nested components checked against its references. Requires local Node 22.13 or newer, npm, and Git. Experimental alpha.",
     "developerName": "Sami Sandqvist",
     "category": "Productivity",
     "capabilities": [

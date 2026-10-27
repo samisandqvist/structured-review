@@ -4,7 +4,7 @@ import { createRequire as __createRequire } from 'node:module';
 const require = __createRequire(import.meta.url);
 
 // packages/skill/src/cli.ts
-import { readFileSync as readFileSync2 } from "node:fs";
+import { readFileSync as readFileSync3 } from "node:fs";
 
 // packages/skill/src/api.ts
 import { spawn } from "node:child_process";
@@ -191,8 +191,11 @@ function uiUrl(base, sessionId) {
   return `${base}/?session=${sessionId}`;
 }
 function launchUI(base, sessionId) {
+  openInBrowser(uiUrl(base, sessionId));
+}
+function openInBrowser(url) {
   const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
-  spawn(cmd, [uiUrl(base, sessionId)], { detached: true, stdio: "ignore" }).unref();
+  spawn(cmd, [url], { detached: true, stdio: "ignore" }).unref();
 }
 
 // packages/skill/src/status.ts
@@ -437,6 +440,140 @@ function prettyShape(shape) {
   return lines.join("\n");
 }
 
+// packages/skill/src/map.ts
+import { readFileSync as readFileSync2 } from "node:fs";
+function mapUrl(base, sessionId, level) {
+  return `${base}/?session=${encodeURIComponent(sessionId)}&view=map${level ? `&level=${encodeURIComponent(level)}` : ""}`;
+}
+async function request(url, init) {
+  const res = await fetch(url, { ...init, headers: { "Content-Type": "application/json", ...init?.headers } });
+  if (!res.ok && res.status !== 422) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  return { status: res.status, body: await res.json() };
+}
+var mapPath = (base, sessionId) => `${base}/api/sessions/${encodeURIComponent(sessionId)}/map`;
+async function getMapEvidence(base, sessionId, opts) {
+  const query = new URLSearchParams();
+  if (opts.within) query.set("within", opts.within);
+  if (opts.full) query.set("full", "1");
+  const qs = query.size ? `?${query}` : "";
+  return (await request(`${mapPath(base, sessionId)}/evidence${qs}`)).body;
+}
+async function checkMap(base, sessionId, model) {
+  const { body } = await request(`${mapPath(base, sessionId)}/check`, { method: "POST", body: JSON.stringify(model) });
+  return body.report;
+}
+async function submitMap(base, sessionId, model) {
+  const { status, body } = await request(mapPath(base, sessionId), { method: "PUT", body: JSON.stringify(model) });
+  return { ok: status === 200, report: body.report };
+}
+async function getMap(base, sessionId) {
+  return (await request(mapPath(base, sessionId))).body;
+}
+var plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+function prettyReport(report) {
+  return [
+    report.ok ? "fidelity check: passed" : `fidelity check: FAILED (${plural(report.issues.length, "issue")})`,
+    `coverage: ${report.coverage.covered}/${report.coverage.references} cross-component references are call sites (${plural(report.coverage.undeclared, "undeclared call site")})`,
+    ...report.issues.map((i) => [`  [${i.rule}] ${i.message}`, ...(i.where ?? []).map((w) => `      ${w}`)].join("\n")),
+    ...report.unclaimedFiles.map(
+      (u) => `unclaimed files ${u.component ? `under ${u.component}` : "in no component"}: ${u.files.join(", ")}`
+    ),
+    `unattributed references: ${report.unattributedReferences}`,
+    ...report.utilities.map((u) => `utility ${u.id} hides ${plural(u.references, "reference")}`),
+    ...report.typeDependencies.map((t) => `type-only: ${t.from} -> ${t.to} (${t.count}: ${t.symbols.join(", ")})`),
+    ...report.gaps.length ? report.gaps.map((g) => `! ${g}`) : ["gaps: none"]
+  ].join("\n");
+}
+function prettyEvidence(e) {
+  return [
+    `scope: ${e.scope || "."} (${e.full ? "full" : "brief"})`,
+    "candidates:",
+    ...e.candidates.map((c) => `  ${c.id} (${plural(c.files, "file")})`),
+    "references:",
+    ...e.matrix.map((m) => `  ${m.from} -> ${m.to}: ${m.references}`),
+    ...e.surfaces.flatMap((s) => [
+      `surface of ${s.candidate} (${plural(s.symbols, "symbol")}):`,
+      ...s.groups.map((g) => `  used by ${g.usedBy.join(", ")}: ${g.symbols.join(", ")}`)
+    ]),
+    "(outside) = files outside the scope; run without --within to see them",
+    "implementations:",
+    ...e.signals.implementations.map((i) => `  ${i.type} (${i.file}): ${i.implementations.join(", ")}`),
+    "barrels:",
+    ...e.signals.barrels.flatMap((b) => b.exports.map((x) => `  ${b.file}: ${x.names.join(", ")} from ${x.from}`)),
+    "entry points:",
+    ...e.signals.entryPoints.map((p) => `  ${p.file}: ${p.reason}`),
+    "headers:",
+    ...e.signals.headers.map((h) => `  ${h.file}: ${h.comment}`),
+    "registrations:",
+    ...e.signals.registrations.map((r) => `  ${r.file}:${r.line} ${r.text}`),
+    ...e.gaps.length ? e.gaps.map((g) => `! ${g}`) : ["gaps: none"]
+  ].join("\n");
+}
+function flag(flags, name) {
+  const v = flags[name];
+  if (typeof v !== "string" || v === "") throw new Error(`missing required flag --${name}`);
+  return v;
+}
+function readModel(path) {
+  const text = readFileSync2(path, "utf8");
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    throw new Error(`model file ${path} is not valid JSON: ${e.message}`, { cause: e });
+  }
+}
+async function evidenceCommand(base, flags) {
+  const within = typeof flags.within === "string" ? flags.within : void 0;
+  const evidence = await getMapEvidence(base, flag(flags, "session"), {
+    ...within ? { within } : {},
+    full: !!flags.full
+  });
+  return { json: evidence, pretty: prettyEvidence(evidence) };
+}
+async function checkCommand(base, flags) {
+  const sessionId = flag(flags, "session");
+  const report = await checkMap(base, sessionId, readModel(flag(flags, "model")));
+  if (!report.ok) process.exitCode = 1;
+  return { json: { report }, pretty: prettyReport(report) };
+}
+async function submitCommand(base, flags) {
+  const sessionId = flag(flags, "session");
+  const { ok, report } = await submitMap(base, sessionId, readModel(flag(flags, "model")));
+  const url = mapUrl(base, sessionId);
+  if (!ok) {
+    process.exitCode = 1;
+    return { json: { ok, report }, pretty: `map not stored
+${prettyReport(report)}` };
+  }
+  if (flags.open) openInBrowser(url);
+  return { json: { ok, url, report }, pretty: `map stored: ${url}
+${prettyReport(report)}` };
+}
+async function getCommand(base, flags) {
+  const sessionId = flag(flags, "session");
+  const stored = await getMap(base, sessionId);
+  const url = mapUrl(base, sessionId);
+  const staleness = stored.stale === void 0 ? {} : { stale: stored.stale };
+  const json = {
+    model: stored.model,
+    url,
+    ...staleness,
+    ...stored.staleReason ? { staleReason: stored.staleReason } : {},
+    report: stored.map.report
+  };
+  return {
+    json,
+    pretty: `${url}${stored.stale ? ` (stale: ${stored.staleReason})` : ""}
+${prettyReport(stored.map.report)}`
+  };
+}
+var MAP_COMMANDS = {
+  "map evidence": evidenceCommand,
+  "map check": checkCommand,
+  "map submit": submitCommand,
+  "map get": getCommand
+};
+
 // packages/skill/src/cli.ts
 var USAGE = `usage:
   srev serve [--repo <path>] [--port N]
@@ -450,6 +587,10 @@ var USAGE = `usage:
   srev status --session <id>
   srev comments --session <id>
   srev wait --session <id> [--until reviewed|commented] [--interval sec] [--timeout sec]
+  srev map evidence --session <id> [--within <path>] [--full]
+  srev map check --session <id> --model <file.json>
+  srev map submit --session <id> --model <file.json> [--open]
+  srev map get --session <id>
   srev gc [--repo <path>] [--all]
   srev shutdown
 global flags: --port N (hub port), --pretty (human-readable output)`;
@@ -535,7 +676,7 @@ async function cmdSessionCreate(base, flags) {
       `session ${out.sessionId}`,
       `ui: ${out.uiUrl}`,
       `nodes: ${out.changedNodes} changed / ${out.totalNodes} total; flows: ${out.affectedFlows} affected / ${out.totalFlows} total`,
-      ...out.indexWarnings.length ? ["index warnings:", ...out.indexWarnings.map((w) => `  ! ${w}`)] : []
+      ...out.indexWarnings.length ? ["index warnings:", ...out.indexWarnings.map((w) => `  ! ${w}`)] : ["index warnings: none"]
     ].join("\n")
   };
 }
@@ -644,7 +785,7 @@ async function cmdPlan(base, flags) {
     const { flows, orphans } = await getFlows(base, sessionId);
     units = defaultPartition(flows, orphans);
   } else if (typeof flags.units === "string") {
-    ({ units, overview } = parsePlanFile(readFileSync2(flags.units, "utf8")));
+    ({ units, overview } = parsePlanFile(readFileSync3(flags.units, "utf8")));
     if (units.some((u) => u.kind === "flow" && (u.flowIds !== void 0 || u.mergeGroup !== void 0))) {
       const { flows, orphans } = await getFlows(base, sessionId);
       const compact = compactContext(flows, orphans);
@@ -752,7 +893,8 @@ var COMMANDS = {
   diff: cmdDiff,
   status: cmdStatus,
   comments: cmdComments,
-  wait: cmdWait
+  wait: cmdWait,
+  ...MAP_COMMANDS
 };
 async function runCli(argv) {
   checkNodeVersion();

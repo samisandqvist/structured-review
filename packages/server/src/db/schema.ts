@@ -58,7 +58,7 @@ CREATE INDEX IF NOT EXISTS idx_comments_session ON comments(session_id);
 CREATE INDEX IF NOT EXISTS idx_comments_node ON comments(node_id);
 `;
 
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 11;
 /**
  * SQL applied when upgrading TO each version. Version 1 = baseline tables.
  * `repo_fingerprint` is deliberately NOT in the baseline SCHEMA_SQL: v2 adds it
@@ -101,4 +101,15 @@ CREATE INDEX IF NOT EXISTS idx_comments_node ON comments(node_id);
   // v10: reference count behind an edge; attachment derivation ranks a test's
   // exercised subjects by it. Existing edges count as one reference.
   10: `ALTER TABLE edges ADD COLUMN weight INTEGER NOT NULL DEFAULT 1;`,
+  // v11: one component map per session; a resubmission replaces it.
+  11: `
+CREATE TABLE IF NOT EXISTS component_maps (
+  session_id TEXT PRIMARY KEY REFERENCES review_sessions(id) ON DELETE CASCADE,
+  model TEXT NOT NULL,
+  resolved TEXT NOT NULL,
+  head_sha TEXT NOT NULL,
+  repo_fingerprint TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+`,
 };

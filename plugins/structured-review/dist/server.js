@@ -239,11 +239,11 @@ function directoryExistsAt(ref, dir, root = repoRoot()) {
     return false;
   }
 }
-function subtractRanges(ranges, spans) {
+function subtractRanges(ranges, spans2) {
   const out = [];
   for (const range of ranges) {
     let pieces = [range];
-    for (const s of spans) {
+    for (const s of spans2) {
       const next = [];
       for (const p of pieces) {
         if (s.end < p.start || s.start > p.end) {
@@ -519,6 +519,13 @@ function readSlice(root, file2, startLine, endLine) {
     return lines.slice(Math.max(0, startLine - 1), endLine).join("\n");
   } catch {
     return "";
+  }
+}
+function trackedFiles(root) {
+  try {
+    return execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 }).split("\0").filter(Boolean);
+  } catch {
+    return void 0;
   }
 }
 var GitError, QUIET, NAME_STATUS, cachedRoot, MARKER_CHAR;
@@ -7158,7 +7165,7 @@ var require_parse = __commonJS({
         }
         return parseInteger(token2, acceptNegative, "id");
       }
-      function parsePackage() {
+      function parsePackage2() {
         if (pkg !== void 0)
           throw illegal("package");
         pkg = next();
@@ -7776,7 +7783,7 @@ var require_parse = __commonJS({
           case "package":
             if (!head)
               throw illegal(token);
-            parsePackage();
+            parsePackage2();
             break;
           case "import":
             parseImport();
@@ -8424,7 +8431,7 @@ var require_scope = __commonJS({
       let: new code_1.Name("let"),
       var: new code_1.Name("var")
     };
-    var Scope = class {
+    var Scope2 = class {
       constructor({ prefixes, parent } = {}) {
         this._names = {};
         this._prefixes = prefixes;
@@ -8448,7 +8455,7 @@ var require_scope = __commonJS({
         return this._names[prefix] = { prefix, index: 0 };
       }
     };
-    exports.Scope = Scope;
+    exports.Scope = Scope2;
     var ValueScopeName = class extends code_1.Name {
       constructor(prefix, nameStr) {
         super(nameStr);
@@ -8461,7 +8468,7 @@ var require_scope = __commonJS({
     };
     exports.ValueScopeName = ValueScopeName;
     var line = (0, code_1._)`\n`;
-    var ValueScope = class extends Scope {
+    var ValueScope = class extends Scope2 {
       constructor(opts) {
         super(opts);
         this._values = {};
@@ -15915,9 +15922,9 @@ __export(flows_exports, {
   readFlows: () => readFlows
 });
 import { DatabaseSync as DatabaseSync2 } from "node:sqlite";
-import { join as join10 } from "node:path";
+import { join as join11 } from "node:path";
 function readFlows(root = repoRoot(), changedStableIds) {
-  const dbPath = process.env.CRG_GRAPH_DB || join10(root, ".code-review-graph", "graph.db");
+  const dbPath = process.env.CRG_GRAPH_DB || join11(root, ".code-review-graph", "graph.db");
   let db2;
   try {
     db2 = new DatabaseSync2(dbPath, { readOnly: true });
@@ -15973,8 +15980,8 @@ var init_flows = __esm({
 });
 
 // packages/server/src/index.ts
-import { existsSync as existsSync5 } from "node:fs";
-import { dirname as dirname2, join as join11 } from "node:path";
+import { existsSync as existsSync6 } from "node:fs";
+import { dirname as dirname2, join as join12 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // node_modules/.pnpm/@hono+node-server@2.1.5_hono@4.13.13/node_modules/@hono/node-server/dist/constants-BLSFu_RU.mjs
@@ -17311,8 +17318,8 @@ var serve = (options, listeningListener) => {
 };
 
 // packages/server/src/app.ts
-import { existsSync as existsSync4 } from "node:fs";
-import { join as join9 } from "node:path";
+import { existsSync as existsSync5 } from "node:fs";
+import { join as join10 } from "node:path";
 
 // node_modules/.pnpm/hono@4.13.13/node_modules/hono/dist/request/constants.js
 var GET_MATCH_RESULT = /* @__PURE__ */ Symbol();
@@ -19643,6 +19650,317 @@ function stepMemberBrace(s, ch, c) {
   return c;
 }
 
+// packages/server/src/graph/namespace-members.ts
+var isLocal = (symbol2) => symbol2.startsWith("local ");
+var isModule = (symbol2) => symbol2.endsWith("/") && !isLocal(symbol2);
+function modulePath(symbol2) {
+  const m = symbol2.match(/ ([^ ]*)`([^`]+)`\/$/);
+  return m ? `${m[1]}${m[2]}` : void 0;
+}
+var descriptor = (symbol2) => symbol2.slice(symbol2.lastIndexOf("`/") + 2);
+function spans(doc) {
+  const out = [];
+  for (const occurrence of doc.occurrences) {
+    const r = occurrence.range ?? [];
+    const end = r.length === 4 && r[0] === r[2] ? r[3] : r.length === 3 ? r[2] : void 0;
+    if (!occurrence.symbol || end === void 0) continue;
+    out.push({ occurrence, symbol: occurrence.symbol, line: r[0], start: r[1], end });
+  }
+  return out.sort((a, b) => a.line - b.line || a.start - b.start);
+}
+var ModuleExports = class {
+  constructor(documents, readSource) {
+    this.readSource = readSource;
+    for (const d of documents) {
+      this.byFile.set(d.file, d);
+      const base = d.file.slice(d.file.lastIndexOf("/") + 1);
+      this.byBasename.set(base, [...this.byBasename.get(base) ?? [], d.file]);
+    }
+  }
+  readSource;
+  byFile = /* @__PURE__ */ new Map();
+  byBasename = /* @__PURE__ */ new Map();
+  lines = /* @__PURE__ */ new Map();
+  spanCache = /* @__PURE__ */ new Map();
+  resolved = /* @__PURE__ */ new Map();
+  spans(doc) {
+    let cached2 = this.spanCache.get(doc);
+    if (!cached2) {
+      cached2 = spans(doc);
+      this.spanCache.set(doc, cached2);
+    }
+    return cached2;
+  }
+  /** The document for a module symbol: exact path, else the one document whose path ends with it (multi-root repos). */
+  document(moduleSymbol) {
+    const path = modulePath(moduleSymbol);
+    if (!path) return void 0;
+    const exact = this.byFile.get(path);
+    if (exact) return exact;
+    const base = path.slice(path.lastIndexOf("/") + 1);
+    const matches = (this.byBasename.get(base) ?? []).filter((f) => f.endsWith(`/${path}`));
+    return matches.length === 1 ? this.byFile.get(matches[0]) : void 0;
+  }
+  sourceLines(file2) {
+    if (!this.lines.has(file2)) this.lines.set(file2, this.readSource(file2)?.split("\n"));
+    return this.lines.get(file2);
+  }
+  /** The symbol `name` resolves to in a module, or undefined. */
+  resolve(moduleSymbol, name) {
+    const key = `${moduleSymbol}\0${name}`;
+    if (!this.resolved.has(key)) this.resolved.set(key, this.lookup(moduleSymbol, name, /* @__PURE__ */ new Set()));
+    return this.resolved.get(key);
+  }
+  lookup(moduleSymbol, name, seen) {
+    const doc = this.document(moduleSymbol);
+    if (!doc || seen.has(doc.file)) return void 0;
+    seen.add(doc.file);
+    const wanted = /* @__PURE__ */ new Set([`${name}().`, `${name}.`, `${name}#`]);
+    const named = this.spans(doc).filter((o) => !isLocal(o.symbol) && wanted.has(descriptor(o.symbol)));
+    const own2 = named.find((o) => ((o.occurrence.symbolRoles ?? 0) & 1) !== 0) ?? named[0];
+    if (own2) return own2.symbol;
+    for (const next of this.starExports(doc)) {
+      const found = this.lookup(next, name, seen);
+      if (found) return found;
+    }
+    return void 0;
+  }
+  /** Modules named on `export * from …` lines of a document. */
+  starExports(doc) {
+    const lines = this.sourceLines(doc.file) ?? [];
+    return this.spans(doc).filter((o) => isModule(o.symbol) && /^\s*export\s+\*/.test(lines[o.line])).map((o) => o.symbol);
+  }
+};
+function memberName(a, b, lines) {
+  const text = lines[b.line] ?? "";
+  if (a.line !== b.line || a.end + 1 !== b.start || text[a.end] !== ".") return void 0;
+  return text.slice(b.start, b.end);
+}
+function resolveNamespaceMembers(documents, readSource) {
+  const modules = new ModuleExports(documents, readSource);
+  let resolved = 0;
+  for (const doc of documents) {
+    const ordered = modules.spans(doc);
+    for (let i = 1; i < ordered.length; i++) {
+      const prev = ordered[i - 1];
+      const occ = ordered[i];
+      if (!isLocal(occ.symbol) || !isModule(prev.symbol)) continue;
+      const lines = modules.sourceLines(doc.file) ?? [];
+      const symbol2 = modules.resolve(prev.symbol, memberName(prev, occ, lines) ?? "");
+      if (!symbol2) continue;
+      occ.occurrence.symbol = symbol2;
+      resolved++;
+    }
+  }
+  return resolved;
+}
+
+// packages/server/src/graph/references.ts
+var ROLE_DEFINITION2 = 1;
+var ROLE_IMPORT = 2;
+var MAPPED_FILE = /\.([cm]?[jt]sx?|py)$/;
+var BARREL_FILE = /(^|\/)(index\.[cm]?[jt]sx?|__init__\.py)$/;
+var REFERENCED_KINDS = /* @__PURE__ */ new Set(["function", "method", "value", "type"]);
+var isMappedFile = (file2) => MAPPED_FILE.test(file2) && !isTestFile(file2);
+function descriptors(symbol2) {
+  let fields = 0;
+  for (let i = 0; i < symbol2.length; i++) {
+    if (symbol2[i] !== " ") continue;
+    if (symbol2[i + 1] === " ") {
+      i++;
+      continue;
+    }
+    if (++fields === 4) return symbol2.slice(i + 1);
+  }
+  return symbol2;
+}
+function symbolName(symbol2) {
+  if (symbol2.startsWith("local ")) return symbol2;
+  const desc = descriptors(symbol2);
+  let quoted = false;
+  let start = 0;
+  for (let i = 0; i < desc.length; i++) {
+    if (desc[i] === "`") quoted = !quoted;
+    else if (desc[i] === "/" && !quoted) start = i + 1;
+  }
+  return desc.slice(start).replace(/\([^)]*\)\.$/, "").replace(/[.#]$/, "");
+}
+function symbolKind(symbol2) {
+  if (symbol2.startsWith("local ")) return "other";
+  if (symbol2.endsWith("/")) return "module";
+  if (symbol2.endsWith("#")) return "type";
+  const name = symbolName(symbol2);
+  if (/[(:]/.test(name)) return symbol2.endsWith(".") ? "field" : "other";
+  const member = name.includes("#");
+  if (symbol2.endsWith(").")) return member ? "method" : "function";
+  if (symbol2.endsWith(".")) return member ? "field" : "value";
+  return "other";
+}
+var line1 = (o) => (o.range?.[0] ?? 0) + 1;
+var hasRole = (o, role) => ((o.symbolRoles ?? 0) & role) !== 0;
+function collectDefinitions(documents) {
+  const definitions = /* @__PURE__ */ new Map();
+  for (const doc of documents) {
+    for (const o of doc.occurrences) {
+      if (!o.symbol || !hasRole(o, ROLE_DEFINITION2) || o.symbol.startsWith("local ") || definitions.has(o.symbol)) {
+        continue;
+      }
+      definitions.set(o.symbol, {
+        symbol: o.symbol,
+        file: doc.file,
+        line: line1(o),
+        name: symbolName(o.symbol),
+        kind: symbolKind(o.symbol)
+      });
+    }
+  }
+  return definitions;
+}
+function callerSpans(doc) {
+  const spans2 = [];
+  for (const o of doc.occurrences) {
+    const r = o.enclosingRange;
+    if (!o.symbol || !r || !hasRole(o, ROLE_DEFINITION2) || o.symbol.endsWith("/") || o.symbol.startsWith("local ")) {
+      continue;
+    }
+    spans2.push({ name: symbolName(o.symbol), start: r[0], end: r.length === 4 ? r[2] : r[0] });
+  }
+  return spans2.sort((a, b) => a.end - a.start - (b.end - b.start));
+}
+var TYPE_POSITION = /(?::|->|<|\||&|\bextends|\bimplements|\bas|\bsatisfies|\bkeyof|\btypeof)\s*$/;
+var VALUE_BEFORE = /(?:[[(,=]|\breturn|\bthrow|\binstanceof|\bnew)\s*$/;
+var VALUE_AFTER = /^\s*(?:[(.]|[,)\];]|$)/;
+var CLOSERS = /* @__PURE__ */ new Set(["]", ")", ">"]);
+var OPENERS = /* @__PURE__ */ new Set(["[", "(", "<"]);
+function inTypeArguments(before) {
+  let depth = 0;
+  for (let i = before.length - 1; i >= 0; i--) {
+    const ch = before[i];
+    if (CLOSERS.has(ch)) depth++;
+    else if (OPENERS.has(ch) && depth > 0) depth--;
+    else if (OPENERS.has(ch)) {
+      if (ch === "(") return false;
+      const head = before.slice(0, i);
+      if (ch === "<") return /[\w$]$/.test(head);
+      const outer = head.replace(/[\w.$]+\s*$/, "");
+      return TYPE_POSITION.test(outer) || inTypeArguments(outer);
+    }
+  }
+  return false;
+}
+function valueUse(lines, o) {
+  const r = o.range;
+  const text = lines?.[r[0]];
+  if (!text) return false;
+  const before = text.slice(0, r[1]);
+  const after = text.slice(r.length === 4 ? r[3] : r[2]);
+  if (/^\s*[(.]/.test(after) || /\b(?:new|instanceof)\s*$/.test(before)) return true;
+  if (TYPE_POSITION.test(before) || inTypeArguments(before)) return false;
+  return VALUE_BEFORE.test(before) && VALUE_AFTER.test(after);
+}
+var TS_IMPORT = /^(?:import\s*[\w*{"'$]|export\s+(?:\*|\{|type\s+\{))/;
+var PY_IMPORT = /^(?:import|from)\s/;
+function statementEnd(lines, start, open2, close) {
+  let depth = 0;
+  for (let i = start; i < lines.length; i++) {
+    const text = lines[i];
+    depth += text.split(open2).length - text.split(close).length;
+    if (depth <= 0 && !text.trimEnd().endsWith("\\")) return i;
+  }
+  return lines.length - 1;
+}
+function importLines(source, file2) {
+  const python = file2.endsWith(".py");
+  const lines = source.split("\n");
+  const out = /* @__PURE__ */ new Set();
+  for (let i = 0; i < lines.length; i++) {
+    const text = lines[i].trimStart();
+    if (!(python ? PY_IMPORT : TS_IMPORT).test(text)) continue;
+    const end = python ? statementEnd(lines, i, "(", ")") : statementEnd(lines, i, "{", "}");
+    const statement = lines.slice(i, end + 1).join("\n");
+    if (!python && text.startsWith("export") && !/\bfrom\s*["']/.test(statement)) continue;
+    for (let j = i; j <= end; j++) out.add(j);
+    i = end;
+  }
+  return out;
+}
+function referencedDefinition(o, file2, imports, definitions) {
+  if (!o.symbol || hasRole(o, ROLE_DEFINITION2) || hasRole(o, ROLE_IMPORT)) return void 0;
+  if (imports.has(o.range?.[0] ?? -1)) return void 0;
+  const def = definitions.get(o.symbol);
+  return def && def.file !== file2 && REFERENCED_KINDS.has(def.kind) ? def : void 0;
+}
+function documentReferences(doc, definitions, readSource) {
+  const spans2 = callerSpans(doc);
+  const source = readSource(doc.file);
+  const lines = source?.split("\n");
+  const imports = source === void 0 ? /* @__PURE__ */ new Set() : importLines(source, doc.file);
+  const refs = [];
+  for (const o of doc.occurrences) {
+    const def = referencedDefinition(o, doc.file, imports, definitions);
+    if (!def) continue;
+    const line = o.range?.[0] ?? 0;
+    const typeOnly = def.kind === "type" && !valueUse(lines, o);
+    const caller = spans2.find((s) => line >= s.start && line <= s.end)?.name ?? "(module)";
+    refs.push({ symbol: def.symbol, file: doc.file, line: line + 1, caller, typeOnly });
+  }
+  return refs;
+}
+function collectImplementations(documents) {
+  const implementations2 = /* @__PURE__ */ new Map();
+  for (const doc of documents) {
+    for (const info of doc.symbols) {
+      for (const rel of info.relationships ?? []) {
+        if (!rel.isImplementation || !rel.symbol || !info.symbol) continue;
+        implementations2.set(rel.symbol, [...implementations2.get(rel.symbol) ?? [], info.symbol]);
+      }
+    }
+  }
+  return implementations2;
+}
+function barrelExports(doc, definitions) {
+  const byFile = /* @__PURE__ */ new Map();
+  for (const o of doc.occurrences) {
+    if (!o.symbol || hasRole(o, ROLE_DEFINITION2)) continue;
+    const def = definitions.get(o.symbol);
+    if (!def || def.file === doc.file || !REFERENCED_KINDS.has(def.kind)) continue;
+    const names = byFile.get(def.file) ?? [];
+    if (!names.includes(def.name)) names.push(def.name);
+    byFile.set(def.file, names);
+  }
+  if (byFile.size === 0) return void 0;
+  const exports = [...byFile].map(([from, names]) => ({ from, names })).sort((a, b) => a.from.localeCompare(b.from));
+  return { file: doc.file, exports };
+}
+function unindexedGaps(tracked, indexed) {
+  const known = new Set(indexed);
+  const groups = /* @__PURE__ */ new Map();
+  for (const file2 of tracked) {
+    if (!isMappedFile(file2) || known.has(file2)) continue;
+    const dir = file2.includes("/") ? `${file2.slice(0, file2.lastIndexOf("/"))}/` : ".";
+    const language = file2.endsWith(".py") ? "Python" : "TypeScript/JavaScript";
+    const key = `${dir}\0${language}`;
+    groups.set(key, (groups.get(key) ?? 0) + 1);
+  }
+  return [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([key, n]) => {
+    const [dir, language] = key.split("\0");
+    const files = n === 1 ? `1 ${language} file in ${dir} is` : `${n} ${language} files in ${dir} are`;
+    return `${files} not in the index (outside every indexed project); the map does not cover ${n === 1 ? "it" : "them"}`;
+  });
+}
+function buildReferenceIndex(documents, readSource, gaps) {
+  const mapped = documents.filter((d) => isMappedFile(d.file));
+  const definitions = collectDefinitions(mapped);
+  return {
+    files: mapped.map((d) => d.file).sort(),
+    definitions,
+    references: mapped.flatMap((d) => documentReferences(d, definitions, readSource)),
+    implementations: collectImplementations(mapped),
+    barrels: mapped.filter((d) => BARREL_FILE.test(d.file)).map((d) => barrelExports(d, definitions)).filter((b) => b !== void 0),
+    gaps
+  };
+}
+
 // packages/server/src/graph/scip.ts
 init_flow_tree();
 
@@ -19766,6 +20084,7 @@ var ScipGraphProvider = class {
   proto;
   cache;
   jobCache = /* @__PURE__ */ new Map();
+  referenceIndexes = /* @__PURE__ */ new WeakMap();
   constructor(opts = {}) {
     this.repoRoot = opts.repoRoot ?? process.env.SCIP_REPO_ROOT ?? repoRoot();
     this.contextDepth = opts.contextDepth ?? Number(process.env.SCIP_CONTEXT_DEPTH ?? 1);
@@ -19962,6 +20281,16 @@ var ScipGraphProvider = class {
   async getIndexWarnings() {
     return (await this.buildGraph()).warnings ?? [];
   }
+  /** Symbol-level references for the component map, built once per graph. */
+  async getReferenceIndex() {
+    const g = await this.buildGraph();
+    let index = this.referenceIndexes.get(g);
+    if (!index) {
+      index = buildReferenceIndex(g.documents ?? [], sourceReader(this.repoRoot), mapGaps(g, this.repoRoot));
+      this.referenceIndexes.set(g, index);
+    }
+    return index;
+  }
   async getFileRequires() {
     return (await this.buildGraph()).fileRequires;
   }
@@ -19982,6 +20311,7 @@ var ScipGraphProvider = class {
       g.warnings = notices;
     }
     if (failures.length) g.failures = failures;
+    g.jobs = jobs;
     return g;
   }
   /** Language-scoped subtree cache key; any git failure yields a unique key (cache miss, never stale). */
@@ -20185,8 +20515,8 @@ function rerootDocuments(docs, jobRoot, absRoot) {
     return { ...d, relativePath: `${prefix}${p}` };
   });
 }
-var ROLE_DEFINITION2 = 1;
-var ROLE_IMPORT = 2;
+var ROLE_DEFINITION3 = 1;
+var ROLE_IMPORT2 = 2;
 function labelOf(symbol2) {
   const s = symbol2.replace(/\([^)]*\)\.$/, "").replace(/[.#/]+$/, "");
   const ctor = s.match(/([A-Za-z0-9_$]+)#`<init>`$/);
@@ -20203,23 +20533,23 @@ function span1(arr) {
   const end = arr.length === 4 ? arr[2] : start;
   return [start + 1, (end ?? start) + 1];
 }
-function collectImplementations(documents) {
-  const implementations = /* @__PURE__ */ new Map();
+function collectImplementations2(documents) {
+  const implementations2 = /* @__PURE__ */ new Map();
   for (const { symbols } of documents) {
     for (const info of symbols) {
       for (const rel of info.relationships ?? []) {
         if (!rel.isImplementation || !rel.symbol || !info.symbol) continue;
-        const impls = implementations.get(rel.symbol) ?? [];
+        const impls = implementations2.get(rel.symbol) ?? [];
         impls.push(info.symbol);
-        implementations.set(rel.symbol, impls);
+        implementations2.set(rel.symbol, impls);
       }
     }
   }
-  return implementations;
+  return implementations2;
 }
-function callTargets(symbol2, nodes, implementations) {
+function callTargets(symbol2, nodes, implementations2) {
   const targets = nodes.has(symbol2) ? [symbol2] : [];
-  for (const impl of implementations.get(symbol2) ?? []) {
+  for (const impl of implementations2.get(symbol2) ?? []) {
     if (nodes.has(impl) && !targets.includes(impl)) targets.push(impl);
   }
   return targets;
@@ -20240,12 +20570,12 @@ function callableNode(symbol2, occurrence, file2) {
   if (!label) return void 0;
   return { label, file: file2, startLine: span[0], endLine: span[1], isTest: isTestFile(file2) };
 }
-function collectDefinitions(documents) {
+function collectDefinitions2(documents) {
   const nodes = /* @__PURE__ */ new Map();
   const definitionFiles = /* @__PURE__ */ new Map();
   for (const { file: file2, occurrences } of documents) {
     for (const occurrence of occurrences) {
-      if (!((occurrence.symbolRoles ?? 0) & ROLE_DEFINITION2)) continue;
+      if (!((occurrence.symbolRoles ?? 0) & ROLE_DEFINITION3)) continue;
       const symbol2 = occurrence.symbol;
       if (!symbol2 || symbol2.startsWith("local ")) continue;
       definitionFiles.set(symbol2, file2);
@@ -20256,7 +20586,7 @@ function collectDefinitions(documents) {
   return { nodes, definitionFiles };
 }
 function addFileReference(file2, occurrence, definitionFiles, requires) {
-  if ((occurrence.symbolRoles ?? 0) & ROLE_DEFINITION2) return;
+  if ((occurrence.symbolRoles ?? 0) & ROLE_DEFINITION3) return;
   if (!occurrence.symbol) return;
   const definition = definitionFiles.get(occurrence.symbol);
   if (!definition || definition === file2) return;
@@ -20277,7 +20607,7 @@ function collectFileRequires(documents, definitionFiles) {
 function documentCallers(document, nodes) {
   const callers = [];
   for (const occurrence of document.occurrences) {
-    if (!((occurrence.symbolRoles ?? 0) & ROLE_DEFINITION2) || !occurrence.symbol) continue;
+    if (!((occurrence.symbolRoles ?? 0) & ROLE_DEFINITION3) || !occurrence.symbol) continue;
     const node2 = nodes.get(occurrence.symbol);
     if (node2?.file === document.file) {
       callers.push({ symbol: occurrence.symbol, sl: node2.startLine, el: node2.endLine });
@@ -20285,12 +20615,12 @@ function documentCallers(document, nodes) {
   }
   return callers.sort((a, b) => a.el - a.sl - (b.el - b.sl));
 }
-function collectDocumentCalls(document, nodes, implementations, calls) {
+function collectDocumentCalls(document, nodes, implementations2, calls) {
   const callers = documentCallers(document, nodes);
   for (const occurrence of document.occurrences) {
     const roles = occurrence.symbolRoles ?? 0;
-    if (roles & ROLE_DEFINITION2 || roles & ROLE_IMPORT || !occurrence.symbol) continue;
-    const targets = callTargets(occurrence.symbol, nodes, implementations);
+    if (roles & ROLE_DEFINITION3 || roles & ROLE_IMPORT2 || !occurrence.symbol) continue;
+    const targets = callTargets(occurrence.symbol, nodes, implementations2);
     if (targets.length === 0) continue;
     const caller = enclosingCaller(callers, occurrence);
     if (!caller) continue;
@@ -20318,7 +20648,17 @@ function callAdjacency(calls) {
   }
   return { callAdj, callRev, callWeights: calls };
 }
-function buildGraphFromIndex(idx, root) {
+function sourceReader(root) {
+  return (file2) => {
+    try {
+      return readFileSync4(join7(root, file2), "utf8");
+    } catch {
+      return void 0;
+    }
+  };
+}
+var NAMESPACE_LANGUAGE = /\.[cm]?[jt]sx?$/;
+function buildGraphFromIndex(idx, root, readSource = sourceReader(root)) {
   const rootSlash = root.endsWith("/") ? root : `${root}/`;
   const documents = idx.documents.map((document) => {
     const path = document.relativePath ?? "";
@@ -20328,12 +20668,27 @@ function buildGraphFromIndex(idx, root) {
       symbols: document.symbols ?? []
     };
   });
-  const { nodes, definitionFiles } = collectDefinitions(documents);
+  resolveNamespaceMembers(
+    documents.filter((d) => NAMESPACE_LANGUAGE.test(d.file)),
+    readSource
+  );
+  const { nodes, definitionFiles } = collectDefinitions2(documents);
   const fileRequires = collectFileRequires(documents, definitionFiles);
-  const implementations = collectImplementations(documents);
+  const implementations2 = collectImplementations2(documents);
   const calls = /* @__PURE__ */ new Map();
-  for (const document of documents) collectDocumentCalls(document, nodes, implementations, calls);
-  return { nodes, ...callAdjacency(calls), fileRequires };
+  for (const document of documents) collectDocumentCalls(document, nodes, implementations2, calls);
+  return { nodes, ...callAdjacency(calls), fileRequires, documents };
+}
+var UNMAPPED_LANGUAGES = /* @__PURE__ */ new Set(["java", "cs"]);
+function mapGaps(g, repoRoot2) {
+  const roots = [...g.jobs ?? [], ...discoverLanguageRoots(repoRoot2).filter((r) => r.hasSources)];
+  const unmapped = new Set(
+    roots.filter((j) => UNMAPPED_LANGUAGES.has(j.language)).map(
+      (j) => `${j.language} root '${j.root || "."}' is not yet mapped; its code is missing from the component map`
+    )
+  );
+  const indexed = (g.documents ?? []).map((d) => d.file);
+  return [...g.warnings ?? [], ...unmapped, ...unindexedGaps(trackedFiles(repoRoot2) ?? [], indexed)];
 }
 
 // packages/server/src/residuals.ts
@@ -20344,13 +20699,13 @@ function computeResiduals(baseRef, nodeSpans, root) {
   for (const file2 of changedFilesStrict(baseRef, root)) {
     const ranges = fileChangedRanges(baseRef, file2, root, { strict: true });
     if (!ranges || ranges.length === 0) continue;
-    const spans = nodeSpans.get(file2) ?? [];
-    const residual = subtractRanges(ranges, spans);
+    const spans2 = nodeSpans.get(file2) ?? [];
+    const residual = subtractRanges(ranges, spans2);
     if (residual.length === 0) continue;
     const start = Math.min(...residual.map((r) => r.start));
     const end = Math.max(...residual.map((r) => r.end));
     const deleted = end === 0;
-    const kind = deleted ? "deleted" : spans.length > 0 ? "module-scope" : "whole-file";
+    const kind = deleted ? "deleted" : spans2.length > 0 ? "module-scope" : "whole-file";
     const sorted = residual.slice().sort((a, b) => a.start - b.start);
     out.push({
       stableId: `file-residual:${file2}`,
@@ -20394,7 +20749,7 @@ function computeCoverage(units, flows, changedStableIds) {
 // packages/server/src/attach.ts
 function orphanWalkIds(memberIds, byStable) {
   const members2 = memberIds.map((id) => byStable.get(id)).filter((n) => !!n);
-  const dirOf = (file2) => file2.slice(0, Math.max(0, file2.lastIndexOf("/")));
+  const dirOf2 = (file2) => file2.slice(0, Math.max(0, file2.lastIndexOf("/")));
   const nestedByParent = /* @__PURE__ */ new Map();
   const topLevel = [];
   for (const m of members2) {
@@ -20409,7 +20764,7 @@ function orphanWalkIds(memberIds, byStable) {
   }
   const byDir = /* @__PURE__ */ new Map();
   for (const n of topLevel) {
-    const dir = dirOf(n.file);
+    const dir = dirOf2(n.file);
     const list = byDir.get(dir) ?? [];
     list.push(n.stableId, ...nestedByParent.get(n.stableId) ?? []);
     byDir.set(dir, list);
@@ -21402,8 +21757,8 @@ function mirrorProps(target, source) {
 function mergeDefs(...defs) {
   const mergedDescriptors = {};
   for (const def of defs) {
-    const descriptors = Object.getOwnPropertyDescriptors(def);
-    Object.assign(mergedDescriptors, descriptors);
+    const descriptors2 = Object.getOwnPropertyDescriptors(def);
+    Object.assign(mergedDescriptors, descriptors2);
   }
   return Object.defineProperties({}, mergedDescriptors);
 }
@@ -21601,9 +21956,9 @@ function createTransparentProxy(getter) {
       target ?? (target = getter());
       return Reflect.getOwnPropertyDescriptor(target, prop);
     },
-    defineProperty(_, prop, descriptor) {
+    defineProperty(_, prop, descriptor2) {
       target ?? (target = getter());
-      return Reflect.defineProperty(target, prop, descriptor);
+      return Reflect.defineProperty(target, prop, descriptor2);
     }
   });
 }
@@ -31304,8 +31659,8 @@ var error43 = () => {
       case "not_multiple_of":
         return `N\xFAmero inv\xE1lido: deve ser m\xFAltiplo de ${issue2.divisor}`;
       case "unrecognized_keys": {
-        const plural2 = issue2.keys.length > 1 ? "s" : "";
-        return `Chave${plural2} inv\xE1lida${plural2}: ${joinValues(issue2.keys, ", ")}`;
+        const plural3 = issue2.keys.length > 1 ? "s" : "";
+        return `Chave${plural3} inv\xE1lida${plural3}: ${joinValues(issue2.keys, ", ")}`;
       }
       case "invalid_key":
         return `Entrada inv\xE1lida n${translateOriginWithArticle(issue2.origin, "definite")}`;
@@ -31449,8 +31804,8 @@ var error44 = () => {
       case "not_multiple_of":
         return `N\xFAmero inv\xE1lido: deve ser m\xFAltiplo de ${issue2.divisor}`;
       case "unrecognized_keys": {
-        const plural2 = issue2.keys.length > 1 ? "s" : "";
-        return `Chave${plural2} inv\xE1lida${plural2}: ${joinValues(issue2.keys, ", ")}`;
+        const plural3 = issue2.keys.length > 1 ? "s" : "";
+        return `Chave${plural3} inv\xE1lida${plural3}: ${joinValues(issue2.keys, ", ")}`;
       }
       case "invalid_key":
         return `Entrada inv\xE1lida n${translateOriginWithArticle(issue2.origin, "definite")}`;
@@ -34643,8 +34998,8 @@ function generateWrapperCheck(doc, ctx, schema, accessor) {
 }
 function generateDefaultCheck(doc, ctx, schema, accessor) {
   const def = schema._zod.def;
-  const descriptor = Object.getOwnPropertyDescriptor(schema._zod.def, "defaultValue");
-  const defaultGetter = descriptor ? () => schema._zod.def.defaultValue : void 0;
+  const descriptor2 = Object.getOwnPropertyDescriptor(schema._zod.def, "defaultValue");
+  const defaultGetter = descriptor2 ? () => schema._zod.def.defaultValue : void 0;
   if (schema._zod.def.type === "prefault") {
     if (!defaultGetter) {
       return generateCheck(doc, ctx, def.innerType, accessor);
@@ -40452,6 +40807,20 @@ function resolvePlanMembership(planUnits, orphanNodes, attach) {
   return { units, attachedPerUnit, emptyUnits };
 }
 
+// packages/server/src/staleness.ts
+init_diff();
+function staleness(root, headSha, fingerprint) {
+  const currentHead = gitHeadSha(root);
+  if (!currentHead || !headSha) return {};
+  if (currentHead !== headSha) return { stale: true, staleReason: "head-moved" };
+  const currentFp = repoFingerprint(root);
+  if (!currentFp || !fingerprint) return {};
+  return currentFp === fingerprint ? { stale: false } : { stale: true, staleReason: "working-tree-changed" };
+}
+function snapshot(root) {
+  return { headSha: gitHeadSha(root) ?? "", repoFingerprint: repoFingerprint(root) ?? "" };
+}
+
 // packages/server/src/routes/sessions.ts
 function reconcileSubgraph(subgraph, baseRef, root) {
   const rangesByFile = /* @__PURE__ */ new Map();
@@ -40512,9 +40881,9 @@ function createSessionsRoute(ctx) {
       ({ nodes: keptNodes, status } = reconcileSubgraph(subgraph, body.baseRef, ctx.repoRoot));
       const spansByFile = /* @__PURE__ */ new Map();
       for (const n of keptNodes) {
-        const spans = spansByFile.get(n.file) ?? [];
-        spans.push({ start: n.startLine, end: n.endLine });
-        spansByFile.set(n.file, spans);
+        const spans2 = spansByFile.get(n.file) ?? [];
+        spans2.push({ start: n.startLine, end: n.endLine });
+        spansByFile.set(n.file, spans2);
       }
       residuals = computeResiduals(body.baseRef, spansByFile, ctx.repoRoot);
       indexWarnings = await ctx.graphProvider.getIndexWarnings?.() ?? [];
@@ -40581,25 +40950,11 @@ function createSessionsRoute(ctx) {
     const changed = getNodesBySession(ctx.db, session.id).filter((n) => n.changeStatus === "changed");
     const autoMembers = new Set(units.filter((u) => u.auto).flatMap((u) => u.memberStableIds));
     const unassigned = changed.filter((n) => autoMembers.has(n.stableId)).length;
-    const currentHead = gitHeadSha(ctx.repoRoot);
-    const currentFp = repoFingerprint(ctx.repoRoot);
-    let stale;
-    let staleReason;
-    if (currentHead && session.headSha) {
-      if (currentHead !== session.headSha) {
-        stale = true;
-        staleReason = "head-moved";
-      } else if (currentFp && session.repoFingerprint) {
-        stale = currentFp !== session.repoFingerprint;
-        if (stale) staleReason = "working-tree-changed";
-      }
-    }
     return c.json({
       session,
       units,
       coverage: { changedTotal: changed.length, covered: changed.length - unassigned, unassigned },
-      ...stale === void 0 ? {} : { stale },
-      ...staleReason ? { staleReason } : {}
+      ...staleness(ctx.repoRoot, session.headSha, session.repoFingerprint)
     });
   });
   router.put("/:id/plan", async (c) => {
@@ -41367,6 +41722,1004 @@ function createShapeRoute(ctx) {
   return router;
 }
 
+// packages/server/src/routes/map.ts
+import { existsSync as existsSync4 } from "node:fs";
+import { join as join9 } from "node:path";
+
+// packages/server/src/repo/maps.ts
+function saveMap(db2, sessionId, record2) {
+  db2.prepare(
+    "INSERT OR REPLACE INTO component_maps (session_id, model, resolved, head_sha, repo_fingerprint, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+  ).run(
+    sessionId,
+    JSON.stringify(record2.model),
+    JSON.stringify(record2.map),
+    record2.headSha,
+    record2.repoFingerprint,
+    Date.now()
+  );
+}
+function getMap(db2, sessionId) {
+  const row = db2.prepare("SELECT * FROM component_maps WHERE session_id = ?").get(sessionId);
+  if (!row) return void 0;
+  return {
+    model: JSON.parse(row.model),
+    map: JSON.parse(row.resolved),
+    headSha: row.head_sha,
+    repoFingerprint: row.repo_fingerprint,
+    createdAt: row.created_at
+  };
+}
+
+// packages/server/src/map/signals.ts
+var MAX_LINE = 160;
+var isPython = (file2) => file2.endsWith(".py");
+function leadingLines(source) {
+  const lines = source.split("\n");
+  let start = lines[0]?.startsWith("#!") ? 1 : 0;
+  while (start < lines.length && lines[start].trim() === "") start++;
+  return lines.slice(start);
+}
+var joinParts = (parts) => parts.map((p) => p.trim()).filter(Boolean).join(" ") || void 0;
+function prefixedBlock(lines, prefix) {
+  const out = [];
+  for (const line of lines) {
+    if (!line.trimStart().startsWith(prefix)) break;
+    out.push(line.trimStart().slice(prefix.length));
+  }
+  return out;
+}
+function delimitedBlock(lines, open2, close) {
+  const first = lines[0].trimStart().slice(open2.length);
+  if (first.includes(close)) return [first.slice(0, first.indexOf(close))];
+  const out = [first];
+  for (const line of lines.slice(1)) {
+    if (line.includes(close)) {
+      out.push(line.slice(0, line.indexOf(close)));
+      break;
+    }
+    out.push(line);
+  }
+  return out;
+}
+function headerComment(source, file2) {
+  const lines = leadingLines(source);
+  const first = lines[0]?.trimStart() ?? "";
+  if (isPython(file2)) {
+    const quote = ['"""', "'''"].find((q) => first.startsWith(q));
+    if (quote) return joinParts(delimitedBlock(lines, quote, quote));
+    return first.startsWith("#") ? joinParts(prefixedBlock(lines, "#")) : void 0;
+  }
+  if (first.startsWith("//")) return joinParts(prefixedBlock(lines, "//"));
+  if (first.startsWith("/*")) {
+    return joinParts(delimitedBlock(lines, "/*", "*/").map((l) => l.replace(/^\s*\*+/, "")));
+  }
+  return void 0;
+}
+var TS_REGISTRATIONS = [
+  /\b\w+\.(get|post|put|patch|delete|all|route)\(\s*["'`]\//,
+  /\.(tool|registerTool|addTool|registerPrompt|registerResource)\(\s*["'`]/
+];
+var PY_REGISTRATIONS = [
+  /^\s*@[\w.]+\.(get|post|put|patch|delete|route|websocket|tool)\(/,
+  /\.(add_url_rule|add_api_route)\(/
+];
+function registrations(source, file2) {
+  const patterns = isPython(file2) ? PY_REGISTRATIONS : TS_REGISTRATIONS;
+  return source.split("\n").map((text, i) => ({ line: i + 1, text: text.trim().slice(0, MAX_LINE) })).filter(({ text }) => patterns.some((p) => p.test(text)));
+}
+function entryPointReason(source, file2) {
+  if (!isPython(file2)) {
+    if (source.startsWith("#!")) return "runs as a script (shebang)";
+    if (/import\.meta\.url\s*===[^\n]*process\.argv\[1\]|require\.main\s*===\s*module/.test(source)) {
+      return "runs as a script (main-module check)";
+    }
+    return void 0;
+  }
+  if (file2 === "__main__.py" || file2.endsWith("/__main__.py")) return "package entry point (__main__.py)";
+  if (/^if __name__ == ["']__main__["']:/m.test(source)) return "runs as a script (__main__ guard)";
+  return void 0;
+}
+
+// packages/server/src/map/evidence.ts
+var OUTSIDE = "(outside)";
+var BRIEF = { treeDepth: 2, groupSymbols: 12, header: 160, headers: 80, registrations: 40 };
+var dirOf = (file2) => file2.includes("/") ? file2.slice(0, file2.lastIndexOf("/")) : "";
+function commonDirectory(files) {
+  if (files.length === 0) return "";
+  let common = dirOf(files[0]).split("/");
+  for (const file2 of files) {
+    const parts = dirOf(file2).split("/");
+    let n = 0;
+    while (n < common.length && common[n] === parts[n]) n++;
+    common = common.slice(0, n);
+  }
+  return common.join("/");
+}
+var normalizeScope = (within) => within.replace(/^\.\//, "").replace(/\/+$/, "");
+var Scope = class {
+  constructor(path) {
+    this.path = path;
+    this.prefix = path ? `${path}/` : "";
+  }
+  path;
+  prefix;
+  contains(file2) {
+    return file2.startsWith(this.prefix);
+  }
+  /** The candidate a file belongs to: a direct subdirectory (`dir/`) or a direct file. */
+  candidate(file2) {
+    if (!this.contains(file2)) return OUTSIDE;
+    const rest = file2.slice(this.prefix.length);
+    const slash = rest.indexOf("/");
+    return slash < 0 ? file2 : `${this.prefix}${rest.slice(0, slash + 1)}`;
+  }
+};
+function countBy(items, key) {
+  const counts = /* @__PURE__ */ new Map();
+  for (const item of items) counts.set(key(item), (counts.get(key(item)) ?? 0) + 1);
+  return counts;
+}
+function directoryTree(files, scope, full) {
+  const depthOf = (dir) => dir === scope.path ? 0 : dir.slice(scope.prefix.length).split("/").length;
+  const dirs = /* @__PURE__ */ new Map();
+  for (const file2 of files) {
+    for (let dir = dirOf(file2); ; dir = dirOf(dir)) {
+      if (full || depthOf(dir) <= BRIEF.treeDepth) dirs.set(dir, (dirs.get(dir) ?? 0) + 1);
+      if (dir === scope.path || dir === "") break;
+    }
+  }
+  return [...dirs].map(([path, n]) => ({ path, files: n })).sort((a, b) => a.path.localeCompare(b.path));
+}
+function valueRefs(index, scope) {
+  return index.references.filter((r) => !r.typeOnly).map((r) => {
+    const def = index.definitions.get(r.symbol);
+    return { from: scope.candidate(r.file), to: scope.candidate(def.file), def };
+  }).filter((r) => r.from !== r.to && r.to !== OUTSIDE);
+}
+function matrix(refs) {
+  return [...countBy(refs, (r) => `${r.from}\0${r.to}`)].map(([key, references]) => {
+    const [from, to] = key.split("\0");
+    return { from, to, references };
+  }).sort((a, b) => b.references - a.references || a.from.localeCompare(b.from) || a.to.localeCompare(b.to));
+}
+function surfaces(refs, full) {
+  const users = /* @__PURE__ */ new Map();
+  for (const r of refs) {
+    const symbols = users.get(r.to) ?? /* @__PURE__ */ new Map();
+    const entry = symbols.get(r.def.symbol) ?? { def: r.def, by: /* @__PURE__ */ new Set() };
+    entry.by.add(r.from);
+    symbols.set(r.def.symbol, entry);
+    users.set(r.to, symbols);
+  }
+  return [...users].map(([candidate, symbols]) => ({
+    candidate,
+    symbols: symbols.size,
+    groups: consumerGroups([...symbols.values()], full)
+  })).sort((a, b) => b.symbols - a.symbols || a.candidate.localeCompare(b.candidate));
+}
+function consumerGroups(entries, full) {
+  const groups = /* @__PURE__ */ new Map();
+  for (const { def, by } of entries) {
+    const usedBy = [...by].sort();
+    const group = groups.get(usedBy.join("+")) ?? { usedBy, symbols: [] };
+    group.symbols.push(`${def.name} (${def.file}:${def.line})`);
+    groups.set(usedBy.join("+"), group);
+  }
+  return [...groups.values()].sort((a, b) => b.symbols.length - a.symbols.length || a.usedBy.join().localeCompare(b.usedBy.join())).map((g) => ({ usedBy: g.usedBy, symbols: capList(g.symbols.sort(), full ? Infinity : BRIEF.groupSymbols) }));
+}
+function capList(items, max) {
+  return items.length <= max ? items : [...items.slice(0, max), `+${items.length - max} more`];
+}
+function implementations(index, scope) {
+  const out = [];
+  for (const [abstract, impls] of index.implementations) {
+    if (!abstract.endsWith("#")) continue;
+    const declared = index.definitions.get(abstract);
+    if (!declared) continue;
+    const defs = impls.map((s) => index.definitions.get(s)).filter((d) => d !== void 0);
+    if (!scope.contains(declared.file) && !defs.some((d) => scope.contains(d.file))) continue;
+    out.push({
+      type: symbolName(abstract),
+      file: declared.file,
+      implementations: defs.map((d) => `${d.name} (${d.file})`)
+    });
+  }
+  return out;
+}
+function parsePackage(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {};
+  }
+}
+function scopePackages(ctx, scope) {
+  const roots = ctx.roots.filter((r) => r.language === "ts").map((r) => r.root);
+  const encloses = (root) => root === "" || scope.path === root || scope.path.startsWith(`${root}/`);
+  const nearest = roots.filter(encloses).sort((a, b) => b.length - a.length)[0];
+  return roots.filter((root) => root === nearest || root !== "" && scope.contains(`${root}/`));
+}
+function packageEntries(ctx, scope) {
+  return scopePackages(ctx, scope).map((root) => ({ root })).flatMap((r) => {
+    const file2 = r.root ? `${r.root}/package.json` : "package.json";
+    const text = ctx.readSource(file2);
+    if (!text) return [];
+    const pkg = parsePackage(text);
+    const bins = typeof pkg.bin === "string" ? [pkg.bin] : Object.values(pkg.bin ?? {});
+    return [
+      ...bins.map((b) => ({ file: file2, reason: `bin: ${b}` })),
+      ...pkg.main ? [{ file: file2, reason: `main: ${pkg.main}` }] : []
+    ];
+  });
+}
+function sourceSignals(files, ctx, full) {
+  const headers = [];
+  const entryPoints = [];
+  const found = [];
+  for (const file2 of files) {
+    const source = ctx.readSource(file2);
+    if (source === void 0) continue;
+    const comment = headerComment(source, file2);
+    if (comment)
+      headers.push({
+        file: file2,
+        comment: full || comment.length <= BRIEF.header ? comment : `${comment.slice(0, BRIEF.header - 1)}\u2026`
+      });
+    const reason = entryPointReason(source, file2);
+    if (reason) entryPoints.push({ file: file2, reason });
+    found.push(...registrations(source, file2).map((r) => ({ file: file2, ...r })));
+  }
+  return {
+    headers: full ? headers : headers.slice(0, BRIEF.headers),
+    entryPoints,
+    registrations: full ? found : found.slice(0, BRIEF.registrations)
+  };
+}
+function buildEvidence(index, ctx, opts) {
+  const scope = new Scope(opts.within !== void 0 ? normalizeScope(opts.within) : commonDirectory(index.files));
+  const files = index.files.filter((f) => scope.contains(f));
+  const refs = valueRefs(index, scope);
+  const signals = sourceSignals(files, ctx, opts.full);
+  const manifest = ctx.manifest?.source === "manifest" ? ctx.manifest.components : void 0;
+  return {
+    scope: scope.path,
+    full: opts.full,
+    tree: directoryTree(files, scope, opts.full),
+    roots: ctx.roots,
+    ...manifest ? {
+      manifest: manifest.map((c) => ({
+        id: c.id,
+        paths: c.paths,
+        ...c.description ? { description: c.description } : {}
+      }))
+    } : {},
+    candidates: [...countBy(files, (f) => scope.candidate(f))].map(([id, n]) => ({ id, files: n })).sort((a, b) => a.id.localeCompare(b.id)),
+    matrix: matrix(refs),
+    surfaces: surfaces(refs, opts.full),
+    signals: {
+      implementations: implementations(index, scope),
+      barrels: index.barrels.filter((b) => scope.contains(b.file)),
+      headers: signals.headers,
+      entryPoints: [...packageEntries(ctx, scope), ...signals.entryPoints],
+      registrations: signals.registrations
+    },
+    gaps: index.gaps
+  };
+}
+
+// packages/server/src/map/bindings.ts
+var BINDABLE = /* @__PURE__ */ new Set(["function", "method", "value", "type"]);
+var QUALIFIED = /^(.+\.[A-Za-z0-9]+):(.+)$/;
+function parseEntry(text) {
+  const qualified = text.match(QUALIFIED);
+  const target = qualified ? qualified[2] : text;
+  const wildcard = target.endsWith("#*");
+  return {
+    text,
+    ...qualified ? { file: qualified[1] } : {},
+    name: wildcard ? target.slice(0, -2) : target,
+    wildcard
+  };
+}
+function entryMatches(entry, def) {
+  if (entry.file !== void 0 && def.file !== entry.file) return false;
+  return def.name === entry.name || entry.wildcard && def.name.startsWith(`${entry.name}#`);
+}
+function candidatesByProvider(model, tree, index) {
+  const providers = new Set(model.interfaces.filter((i) => i.kind === void 0).map((i) => i.provider));
+  const out = new Map([...providers].map((p) => [p, []]));
+  for (const def of index.definitions.values()) {
+    const component = BINDABLE.has(def.kind) ? tree.ownerOf(def.file) : void 0;
+    if (!component) continue;
+    for (const provider of providers) {
+      if (tree.within(component, provider)) out.get(provider).push({ def, component });
+    }
+  }
+  return out;
+}
+function entryIssue(i, entry, matched) {
+  if (matched.length === 0) {
+    return {
+      rule: "binding",
+      message: `bind entry '${entry.text}' of interface '${i.id}' matches no symbol in '${i.provider}'`
+    };
+  }
+  const named = matched.filter((m) => m.def.name === entry.name);
+  const files = [...new Set((named.length ? named : matched).map((m) => m.def.file))].sort();
+  if (files.length > 1) {
+    return {
+      rule: "binding",
+      message: `bind entry '${entry.text}' of interface '${i.id}' matches symbols in ${files.join(", ")}; qualify it as '${files[0]}:${entry.text}'`
+    };
+  }
+  return void 0;
+}
+function resolveBindings(model, tree, index) {
+  const candidates = candidatesByProvider(model, tree, index);
+  const result = { bindings: /* @__PURE__ */ new Map(), bySymbol: /* @__PURE__ */ new Map(), issues: [] };
+  for (const i of model.interfaces) {
+    if (i.kind !== void 0) continue;
+    const owned = result.bySymbol.get(i.provider) ?? /* @__PURE__ */ new Map();
+    result.bySymbol.set(i.provider, owned);
+    const bound = /* @__PURE__ */ new Map();
+    for (const entry of i.bind.map(parseEntry)) {
+      const matched = candidates.get(i.provider).filter((c) => entryMatches(entry, c.def));
+      const issue2 = entryIssue(i, entry, matched);
+      if (issue2) result.issues.push(issue2);
+      for (const { def, component } of matched) {
+        bound.set(def.symbol, { symbol: def.symbol, name: def.name, file: def.file, line: def.line, component });
+      }
+    }
+    for (const symbol2 of bound.keys()) claim2(result, owned, i, symbol2, bound.get(symbol2).name);
+    result.bindings.set(
+      i.id,
+      [...bound.values()].sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line)
+    );
+  }
+  return result;
+}
+function claim2(result, owned, i, symbol2, name) {
+  const first = owned.get(symbol2);
+  if (first === void 0) {
+    owned.set(symbol2, i.id);
+    return;
+  }
+  result.issues.push({
+    rule: "binding",
+    message: `symbol '${name}' of '${i.provider}' is bound by both '${first}' and '${i.id}'`
+  });
+}
+
+// packages/server/src/map/model.ts
+var ID = /^[a-z0-9][a-z0-9._-]*$/;
+var RESERVED_ID = "system";
+var componentSchema2 = external_exports.object({
+  id: external_exports.string(),
+  name: external_exports.string().min(1),
+  parent: external_exports.string().nullable(),
+  meaning: external_exports.string(),
+  paths: external_exports.array(external_exports.string()).default([]),
+  external: external_exports.boolean().default(false),
+  utility: external_exports.boolean().default(false)
+}).strict();
+var interfaceSchema = external_exports.object({
+  id: external_exports.string(),
+  name: external_exports.string().min(1),
+  provider: external_exports.string(),
+  requirers: external_exports.array(external_exports.string()).default([]),
+  meaning: external_exports.string(),
+  bind: external_exports.array(external_exports.string().min(1)).default([]),
+  kind: external_exports.string().min(1).optional(),
+  evidence: external_exports.array(external_exports.string().min(1)).default([])
+}).strict();
+var modelSchema = external_exports.object({
+  title: external_exports.string(),
+  components: external_exports.array(componentSchema2),
+  interfaces: external_exports.array(interfaceSchema).default([]),
+  undeclared: external_exports.array(external_exports.object({ interface: external_exports.string(), requirer: external_exports.string(), reason: external_exports.string() })).default([])
+});
+var EMPTY_MODEL = { title: "", components: [], interfaces: [], undeclared: [] };
+function parseMapModel(json3) {
+  const parsed = modelSchema.safeParse(json3);
+  if (!parsed.success) {
+    const issues = parsed.error.issues.map((i) => ({
+      rule: "model",
+      message: `${i.path.join(".") || "model"}: ${i.message}`
+    }));
+    return { model: EMPTY_MODEL, issues };
+  }
+  const model = parsed.data;
+  const messages = [
+    ...idIssues(model),
+    ...treeIssues(model.components),
+    ...componentIssues(model.components),
+    ...model.interfaces.flatMap((i) => interfaceIssues(i, model.components)),
+    ...undeclaredIssues(model)
+  ];
+  return { model, issues: messages.map((message) => ({ rule: "model", message })) };
+}
+function idIssues(model) {
+  return [
+    ...idsOf(
+      "component",
+      model.components.map((c) => c.id)
+    ),
+    ...idsOf(
+      "interface",
+      model.interfaces.map((i) => i.id)
+    )
+  ];
+}
+function idsOf(kind, ids) {
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const id of ids) {
+    if (seen.has(id)) out.push(`duplicate ${kind} id '${id}'`);
+    seen.add(id);
+    if (!ID.test(id)) out.push(`invalid ${kind} id '${id}'`);
+    else if (kind === "component" && id === RESERVED_ID) out.push(`reserved component id '${id}'`);
+  }
+  return out;
+}
+function treeIssues(components) {
+  const byId = new Map(components.map((c) => [c.id, c]));
+  const out = [];
+  for (const c of components) {
+    if (c.parent !== null && !byId.has(c.parent)) out.push(`component '${c.id}' has unknown parent '${c.parent}'`);
+  }
+  const reported = /* @__PURE__ */ new Set();
+  for (const c of components) {
+    const cycle = cycleFrom(c.id, byId);
+    if (!cycle || cycle.some((id) => reported.has(id))) continue;
+    cycle.forEach((id) => reported.add(id));
+    const first = components.find((x) => cycle.includes(x.id));
+    out.push(`parent cycle through '${first.id}'`);
+  }
+  if (components.length > 0 && !components.some((c) => c.parent === null)) out.push("the model has no root component");
+  return out;
+}
+function cycleFrom(id, byId) {
+  const path = [];
+  for (let at2 = id; at2 != null; at2 = byId.get(at2)?.parent) {
+    const seenAt = path.indexOf(at2);
+    if (seenAt >= 0) return path.slice(seenAt);
+    path.push(at2);
+  }
+  return void 0;
+}
+function componentIssues(components) {
+  const hasParts = new Set(components.map((c) => c.parent).filter((p) => p !== null));
+  return components.flatMap((c) => {
+    const out = [];
+    if (c.external) {
+      if (c.paths.length > 0) out.push(`external component '${c.id}' has paths`);
+      if (c.utility) out.push(`external component '${c.id}' is a utility`);
+      if (hasParts.has(c.id)) out.push(`external component '${c.id}' has parts`);
+    } else if (c.paths.length === 0) {
+      out.push(`component '${c.id}' needs paths`);
+    }
+    if (c.utility && hasParts.has(c.id)) out.push(`utility '${c.id}' has parts`);
+    return out;
+  });
+}
+function interfaceIssues(i, components) {
+  const byId = new Map(components.map((c) => [c.id, c]));
+  const provider = byId.get(i.provider);
+  if (!provider) return [`interface '${i.id}' has unknown provider '${i.provider}'`];
+  const out = [...shapeIssues(i, provider), ...i.requirers.flatMap((r) => requirerIssues(i, provider, byId.get(r), r))];
+  if (provider.utility) out.push(`utility '${provider.id}' cannot provide interface '${i.id}'`);
+  return out;
+}
+function shapeIssues(i, provider) {
+  const out = [];
+  if (i.kind === void 0) {
+    if (i.bind.length === 0) out.push(`interface '${i.id}' needs bind entries`);
+    if (i.evidence.length > 0) {
+      out.push(`in-process interface '${i.id}' cannot have evidence; set kind for a cross-process interface`);
+    }
+    if (provider.external) out.push(`external '${provider.id}' can only provide cross-process interfaces ('${i.id}')`);
+  } else if (i.bind.length > 0) {
+    out.push(`cross-process interface '${i.id}' cannot have bind entries`);
+  }
+  return out;
+}
+function requirerIssues(i, provider, requirer, id) {
+  if (!requirer) return [`interface '${i.id}' has unknown requirer '${id}'`];
+  if (requirer.id === provider.id) return [`interface '${i.id}' lists its provider '${id}' as a requirer`];
+  if (requirer.utility) return [`utility '${id}' cannot require interface '${i.id}'`];
+  if (requirer.parent !== provider.parent) {
+    return [`requirer '${id}' of interface '${i.id}' is not a sibling of provider '${provider.id}'`];
+  }
+  return [];
+}
+function undeclaredIssues(model) {
+  const interfaces = new Set(model.interfaces.map((i) => i.id));
+  const components = new Set(model.components.map((c) => c.id));
+  return model.undeclared.flatMap((u) => {
+    if (!interfaces.has(u.interface)) return [`undeclared use names unknown interface '${u.interface}'`];
+    if (!components.has(u.requirer))
+      return [`undeclared use of '${u.interface}' names unknown component '${u.requirer}'`];
+    if (!u.reason.trim()) return [`undeclared use of '${u.interface}' by '${u.requirer}' needs a reason`];
+    return [];
+  });
+}
+
+// packages/server/src/map/ownership.ts
+var GLOB = /[*?[]/;
+function patternMatches(pattern, file2) {
+  if (pattern === "") return true;
+  if (pattern.endsWith("/")) return file2.startsWith(pattern);
+  if (GLOB.test(pattern)) return matchGlob(file2, pattern);
+  return file2 === pattern || file2.startsWith(`${pattern}/`);
+}
+var ComponentTree = class {
+  constructor(components) {
+    this.components = components;
+    this.byId = new Map(components.map((c) => [c.id, c]));
+  }
+  components;
+  byId;
+  owners = /* @__PURE__ */ new Map();
+  get(id) {
+    return this.byId.get(id);
+  }
+  parentOf(id) {
+    return this.byId.get(id)?.parent ?? null;
+  }
+  childrenOf(id) {
+    return this.components.filter((c) => c.parent === id);
+  }
+  /** The component and its ancestors, self first. */
+  ancestors(id) {
+    const out = [];
+    for (let at2 = id; at2 !== null && this.byId.has(at2); at2 = this.parentOf(at2)) out.push(at2);
+    return out;
+  }
+  within(id, root) {
+    return this.ancestors(id).includes(root);
+  }
+  lca(a, b) {
+    const above = new Set(this.ancestors(a));
+    return this.ancestors(b).find((x) => above.has(x)) ?? null;
+  }
+  /** The child of `ancestor` on the way to `id`; undefined when `id` is not strictly below it. */
+  childToward(ancestor, id) {
+    return this.ancestors(id).find((x) => x !== ancestor && this.parentOf(x) === ancestor);
+  }
+  /** Parent/child steps from `from` up to its ancestor `to`. */
+  steps(from, to) {
+    const out = [];
+    for (const inner of this.ancestors(from)) {
+      if (inner === to) break;
+      out.push({ outer: this.parentOf(inner), inner });
+    }
+    return out;
+  }
+  ownerOf(file2) {
+    if (!this.owners.has(file2)) this.owners.set(file2, this.findOwner(file2));
+    return this.owners.get(file2);
+  }
+  findOwner(file2) {
+    let best;
+    for (const c of this.components) {
+      if (c.external) continue;
+      const depth = this.ancestors(c.id).length;
+      for (const pattern of c.paths) {
+        if (!patternMatches(pattern, file2)) continue;
+        if (!best || depth > best.depth || depth === best.depth && pattern.length > best.length) {
+          best = { id: c.id, depth, length: pattern.length };
+        }
+      }
+    }
+    return best?.id;
+  }
+};
+
+// packages/server/src/map/resolve.ts
+var MAX_SAMPLES = 5;
+var MAX_TYPE_SYMBOLS = 8;
+var at = (r) => `${r.file}:${r.line} (${r.caller})`;
+var Resolver = class {
+  constructor(tree, bound, declared) {
+    this.tree = tree;
+    this.bound = bound;
+    this.declared = declared;
+  }
+  tree;
+  bound;
+  declared;
+  out = {
+    sites: /* @__PURE__ */ new Map(),
+    references: 0,
+    uncovered: [],
+    utilityRefs: /* @__PURE__ */ new Map(),
+    utilityViolations: /* @__PURE__ */ new Map(),
+    unattributed: 0,
+    typeDependencies: []
+  };
+  uncoveredByKey = /* @__PURE__ */ new Map();
+  types = /* @__PURE__ */ new Map();
+  add(ref, def) {
+    const from = this.tree.ownerOf(ref.file);
+    const to = this.tree.ownerOf(def.file);
+    if (!from || !to || from === to) return;
+    if (this.exempt(from, to)) {
+      this.out.utilityRefs.set(to, (this.out.utilityRefs.get(to) ?? 0) + 1);
+      return;
+    }
+    const fromUtility = this.tree.get(from).utility;
+    if (ref.typeOnly) {
+      if (!fromUtility) this.typeDependency(from, to, def);
+      return;
+    }
+    if (fromUtility) return this.violation(from, to, ref);
+    const pair = this.siblings(from, to);
+    if (!pair) {
+      this.out.unattributed++;
+      return;
+    }
+    this.out.references++;
+    this.site(pair.a, pair.b, from, ref, def);
+  }
+  finish() {
+    this.out.uncovered = [...this.uncoveredByKey.values()];
+    this.out.typeDependencies = [...this.types.values()].map((t) => ({
+      ...t,
+      symbols: [...t.symbols].slice(0, MAX_TYPE_SYMBOLS)
+    }));
+    return this.out;
+  }
+  /** References into a utility are exempt where the utility itself is the part they reach;
+   *  from further out they cross a visible ancestor and need that ancestor's interface. */
+  exempt(from, to) {
+    if (!this.tree.get(to).utility) return false;
+    const b = this.siblings(from, to)?.b;
+    return b === void 0 || b === to;
+  }
+  siblings(from, to) {
+    const lca = this.tree.lca(from, to);
+    const a = this.tree.childToward(lca, from);
+    const b = this.tree.childToward(lca, to);
+    return a && b ? { a, b } : void 0;
+  }
+  site(requirer, provider, component, ref, def) {
+    const iface = this.bound.bySymbol.get(provider)?.get(def.symbol);
+    if (!iface) return this.uncoveredRef(provider, requirer, ref, def);
+    const undeclared = !this.declared.get(iface).has(requirer);
+    const site = {
+      file: ref.file,
+      line: ref.line,
+      caller: ref.caller,
+      symbol: def.name,
+      component,
+      requirer,
+      undeclared
+    };
+    const list = this.out.sites.get(iface) ?? [];
+    list.push(site);
+    this.out.sites.set(iface, list);
+  }
+  uncoveredRef(provider, requirer, ref, def) {
+    const key = `${provider}\0${def.symbol}`;
+    const entry = this.uncoveredByKey.get(key) ?? { provider, def, from: /* @__PURE__ */ new Set(), where: [], count: 0 };
+    entry.from.add(requirer);
+    entry.count++;
+    entry.where.push(at(ref));
+    this.uncoveredByKey.set(key, entry);
+  }
+  violation(utility, to, ref) {
+    const target = this.siblings(utility, to)?.b ?? to;
+    const key = `${utility}\0${target}`;
+    const entry = this.out.utilityViolations.get(key) ?? { utility, target, count: 0, where: [] };
+    entry.count++;
+    entry.where.push(at(ref));
+    this.out.utilityViolations.set(key, entry);
+  }
+  typeDependency(from, to, def) {
+    const pair = this.siblings(from, to);
+    if (!pair) return;
+    const key = `${pair.a}\0${pair.b}`;
+    const entry = this.types.get(key) ?? { from: pair.a, to: pair.b, count: 0, symbols: /* @__PURE__ */ new Set() };
+    entry.count++;
+    entry.symbols.add(def.name);
+    this.types.set(key, entry);
+  }
+};
+function resolveReferences(index, tree, bound, declared) {
+  const resolver = new Resolver(tree, bound, declared);
+  for (const ref of index.references) resolver.add(ref, index.definitions.get(ref.symbol));
+  return resolver.finish();
+}
+function referenceIssues(res) {
+  const uncovered = res.uncovered.map((u) => ({
+    rule: "coverage",
+    message: `'${u.provider}' symbol '${u.def.name}' (${u.def.file}:${u.def.line}) is used by ${[...u.from].sort().join(", ")} but bound by no interface of '${u.provider}' (${u.count} reference${u.count === 1 ? "" : "s"})`,
+    where: u.where.slice(0, MAX_SAMPLES)
+  }));
+  const violations = [...res.utilityViolations.values()].map((v) => ({
+    rule: "utility",
+    message: `utility '${v.utility}' references visible component '${v.target}' (${v.count} reference${v.count === 1 ? "" : "s"}); utilities may not depend on visible components`,
+    where: v.where.slice(0, MAX_SAMPLES)
+  }));
+  return [...uncovered, ...violations];
+}
+
+// packages/server/src/map/rules.ts
+var plural2 = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+function requirerIssues2(interfaces) {
+  return interfaces.filter((i) => i.kind === void 0).flatMap(
+    (i) => i.requirers.filter((r) => !i.sites.some((s) => s.requirer === r)).map((r) => ({
+      rule: "requirer",
+      message: `declared requirer '${r}' of interface '${i.id}' has no call sites`
+    }))
+  );
+}
+function undeclaredIssues2(model, interfaces) {
+  const issues = [];
+  for (const i of interfaces) {
+    const byRequirer = /* @__PURE__ */ new Map();
+    for (const s of i.sites.filter((x) => x.undeclared)) {
+      const where = byRequirer.get(s.requirer) ?? [];
+      where.push(`${s.file}:${s.line} (${s.caller})`);
+      byRequirer.set(s.requirer, where);
+    }
+    for (const [requirer, where] of byRequirer) {
+      if (i.reasons.some((r) => r.requirer === requirer)) continue;
+      issues.push({
+        rule: "undeclared",
+        message: `interface '${i.id}' of '${i.provider}' is used by undeclared requirer '${requirer}' (${plural2(where.length, "call site")}); declare the requirer or add an undeclared entry with a reason`,
+        where: where.slice(0, 5)
+      });
+    }
+  }
+  for (const u of model.undeclared) {
+    const i = interfaces.find((x) => x.id === u.interface);
+    if (i.sites.some((s) => s.undeclared && s.requirer === u.requirer)) continue;
+    issues.push({
+      rule: "undeclared",
+      message: `undeclared entry for '${u.interface}' by '${u.requirer}' has no undeclared call sites`
+    });
+  }
+  return issues;
+}
+function resolveEvidence(i, tree, fileExists) {
+  if (i.kind === void 0) return { files: [], issues: [] };
+  if (i.evidence.length === 0) {
+    return {
+      files: [],
+      issues: [{ rule: "evidence", message: `cross-process interface '${i.id}' needs evidence files` }]
+    };
+  }
+  const connected = [i.provider, ...i.requirers];
+  const files = [];
+  const issues = [];
+  for (const file2 of i.evidence) {
+    const owner = tree.ownerOf(file2);
+    if (file2.startsWith("/") || file2.split("/").includes("..")) {
+      issues.push({
+        rule: "evidence",
+        message: `evidence file '${file2}' of interface '${i.id}' must be a repository-relative path`
+      });
+    } else if (!fileExists(file2)) {
+      issues.push({ rule: "evidence", message: `evidence file '${file2}' of interface '${i.id}' does not exist` });
+    } else if (!owner || !connected.some((c) => tree.within(owner, c))) {
+      issues.push({
+        rule: "evidence",
+        message: `evidence file '${file2}' of interface '${i.id}' is outside the components it connects`
+      });
+    } else {
+      files.push({ file: file2, component: owner });
+    }
+  }
+  return { files, issues };
+}
+function deriveDelegations(interfaces, tree) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  const add = (iface, side, from, to) => {
+    for (const step2 of tree.steps(from, to)) {
+      const key = `${iface}\0${side}\0${step2.outer}\0${step2.inner}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ interface: iface, side, ...step2 });
+    }
+  };
+  for (const i of interfaces) {
+    for (const b of i.bindings) add(i.id, "provided", b.component, i.provider);
+    for (const s of i.sites) add(i.id, "required", s.component, s.requirer);
+    for (const e of i.evidenceFiles) {
+      const end = [i.provider, ...i.requirers].find((c) => tree.within(e.component, c));
+      add(i.id, end === i.provider ? "provided" : "required", e.component, end);
+    }
+  }
+  return out;
+}
+function mappedTopLevels(components) {
+  const tops = components.flatMap((c) => c.paths).map((p) => p.split(/[*?[]/)[0].split("/")[0]);
+  if (tops.includes("")) return () => true;
+  return (file2) => tops.some((t) => file2 === t || file2.startsWith(`${t}/`));
+}
+function unclaimedFiles(files, tree, components) {
+  const mapped = mappedTopLevels(components);
+  const groups = /* @__PURE__ */ new Map();
+  for (const file2 of files) {
+    const owner = tree.ownerOf(file2) ?? null;
+    if (owner === null && !mapped(file2)) continue;
+    if (owner !== null && !tree.childrenOf(owner).some((c) => !c.external)) continue;
+    const group = groups.get(owner) ?? [];
+    group.push(file2);
+    groups.set(owner, group);
+  }
+  return [...groups].map(([component, list]) => ({ component, files: list }));
+}
+function fileCounts(files, tree) {
+  const counts = /* @__PURE__ */ new Map();
+  for (const file2 of files) {
+    const owner = tree.ownerOf(file2);
+    for (const id of owner ? tree.ancestors(owner) : []) counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  return counts;
+}
+
+// packages/server/src/map/check.ts
+function checkMap(json3, index, fileExists) {
+  const { model, issues } = parseMapModel(json3);
+  if (issues.length > 0) return { model, map: unresolvedMap(model, issues, index.gaps) };
+  const tree = new ComponentTree(model.components);
+  const bound = resolveBindings(model, tree, index);
+  const declared = new Map(model.interfaces.map((i) => [i.id, new Set(i.requirers)]));
+  const refs = resolveReferences(index, tree, bound, declared);
+  const evidenceIssues = [];
+  const interfaces = model.interfaces.map((i) => {
+    const resolved = {
+      ...i,
+      bindings: bound.bindings.get(i.id) ?? [],
+      sites: sortSites(refs.sites.get(i.id) ?? []),
+      evidenceFiles: [],
+      reasons: model.undeclared.filter((u) => u.interface === i.id).map((u) => ({ requirer: u.requirer, reason: u.reason }))
+    };
+    const evidence = resolveEvidence(resolved, tree, fileExists);
+    evidenceIssues.push(...evidence.issues);
+    return { ...resolved, evidenceFiles: evidence.files };
+  });
+  const allIssues = [
+    ...bound.issues,
+    ...referenceIssues(refs),
+    ...requirerIssues2(interfaces),
+    ...undeclaredIssues2(model, interfaces),
+    ...evidenceIssues
+  ];
+  const counts = fileCounts(index.files, tree);
+  return {
+    model,
+    map: {
+      title: model.title,
+      components: model.components.map((c) => ({ ...c, fileCount: counts.get(c.id) ?? 0 })),
+      interfaces,
+      delegations: deriveDelegations(interfaces, tree),
+      report: report(allIssues, refs, interfaces, unclaimedFiles(index.files, tree, model.components), index.gaps)
+    }
+  };
+}
+function sortSites(sites) {
+  return [...sites].sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
+}
+function report(issues, refs, interfaces, unclaimed, gaps) {
+  const sites = interfaces.flatMap((i) => i.sites);
+  return {
+    ok: issues.length === 0,
+    coverage: {
+      references: refs.references,
+      covered: sites.length,
+      undeclared: sites.filter((s) => s.undeclared).length
+    },
+    issues,
+    unclaimedFiles: unclaimed,
+    unattributedReferences: refs.unattributed,
+    utilities: [...refs.utilityRefs].map(([id, references]) => ({ id, references })),
+    typeDependencies: refs.typeDependencies,
+    gaps
+  };
+}
+function unresolvedMap(model, issues, gaps) {
+  return {
+    title: model.title,
+    components: [],
+    interfaces: [],
+    delegations: [],
+    report: {
+      ok: false,
+      coverage: { references: 0, covered: 0, undeclared: 0 },
+      issues,
+      unclaimedFiles: [],
+      unattributedReferences: 0,
+      utilities: [],
+      typeDependencies: [],
+      gaps
+    }
+  };
+}
+
+// packages/server/src/routes/map.ts
+function createMapRoute(ctx) {
+  const router = new Hono3();
+  const root = ctx.repoRoot;
+  const fileExists = (file2) => existsSync4(join9(root, file2));
+  const withIndex = (handler) => async (c) => {
+    const sessionId = c.req.param("id");
+    if (!getSession(ctx.db, sessionId)) return c.json({ error: "not found" }, 404);
+    if (!ctx.graphProvider.getReferenceIndex) {
+      return c.json(
+        {
+          error: `component maps need the scip graph provider (current: ${ctx.providerName ?? "unknown"})`,
+          phase: "map"
+        },
+        400
+      );
+    }
+    try {
+      return await handler(c, sessionId, await ctx.graphProvider.getReferenceIndex());
+    } catch (e) {
+      if (e instanceof IndexError) return c.json({ error: e.message, phase: e.phase }, 400);
+      throw e;
+    }
+  };
+  router.get(
+    "/:id/map/evidence",
+    withIndex((c, _sessionId, index) => {
+      const within = c.req.query("within");
+      const full = ["1", "true"].includes(c.req.query("full") ?? "");
+      const evidence = buildEvidence(
+        index,
+        { readSource: sourceReader(root), roots: findMarkerRoots(root), manifest: loadComponentMap(root) },
+        { full, ...within ? { within } : {} }
+      );
+      return c.json(evidence);
+    })
+  );
+  router.post(
+    "/:id/map/check",
+    withIndex(async (c, _sessionId, index) => {
+      const body = await jsonBody(c);
+      if (body === void 0) return badBody(c);
+      return c.json({ report: checkMap(body, index, fileExists).map.report });
+    })
+  );
+  router.put(
+    "/:id/map",
+    withIndex(async (c, sessionId, index) => {
+      const body = await jsonBody(c);
+      if (body === void 0) return badBody(c);
+      const { model, map: map2 } = checkMap(body, index, fileExists);
+      if (!map2.report.ok) return c.json({ error: "the map fails the fidelity check", report: map2.report }, 422);
+      saveMap(ctx.db, sessionId, { model, map: map2, ...snapshot(root) });
+      return c.json({ report: map2.report });
+    })
+  );
+  router.get("/:id/map", (c) => {
+    if (!getSession(ctx.db, c.req.param("id"))) return c.json({ error: "not found" }, 404);
+    const stored = getMap(ctx.db, c.req.param("id"));
+    if (!stored) return c.json({ error: "no component map for this session" }, 404);
+    return c.json({
+      model: stored.model,
+      map: stored.map,
+      headSha: stored.headSha,
+      createdAt: stored.createdAt,
+      ...staleness(root, stored.headSha, stored.repoFingerprint)
+    });
+  });
+  return router;
+}
+async function jsonBody(c) {
+  try {
+    return await c.req.json();
+  } catch {
+    return void 0;
+  }
+}
+var badBody = (c) => c.json({ error: "the request body must be a JSON component model" }, 400);
+
 // node_modules/.pnpm/hono@4.13.13/node_modules/hono/dist/helper/factory/index.js
 var createMiddleware = (middleware) => middleware;
 
@@ -41410,7 +42763,8 @@ function createApp(ctx) {
   app2.route("/api/sessions", createFlowsRoute(resolved));
   app2.route("/api/sessions", createChangesRoute(resolved));
   app2.route("/api/sessions", createShapeRoute(resolved));
-  if (resolved.webDistPath && existsSync4(join9(resolved.webDistPath, "index.html"))) {
+  app2.route("/api/sessions", createMapRoute(resolved));
+  if (resolved.webDistPath && existsSync5(join10(resolved.webDistPath, "index.html"))) {
     app2.route("/", createStaticRoute(resolved.webDistPath));
   }
   return app2;
@@ -41479,7 +42833,7 @@ CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_node_id);
 CREATE INDEX IF NOT EXISTS idx_comments_session ON comments(session_id);
 CREATE INDEX IF NOT EXISTS idx_comments_node ON comments(node_id);
 `;
-var SCHEMA_VERSION = 10;
+var SCHEMA_VERSION = 11;
 var MIGRATIONS = {
   1: SCHEMA_SQL,
   2: `ALTER TABLE review_sessions ADD COLUMN repo_fingerprint TEXT NOT NULL DEFAULT '';`,
@@ -41515,7 +42869,18 @@ CREATE INDEX IF NOT EXISTS idx_comments_node ON comments(node_id);
   9: `ALTER TABLE review_sessions ADD COLUMN overview TEXT NOT NULL DEFAULT '';`,
   // v10: reference count behind an edge; attachment derivation ranks a test's
   // exercised subjects by it. Existing edges count as one reference.
-  10: `ALTER TABLE edges ADD COLUMN weight INTEGER NOT NULL DEFAULT 1;`
+  10: `ALTER TABLE edges ADD COLUMN weight INTEGER NOT NULL DEFAULT 1;`,
+  // v11: one component map per session; a resubmission replaces it.
+  11: `
+CREATE TABLE IF NOT EXISTS component_maps (
+  session_id TEXT PRIMARY KEY REFERENCES review_sessions(id) ON DELETE CASCADE,
+  model TEXT NOT NULL,
+  resolved TEXT NOT NULL,
+  head_sha TEXT NOT NULL,
+  repo_fingerprint TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+`
 };
 
 // packages/server/src/db/connection.ts
@@ -45380,8 +46745,8 @@ switch (which) {
     graphProvider = new StubGraphProvider();
 }
 var here = dirname2(fileURLToPath2(import.meta.url));
-var webDistPath = [process.env.SREV_WEB_DIST, join11(here, "..", "..", "web", "dist"), join11(here, "..", "web")].find(
-  (p) => p && existsSync5(join11(p, "index.html"))
+var webDistPath = [process.env.SREV_WEB_DIST, join12(here, "..", "..", "web", "dist"), join12(here, "..", "web")].find(
+  (p) => p && existsSync6(join12(p, "index.html"))
 );
 var webBuilt = webDistPath !== void 0;
 var hostname3 = process.env.SREV_HOST || "127.0.0.1";

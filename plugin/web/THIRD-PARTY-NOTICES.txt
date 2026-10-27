@@ -1,0 +1,8 @@
+Third-party software bundled in the Structured Review web UI
+
+elkjs 0.9.3
+Copyright (c) 2017-2023 Kiel University and others (the Eclipse Layout Kernel project)
+Licensed under the Eclipse Public License 2.0 (EPL-2.0).
+License text: https://www.eclipse.org/legal/epl-2.0/
+Source code: https://github.com/kieler/elkjs (tag 0.9.3) and https://www.npmjs.com/package/elkjs/v/0.9.3
+Used unmodified for the component map layout.

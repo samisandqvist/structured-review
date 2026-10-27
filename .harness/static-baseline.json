@@ -104,7 +104,6 @@
     "packages/skill/test/api.test.ts|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.|const units = defaultPartition(flows as any, orphans as any);": 2,
     "packages/skill/test/api.test.ts|max-lines-per-function|Arrow function has too many lines (85). Maximum allowed is 80.|describe(\"briefContext\", () => {": 1,
     "packages/skill/test/status.test.ts|max-lines-per-function|Arrow function has too many lines (96). Maximum allowed is 80.|describe(\"computeStatus\", () => {": 1,
-    "packages/web/src/App.tsx|max-lines-per-function|Function 'StatusBar' has too many lines (95). Maximum allowed is 80.|export function StatusBar({ sessionId }: { sessionId: string }) {": 1,
     "packages/web/src/api/hooks.ts|@typescript-eslint/no-floating-promises|Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator.|qc.invalidateQueries({ queryKey: [\"nodes\", sessionId] });": 4,
     "packages/web/src/api/hooks.ts|@typescript-eslint/no-floating-promises|Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator.|qc.invalidateQueries({ queryKey: [\"node\", sessionId] });": 4,
     "packages/web/src/api/hooks.ts|@typescript-eslint/no-floating-promises|Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator.|qc.invalidateQueries({ queryKey: [\"flows\", sessionId] });": 3,
@@ -128,7 +127,7 @@
     "packages/web/test/PlanView.test.tsx|max-lines-per-function|Arrow function has too many lines (128). Maximum allowed is 80.|describe(\"PlanView\", () => {": 1,
     "scripts/demo.mjs|max-lines-per-function|Async function 'main' has too many lines (108). Maximum allowed is 80.|async function main() {": 1,
     "scripts/plugin-launcher.mjs|max-depth|Blocks are nested too deeply (5). Maximum allowed is 4.|if (install.error || install.status !== 0 || !indexersPresent()) {": 1,
-    "packages/server/src/routes/sessions.ts|max-lines-per-function|Function 'createSessionsRoute' has too many lines (215). Maximum allowed is 80.|export function createSessionsRoute(ctx: AppContext) {": 1,
+    "packages/server/src/routes/sessions.ts|max-lines-per-function|Function 'createSessionsRoute' has too many lines (201). Maximum allowed is 80.|export function createSessionsRoute(ctx: AppContext) {": 1,
     "packages/server/src/routes/sessions.ts|max-lines-per-function|Async arrow function has too many lines (87). Maximum allowed is 80.|router.post(\"/\", async (c) => {": 1
   },
   "unused": {

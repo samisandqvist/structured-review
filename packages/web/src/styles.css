@@ -1221,3 +1221,492 @@ textarea:focus {
   font-size: 17px;
   margin: 0 0 4px;
 }
+
+/* ===========================================================================
+   Component map. Its own palette: tinted neutrals, a blue selection accent and
+   red for undeclared use. Dark by default like the app; light when the
+   system asks for it.
+   =========================================================================== */
+
+.cmap {
+  --cm-bg: #101312;
+  --cm-surface: #191d1b;
+  --cm-frame: #202522;
+  --cm-neighbor: #161a18;
+  --cm-ink: #e3e8e4;
+  --cm-muted: #96a19b;
+  --cm-rule: #313834;
+  --cm-line: #6d7873;
+  --cm-accent: #93a6ff;
+  --cm-accent-soft: rgba(147, 166, 255, 0.14);
+  --cm-bad: #ff7d6e;
+  --cm-bad-soft: rgba(255, 125, 110, 0.13);
+  --cm-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --cm-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: dark;
+  height: 100vh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: var(--cm-bg);
+  color: var(--cm-ink);
+  font-family: var(--cm-sans);
+  font-size: 14px;
+  line-height: 1.45;
+}
+@media (prefers-color-scheme: light) {
+  .cmap {
+    --cm-bg: #eceee9;
+    --cm-surface: #fbfcf9;
+    --cm-frame: #e2e6df;
+    --cm-neighbor: #f2f4ef;
+    --cm-ink: #1b211f;
+    --cm-muted: #5d6863;
+    --cm-rule: #c8cec8;
+    --cm-line: #79847f;
+    --cm-accent: #2747c4;
+    --cm-accent-soft: rgba(39, 71, 196, 0.1);
+    --cm-bad: #b8352a;
+    --cm-bad-soft: rgba(184, 53, 42, 0.1);
+    color-scheme: light;
+  }
+}
+.cmap-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  padding: 10px 16px;
+  background: var(--cm-surface);
+  border-bottom: 1px solid var(--cm-rule);
+}
+.cmap-bar h1 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: 0.01em;
+}
+.cmap .crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--cm-muted);
+}
+.cmap .crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.cmap .crumbs button {
+  font: inherit;
+  color: var(--cm-accent);
+  background: none;
+  border: 0;
+  padding: 2px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.cmap .crumbs button:hover {
+  background: var(--cm-accent-soft);
+}
+.cmap .crumbs .here {
+  color: var(--cm-ink);
+  font-weight: 500;
+  padding: 2px 4px;
+}
+.cmap .tag {
+  font-family: var(--cm-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cm-muted);
+  border: 1px solid var(--cm-rule);
+  border-radius: 3px;
+  padding: 1px 6px;
+}
+.cmap .stale {
+  font-size: 13px;
+  color: var(--warn);
+}
+.cmap .spacer {
+  flex: 1;
+}
+.cmap .tools {
+  display: flex;
+  gap: 4px;
+}
+.cmap .tools button,
+.cmap .btn {
+  font: 500 13px var(--cm-sans);
+  color: var(--cm-ink);
+  background: var(--cm-surface);
+  border: 1px solid var(--cm-rule);
+  border-radius: 5px;
+  padding: 4px 10px;
+  cursor: pointer;
+  text-decoration: none;
+}
+.cmap .tools button:hover,
+.cmap .btn:hover {
+  border-color: var(--cm-line);
+}
+.cmap button:focus-visible,
+.cmap a:focus-visible {
+  outline: 2px solid var(--cm-accent);
+  outline-offset: 1px;
+}
+.cmap-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 370px;
+  min-height: 0;
+}
+.cmap-canvas {
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+  touch-action: none;
+  cursor: grab;
+}
+.cmap-canvas:active {
+  cursor: grabbing;
+}
+.cmap-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.cmap-status {
+  position: absolute;
+  left: 16px;
+  top: 12px;
+  color: var(--cm-muted);
+  font-size: 13px;
+}
+.cmap-legend {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  background: var(--cm-surface);
+  border: 1px solid var(--cm-rule);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--cm-muted);
+  max-width: calc(100% - 24px);
+}
+.cmap-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.cmap-legend .bad {
+  color: var(--cm-bad);
+}
+.cmap-legend svg {
+  width: 34px;
+  height: 14px;
+  overflow: visible;
+}
+.cmap-panel {
+  border-left: 1px solid var(--cm-rule);
+  background: var(--cm-surface);
+  overflow: auto;
+  min-width: 0;
+  padding: 16px 16px 24px;
+}
+.cmap-panel h2 {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 2px 0 4px;
+  text-wrap: balance;
+}
+.cmap-panel h3 {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--cm-muted);
+  margin: 18px 0 6px;
+}
+.cmap-panel p {
+  margin: 0 0 8px;
+  max-width: 65ch;
+}
+.cmap-panel .kind {
+  font-family: var(--cm-mono);
+  font-size: 11px;
+  color: var(--cm-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.cmap-panel .chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.cmap-panel .chip {
+  font: 500 12px var(--cm-sans);
+  color: var(--cm-ink);
+  background: var(--cm-bg);
+  border: 1px solid var(--cm-rule);
+  border-radius: 999px;
+  padding: 2px 9px;
+  cursor: pointer;
+}
+.cmap-panel .chip:hover {
+  border-color: var(--cm-accent);
+}
+.cmap-panel .chip.bad {
+  color: var(--cm-bad);
+  border-color: var(--cm-bad);
+  background: var(--cm-bad-soft);
+}
+.cmap-panel ul.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+.cmap-panel ul.list li {
+  font-family: var(--cm-mono);
+  font-size: 12px;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 3px 6px;
+  border-radius: 4px;
+  min-width: 0;
+}
+.cmap-panel ul.list li:nth-child(odd) {
+  background: var(--cm-bg);
+}
+.cmap-panel ul.list .sym {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.cmap-panel ul.list .loc {
+  color: var(--cm-muted);
+  white-space: nowrap;
+}
+.cmap-panel ul.list li.bad .sym,
+.cmap-panel ul.list li.bad .loc {
+  color: var(--cm-bad);
+}
+.cmap-panel details {
+  border-top: 1px solid var(--cm-rule);
+  padding-block: 6px;
+}
+.cmap-panel summary {
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.cmap-panel summary .n {
+  font-family: var(--cm-mono);
+  color: var(--cm-muted);
+  font-variant-numeric: tabular-nums;
+}
+.cmap-panel details[open] summary {
+  margin-bottom: 6px;
+}
+.cmap-panel .finding {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: var(--cm-ink);
+  border: 1px solid var(--cm-bad);
+  background: var(--cm-bad-soft);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+.cmap-panel .finding b {
+  color: var(--cm-bad);
+  font-weight: 600;
+}
+.cmap-panel code {
+  font-family: var(--cm-mono);
+  font-size: 12px;
+}
+.cmap-panel .finding code {
+  display: block;
+  margin-top: 4px;
+}
+.cmap-panel .reason {
+  display: block;
+  margin-top: 4px;
+  font-style: italic;
+  color: var(--cm-muted);
+}
+.cmap-panel .gap {
+  color: var(--warn);
+  font-size: 13px;
+}
+.cmap-panel .muted {
+  color: var(--cm-muted);
+}
+.cmap-panel .note {
+  font-size: 12.5px;
+  color: var(--cm-muted);
+  border-left: 2px solid var(--cm-rule);
+  padding-left: 10px;
+  margin-top: 18px;
+}
+.cmap-prompt {
+  white-space: pre-wrap;
+  max-width: 600px;
+  padding: 16px;
+  background: var(--surface);
+}
+
+/* Diagram */
+.cmap .d-frame rect.body {
+  fill: var(--cm-frame);
+  stroke: var(--cm-line);
+  stroke-width: 1.2;
+}
+.cmap .d-frame text.title {
+  font: 600 14px var(--cm-sans);
+  fill: var(--cm-ink);
+}
+.cmap .d-frame text.meaning {
+  font: 400 11px var(--cm-mono);
+  fill: var(--cm-muted);
+}
+.cmap .d-node {
+  cursor: pointer;
+}
+.cmap .d-node rect.body {
+  fill: var(--cm-surface);
+  stroke: var(--cm-ink);
+  stroke-width: 1.1;
+}
+.cmap .d-node.neighbor rect.body {
+  fill: var(--cm-neighbor);
+  stroke: var(--cm-line);
+  stroke-dasharray: 4 3;
+}
+.cmap .d-node.external rect.body {
+  fill: var(--cm-neighbor);
+  stroke: var(--cm-line);
+}
+.cmap .d-node text.name {
+  font: 500 13px var(--cm-sans);
+  fill: var(--cm-ink);
+}
+.cmap .d-node text.sub {
+  font: 400 11px var(--cm-mono);
+  fill: var(--cm-muted);
+}
+.cmap .d-node text.sub.open {
+  fill: var(--cm-accent);
+}
+.cmap .glyph rect {
+  fill: var(--cm-surface);
+  stroke: var(--cm-muted);
+  stroke-width: 1;
+}
+.cmap .d-port {
+  cursor: pointer;
+}
+.cmap .d-port text {
+  font: 400 11.5px var(--cm-sans);
+  fill: var(--cm-muted);
+}
+.cmap .d-port .ball,
+.cmap .d-port .box {
+  fill: var(--cm-surface);
+  stroke: var(--cm-ink);
+  stroke-width: 1.2;
+}
+.cmap .d-port .stem,
+.cmap .d-port .cup {
+  fill: none;
+  stroke: var(--cm-ink);
+  stroke-width: 1.2;
+}
+.cmap .d-edge path {
+  fill: none;
+  stroke: var(--cm-line);
+  stroke-width: 1.3;
+}
+.cmap .d-edge path.hit {
+  stroke: transparent;
+  stroke-width: 10;
+  cursor: pointer;
+}
+.cmap .d-edge.cross path.vis {
+  stroke-dasharray: 1.5 3;
+  stroke-width: 1.8;
+}
+.cmap .d-edge.delegate path.vis {
+  stroke-dasharray: 5 4;
+  stroke: var(--cm-muted);
+}
+.cmap .d-edge.undeclared path.vis {
+  stroke: var(--cm-bad);
+  stroke-dasharray: 7 3;
+  stroke-width: 1.8;
+}
+.cmap .d-edge.hl path.vis {
+  stroke: var(--cm-accent);
+  stroke-width: 2.4;
+}
+.cmap .d-edge.undeclared.hl path.vis {
+  stroke: var(--cm-bad);
+  stroke-width: 2.6;
+}
+.cmap .d-port.hl .ball,
+.cmap .d-port.hl .box {
+  stroke: var(--cm-accent);
+  stroke-width: 2;
+  fill: var(--cm-accent-soft);
+}
+.cmap .d-port.hl .stem,
+.cmap .d-port.hl .cup {
+  stroke: var(--cm-accent);
+  stroke-width: 2;
+}
+.cmap .d-port.hl text {
+  fill: var(--cm-accent);
+  font-weight: 600;
+}
+.cmap .d-node.hl rect.body {
+  stroke: var(--cm-accent);
+  stroke-width: 2.2;
+}
+.cmap .dimmed .d-edge:not(.hl),
+.cmap .dimmed .d-node:not(.hl):not(.keep) {
+  opacity: 0.28;
+}
+@media (max-width: 760px) {
+  .cmap {
+    height: auto;
+  }
+  .cmap-main {
+    grid-template-columns: 1fr;
+    grid-template-rows: 68vh auto;
+  }
+  .cmap-panel {
+    border-left: 0;
+    border-top: 1px solid var(--cm-rule);
+  }
+}
+.statusbar__map-link {
+  color: var(--trace);
+  text-decoration: none;
+  font-size: 16px;
+}
+.statusbar__map-link:hover {
+  text-decoration: underline;
+}

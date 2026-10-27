@@ -157,6 +157,17 @@ dependencies, compare a change with an existing feature, or check architectural
 conventions. Use review notes to keep those questions visible. [Ideas for improving this part of review](docs/review-experience-direction.md)
 describe possible additions; they are proposals, not shipped features.
 
+## Map a codebase
+
+The `component-map` skill draws a codebase as nested UML components: each
+component provides and requires named interfaces, and you can open a
+component to see which part handles each one. An LLM proposes the components
+and interfaces from the index; the hub refuses the map until every
+cross-component call in the code is covered by an interface or shown as an
+undeclared use. Ask your agent "Use component-map to map this codebase and
+open the map." See the [component map](docs/component-map.md) for the model,
+the checks and the limits.
+
 ## What the review includes
 
 - The current **tracked working tree** against the supplied base ref, including
