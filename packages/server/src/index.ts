@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
@@ -29,6 +29,12 @@ switch (which) {
     graphProvider = new StubGraphProvider();
 }
 
+/** Per-user cache for review maps' base checkouts (never a shared temp dir). */
+function baseDir(): string {
+  if (process.env.SREV_BASE_DIR) return process.env.SREV_BASE_DIR;
+  return join(process.env.XDG_CACHE_HOME || join(homedir(), ".cache"), "structured-review", "bases");
+}
+
 const here = dirname(fileURLToPath(import.meta.url));
 // Candidates: env override; monorepo layout (dist/index.js -> ../../web/dist,
 // same from src in dev); plugin bundle layout (plugin/dist/server.js -> ../web).
@@ -49,7 +55,7 @@ const app = createApp({
   graphProvider,
   ...(webBuilt ? { webDistPath } : {}),
   providerName: which,
-  ...(providerFor ? { providerFor, baseDir: process.env.SREV_BASE_DIR || join(tmpdir(), "srev-bases") } : {}),
+  ...(providerFor ? { providerFor, baseDir: baseDir() } : {}),
   onShutdown: () => process.exit(0),
 });
 const port = Number(process.env.PORT) || 3456;

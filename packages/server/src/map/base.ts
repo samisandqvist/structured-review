@@ -1,8 +1,8 @@
 // The base side of a review map: a shared clone of the reviewed repository at
 // the session's pinned base commit, indexed by its own graph provider. The
 // clone borrows the repository's objects (`--shared`) and writes nothing into
-// it; it lives in the hub's base directory as a cache that is rebuilt when it
-// is missing and removed with its session.
+// it; it lives in the hub's per-user base directory as a cache that is
+// rebuilt when it is missing and removed with its session.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -38,7 +38,7 @@ function headOf(dir: string): string | null {
 function checkout(dir: string, repoRoot: string, sha: string): void {
   if (headOf(dir) === sha) return;
   rmSync(dir, { recursive: true, force: true });
-  mkdirSync(dir, { recursive: true });
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
   try {
     execFileSync("git", ["clone", "--shared", "--no-checkout", "-q", repoRoot, dir], QUIET);
     execFileSync("git", ["checkout", "-q", "--detach", sha], { cwd: dir, ...QUIET });
