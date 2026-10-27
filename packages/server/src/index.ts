@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
@@ -15,9 +16,11 @@ const db = createDatabase(process.env.SREV_DB_PATH || "review.db");
 // default. Set GRAPH_PROVIDER=crg or =stub to override.
 const which = (process.env.GRAPH_PROVIDER || "scip").toLowerCase();
 let graphProvider: GraphProvider;
+let providerFor: ((root: string) => GraphProvider) | undefined;
 switch (which) {
   case "scip":
     graphProvider = new ScipGraphProvider();
+    providerFor = (root) => new ScipGraphProvider({ repoRoot: root });
     break;
   case "crg":
     graphProvider = new CrgGraphProvider((process.env.CRG_COMMAND ?? "code-review-graph serve").split(" "));
@@ -46,6 +49,7 @@ const app = createApp({
   graphProvider,
   ...(webBuilt ? { webDistPath } : {}),
   providerName: which,
+  ...(providerFor ? { providerFor, baseDir: process.env.SREV_BASE_DIR || join(tmpdir(), "srev-bases") } : {}),
   onShutdown: () => process.exit(0),
 });
 const port = Number(process.env.PORT) || 3456;

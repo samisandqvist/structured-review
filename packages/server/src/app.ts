@@ -14,9 +14,11 @@ import { createChangesRoute } from "./routes/changes.js";
 import { createShapeRoute } from "./routes/shape.js";
 import { createMapRoute } from "./routes/map.js";
 import { localRequestsOnly } from "./request-security.js";
+import { BaseIndexes } from "./map/base.js";
 
 export function createApp(ctx: AppContext) {
   const resolved: AppContext = { ...ctx, repoRoot: ctx.repoRoot ?? defaultRepoRoot() };
+  if (ctx.providerFor && ctx.baseDir) resolved.bases = new BaseIndexes(ctx.baseDir, ctx.providerFor);
   const app = new Hono();
   app.use("*", localRequestsOnly);
   // repoRoot + pid let a CLI tell "the right hub for this repo" apart from a

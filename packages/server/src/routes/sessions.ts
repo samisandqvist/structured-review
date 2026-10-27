@@ -194,6 +194,7 @@ export function createSessionsRoute(ctx: AppContext) {
   router.delete("/:id", (c) => {
     const id = c.req.param("id");
     if (!deleteSession(ctx.db, id)) return c.json({ error: "not found" }, 404);
+    ctx.bases?.drop(id);
     return c.json({ deleted: id });
   });
 

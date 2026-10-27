@@ -45,7 +45,7 @@ interface Hunk {
 
 export class GitError extends Error {
   constructor(
-    readonly phase: "resolve-ref" | "list-files" | "read-diff",
+    readonly phase: "resolve-ref" | "list-files" | "read-diff" | "base-checkout",
     message: string,
   ) {
     super(message);
