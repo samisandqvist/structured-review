@@ -22,7 +22,7 @@ import type {
 
 const MAX_SAMPLES = 5;
 
-export interface ChangeNode {
+interface ChangeNode {
   id: string;
   file: string;
   startLine: number;

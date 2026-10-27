@@ -56,7 +56,9 @@ silently review the wrong code and is rejected with a 400 instead.
 ## Scope and contract
 
 - A session reviews the current working tree vs. the supplied `baseRef`,
-  including staged and unstaged changes — not just the last commit.
+  including staged and unstaged changes — not just the last commit. The ref
+  is resolved to a commit when the session is created, and the session keeps
+  diffing against that commit when the ref moves later.
   Brand-new **untracked** files are not part of the diff universe yet.
 - The session branch must be `HEAD` or the branch currently checked out.
 - If HEAD moves or the working tree changes after a session is created, the
@@ -78,6 +80,7 @@ or proof of correctness. See the [README's limits](../README.md#what-the-review-
 | `SREV_SERVER_URL`      | `http://localhost:3456` | Hub URL the `srev` CLI talks to (or pass `--port`).                                                                                                |
 | `SREV_DATA_DIR`        | unset                   | Plugin mode: root for per-repo DBs and logs (keyed by repo name + path hash). Unset = state lands in the repo (`review.db`, `.srev/`).             |
 | `SREV_INDEXER_HOME`    | unset                   | Plugin mode: directory whose `node_modules` holds the scip indexers. Unset = resolve from the app's own dependencies.                              |
+| `SREV_BASE_DIR`        | per-user cache          | Base checkouts of review maps; default `$XDG_CACHE_HOME/structured-review/bases` (or `~/.cache/…`). Each is removed with its session.           |
 | `SCIP_CONTEXT_DEPTH`   | `1`                     | (scip) Call-graph hops of context around changed nodes.                                                                                            |
 | `SCIP_NO_CACHE`        | unset                   | (scip) Set to `1` to force a full re-index instead of using cached per-root indexes.                                                               |
 | `SCIP_JAVA_CMD`        | unset                   | (scip) Explicit scip-java launcher, overriding PATH detection of `scip-java`/`cs`.                                                                 |

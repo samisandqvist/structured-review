@@ -85,6 +85,23 @@ srev map get --session <id>                         # stored model, URL, stalene
    thing", "the API should not write state"), run `srev map get`, edit the
    model, check and resubmit. A resubmission replaces the session's map.
 
+## Mapping a review
+
+In a review session (a session with a base commit), the map describes the
+code before the change, and the hub marks the change on top of it. Evidence
+and the check run on the base (the evidence says `base <sha>`); the first call
+checks out and indexes the base, which takes about as long as indexing the
+working tree. Model the base exactly as you would any codebase: the change
+never enters the model, so do not add requirers, interfaces or components for
+calls the change introduces. On submit the hub compares the head with the
+base and stores the change: changed components, new, removed and changed
+dependencies, new surfaces (head calls into a symbol no interface binds),
+touched contracts and changed files the model cannot place. `srev map submit`
+and `srev map get` print it. Give the reviewer the link and point out the new
+dependencies and new surfaces; they are the structural questions of the
+review. The reviewer can open each changed part on the map and review its
+changed items from there.
+
 ## Modelling rules
 
 - **Components** come from the candidates and the explicit signals: a

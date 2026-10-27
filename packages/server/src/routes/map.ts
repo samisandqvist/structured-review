@@ -37,16 +37,6 @@ export function createMapRoute(ctx: AppContext) {
   const root = ctx.repoRoot!;
   const fileExistsIn = (dir: string) => (file: string) => existsSync(join(dir, file));
 
-  const headIndex = () => ctx.graphProvider.getReferenceIndex!();
-
-  async function mapSource(session: ReviewSession): Promise<MapSource> {
-    const sha = diffBase(session);
-    const type = objectType(sha, root);
-    if (type === null) throw new GitError("base-checkout", `the session's base ${sha} is not in the repository`);
-    if (ctx.bases && type === "commit") return { ...(await ctx.bases.get(session.id, root, sha)), baseSha: sha };
-    return { root, index: await headIndex() };
-  }
-
   const withSource = (handler: Handler) => async (c: Context) => {
     const session = getSession(ctx.db, c.req.param("id")!);
     if (!session) return c.json({ error: "not found" }, 404);
@@ -60,34 +50,12 @@ export function createMapRoute(ctx: AppContext) {
       );
     }
     try {
-      return await handler(c, session, await mapSource(session));
+      return await handler(c, session, await mapSource(ctx, session));
     } catch (e) {
       if (e instanceof IndexError || e instanceof GitError) return c.json({ error: e.message, phase: e.phase }, 400);
       throw e;
     }
   };
-
-  async function withChange(session: ReviewSession, source: MapSource, model: MapModel, base: ResolvedMap) {
-    if (!source.baseSha) return base;
-    const sha = source.baseSha;
-    const ranges = new Map<string, LineRange[]>();
-    const changedLines = (file: string) => {
-      if (!ranges.has(file)) ranges.set(file, fileChangedRanges(sha, file, root) ?? []);
-      return ranges.get(file)!;
-    };
-    const nodes = getNodesBySession(ctx.db, session.id).map((n) => ({
-      id: n.id,
-      file: n.file,
-      startLine: n.startLine,
-      endLine: n.endLine,
-      isTest: n.isTest,
-      residual: (n.residualRanges?.length ?? 0) > 0,
-      changed: n.changeStatus === "changed",
-    }));
-    const files = changedFileStatuses(sha, root) ?? [];
-    const head = await headIndex();
-    return { ...base, change: compareVersions({ model, base, head, nodes, files, changedLines }, sha) };
-  }
 
   router.get(
     "/:id/map/evidence",
@@ -123,7 +91,7 @@ export function createMapRoute(ctx: AppContext) {
       if (body === undefined) return badBody(c);
       const { model, map } = checkMap(body, source.index, fileExistsIn(source.root));
       if (!map.report.ok) return c.json({ error: "the map fails the fidelity check", report: map.report }, 422);
-      const stored = await withChange(session, source, model, map);
+      const stored = await withChange(ctx, session, source, { model, base: map });
       saveMap(ctx.db, session.id, { model, map: stored, ...snapshot(root) });
       return c.json({ report: map.report, ...(stored.change ? { change: stored.change } : {}) });
     }),
@@ -143,6 +111,46 @@ export function createMapRoute(ctx: AppContext) {
   });
 
   return router;
+}
+
+const headIndex = (ctx: AppContext) => ctx.graphProvider.getReferenceIndex!();
+
+async function mapSource(ctx: AppContext, session: ReviewSession): Promise<MapSource> {
+  const root = ctx.repoRoot!;
+  const sha = diffBase(session);
+  const type = objectType(sha, root);
+  if (type === null) throw new GitError("base-checkout", `the session's base ${sha} is not in the repository`);
+  if (ctx.bases && type === "commit") return { ...(await ctx.bases.get(session.id, root, sha)), baseSha: sha };
+  return { root, index: await headIndex(ctx) };
+}
+
+/** The checked base map, with the change to the working tree in a review session. */
+async function withChange(
+  ctx: AppContext,
+  session: ReviewSession,
+  source: MapSource,
+  checked: { model: MapModel; base: ResolvedMap },
+): Promise<ResolvedMap> {
+  if (!source.baseSha) return checked.base;
+  const root = ctx.repoRoot!;
+  const sha = source.baseSha;
+  const ranges = new Map<string, LineRange[]>();
+  const changedLines = (file: string) => {
+    if (!ranges.has(file)) ranges.set(file, fileChangedRanges(sha, file, root) ?? []);
+    return ranges.get(file)!;
+  };
+  const nodes = getNodesBySession(ctx.db, session.id).map((n) => ({
+    id: n.id,
+    file: n.file,
+    startLine: n.startLine,
+    endLine: n.endLine,
+    isTest: n.isTest,
+    residual: (n.residualRanges?.length ?? 0) > 0,
+    changed: n.changeStatus === "changed",
+  }));
+  const files = changedFileStatuses(sha, root) ?? [];
+  const head = await headIndex(ctx);
+  return { ...checked.base, change: compareVersions({ ...checked, head, nodes, files, changedLines }, sha) };
 }
 
 async function jsonBody(c: Context): Promise<unknown> {

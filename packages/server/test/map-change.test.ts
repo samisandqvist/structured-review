@@ -151,7 +151,9 @@ describe("compareVersions", () => {
     const moved = BASE_REFS.map((r): Ref => (r[2] === "handle" && r[3] === 4 ? [r[0], r[1], r[2], 8] : r));
     expect(compare({ head: index(moved) }).crossings).toEqual([]);
   });
+});
 
+describe("compareVersions renames", () => {
   it("reports a renamed bound symbol as a lost binding and its uses as a new surface", () => {
     const defs = DEFS.map((d): Def => (d[1] === "getJob" ? [d[0], "fetchJob", d[2]] : d));
     const refs = BASE_REFS.map((r): Ref =>
@@ -180,7 +182,9 @@ describe("compareVersions", () => {
       ["reads", "core", "removed"],
     ]);
   });
+});
 
+describe("compareVersions contracts and placement", () => {
   it("marks a contract touched when a bound function's body or line changed", () => {
     const change = compare({
       nodes: [

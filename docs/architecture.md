@@ -50,6 +50,12 @@ manage the browser's server data; Zustand holds local navigation/layout state.
    node, line anchors when present, and review-wide notes. Publishing that output
    is an external action.
 
+Session creation resolves the base ref to a commit and stores it; every diff of
+the session uses that commit. A component map of a review session is built from
+a shared clone of that commit in the hub's per-user base directory, indexed by a
+second provider, and the change is computed by comparing it with the working
+tree (see [component map](component-map.md#reviewing-a-change-on-the-map)).
+
 The reviewed input is the checked-out working tree, not an arbitrary branch
 checkout or an immutable snapshot. Untracked files must be staged to enter the
 review. A stored content fingerprint lets the UI and CLI report a stale session;

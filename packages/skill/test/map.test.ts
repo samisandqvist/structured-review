@@ -7,7 +7,16 @@ import { join } from "node:path";
 vi.mock("node:child_process", () => ({ spawn: vi.fn(() => ({ unref: vi.fn() })), execFileSync: vi.fn() }));
 
 import { spawn } from "node:child_process";
-import { mapUrl, prettyEvidence, prettyReport, submitMap, type MapCheckReport, type MapEvidence } from "../src/map.js";
+import {
+  mapUrl,
+  prettyChange,
+  prettyEvidence,
+  prettyReport,
+  submitMap,
+  type MapChangeSummary,
+  type MapCheckReport,
+  type MapEvidence,
+} from "../src/map.js";
 import { runCli } from "../src/cli.js";
 
 const BASE = "http://127.0.0.1:4999";
@@ -216,5 +225,55 @@ describe("srev map pretty commands", () => {
     await runCli(["map", "get", "--session", "s1", "--port", "4999"]);
     expect(log.mock.calls[0]![0]).toContain("(stale: head-moved)");
     expect(JSON.parse(log.mock.calls[1]![0] as string)).not.toHaveProperty("stale");
+  });
+});
+
+const CHANGE: MapChangeSummary = {
+  baseSha: "0123456789abcdef",
+  components: [
+    { id: "app", items: 3, files: 2 },
+    { id: "core", items: 2, files: 1 },
+  ],
+  crossings: [
+    { interface: "writes", requirer: "api", status: "new", added: [{}], removed: [] },
+    { interface: "help", requirer: "engine", status: "removed", added: [], removed: [{}, {}] },
+    { interface: "reads", requirer: "core", status: "changed", added: [{}], removed: [{}] },
+  ],
+  surfaces: [{ provider: "store", requirers: ["core"], symbol: "warm", references: 2 }],
+  touched: [{ interface: "reads", reasons: ["body", "binding-lost"], symbols: ["getJob"] }],
+  unmapped: [
+    { component: "app", files: ["src/main.ts"] },
+    { component: null, files: ["scripts/x.ts"] },
+  ],
+};
+
+describe("change output", () => {
+  it("summarizes a review's change", () => {
+    expect(prettyChange(CHANGE).split("\n")).toEqual([
+      "change against base 0123456",
+      "  changed components: app (3 items, 2 files), core (2 items, 1 file)",
+      "  new dependency: api -> writes (1 call site)",
+      "  removed dependency: engine -> help (2 call sites)",
+      "  changed dependency: core -> reads (+1 / -1 call sites)",
+      "  new surface: warm of store, used by core (2 references)",
+      "  contract touched: reads (body, binding-lost: getJob)",
+      "  not placed under app: src/main.ts",
+      "  not placed in any component: scripts/x.ts",
+    ]);
+  });
+
+  it("marks evidence read from a review's base", () => {
+    expect(prettyEvidence({ ...EVIDENCE, baseSha: "0123456789abcdef" })).toContain("scope: src (brief), base 0123456");
+  });
+
+  it("prints the change of a stored and a submitted review map", async () => {
+    const passed = { ...REPORT, ok: true, issues: [] };
+    const stored = { model: {}, map: { report: passed, change: CHANGE }, headSha: "a", createdAt: 1 };
+    stubFetch(respond(200, stored), respond(200, { report: passed, change: CHANGE }));
+    const log = captureLog();
+    await runCli(["map", "get", "--session", "s1", "--port", "4999", "--pretty"]);
+    await runCli(["map", "submit", "--session", "s1", "--port", "4999", "--model", modelFile]);
+    expect(log.mock.calls[0]![0]).toContain("change against base 0123456");
+    expect(JSON.parse(log.mock.calls[1]![0] as string)).toMatchObject({ change: { baseSha: CHANGE.baseSha } });
   });
 });

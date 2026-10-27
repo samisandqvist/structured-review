@@ -105,6 +105,12 @@ conventions and a comparable existing feature when the change introduces a
 new layout or abstraction. Prefer local evidence over a generic framework
 template. Keep this pass brief and proportional to the change.
 
+When the shape lists more than one top-level component, offer the reviewer a
+component map of the change: the component-map skill builds it in the same
+session from the base commit, and the map then marks the changed parts, new
+and removed dependencies and touched contracts, and opens each changed item
+in this review. Do not build it for small changes unless asked.
+
 Include consequential structural departures or unanswered design questions
 in the plan overview, with concrete paths or convention references. Phrase
 inferences as questions for the reviewer, not automated verdicts. Review-wide

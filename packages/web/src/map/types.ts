@@ -66,7 +66,7 @@ export interface CallSite {
   undeclared: boolean;
 }
 
-export interface Delegation {
+interface Delegation {
   interface: string;
   side: "provided" | "required";
   outer: string;
@@ -98,7 +98,7 @@ export interface CheckReport {
 
 export type ChangeStatus = "new" | "removed" | "changed";
 
-export interface CrossingChange {
+interface CrossingChange {
   interface: string;
   requirer: string;
   status: ChangeStatus;
@@ -106,7 +106,7 @@ export interface CrossingChange {
   removed: CallSite[];
 }
 
-export interface NewSurface {
+interface NewSurface {
   id: string;
   provider: string;
   requirers: string[];
@@ -118,7 +118,7 @@ export interface NewSurface {
   sites: CallSite[];
 }
 
-export interface TouchedContract {
+interface TouchedContract {
   interface: string;
   reasons: ("body" | "binding-lost" | "evidence")[];
   symbols: string[];

@@ -18,7 +18,18 @@ export interface MapCheckReport {
   typeDependencies: { from: string; to: string; count: number; symbols: string[] }[];
   gaps: string[];
 }
+/** The parts of a review map's change the CLI prints (see the hub's map/change.ts). */
+export interface MapChangeSummary {
+  baseSha: string;
+  components: { id: string; items: number; files: number }[];
+  crossings: { interface: string; requirer: string; status: string; added: unknown[]; removed: unknown[] }[];
+  surfaces: { provider: string; requirers: string[]; symbol: string; references: number }[];
+  touched: { interface: string; reasons: string[]; symbols: string[] }[];
+  unmapped: { component: string | null; files: string[] }[];
+}
 export interface MapEvidence {
+  /** Set in a review session: the evidence describes this base commit. */
+  baseSha?: string;
   scope: string;
   full: boolean;
   tree: { path: string; files: number }[];
@@ -38,7 +49,7 @@ export interface MapEvidence {
 }
 interface StoredMap {
   model: unknown;
-  map: { report: MapCheckReport };
+  map: { report: MapCheckReport; change?: MapChangeSummary };
   headSha: string;
   createdAt: number;
   stale?: boolean;
@@ -81,9 +92,10 @@ export async function submitMap(
   base: string,
   sessionId: string,
   model: unknown,
-): Promise<{ ok: boolean; report: MapCheckReport }> {
+): Promise<{ ok: boolean; report: MapCheckReport; change?: MapChangeSummary }> {
   const { status, body } = await request(mapPath(base, sessionId), { method: "PUT", body: JSON.stringify(model) });
-  return { ok: status === 200, report: (body as { report: MapCheckReport }).report };
+  const { report, change } = body as { report: MapCheckReport; change?: MapChangeSummary };
+  return { ok: status === 200, report, ...(change ? { change } : {}) };
 }
 
 async function getMap(base: string, sessionId: string): Promise<StoredMap> {
@@ -107,9 +119,35 @@ export function prettyReport(report: MapCheckReport): string {
   ].join("\n");
 }
 
+const short = (sha: string) => sha.slice(0, 7);
+
+export function prettyChange(change: MapChangeSummary): string {
+  const sites = (n: number) => plural(n, "call site");
+  const crossing = (c: MapChangeSummary["crossings"][number]) =>
+    c.status === "changed"
+      ? `  changed dependency: ${c.requirer} -> ${c.interface} (+${c.added.length} / -${c.removed.length} call sites)`
+      : `  ${c.status} dependency: ${c.requirer} -> ${c.interface} (${sites(c.status === "new" ? c.added.length : c.removed.length)})`;
+  return [
+    `change against base ${short(change.baseSha)}`,
+    `  changed components: ${change.components.map((c) => `${c.id} (${plural(c.items, "item")}, ${plural(c.files, "file")})`).join(", ") || "none"}`,
+    ...change.crossings.map(crossing),
+    ...change.surfaces.map(
+      (s) =>
+        `  new surface: ${s.symbol} of ${s.provider}, used by ${s.requirers.join(", ")} (${plural(s.references, "reference")})`,
+    ),
+    ...change.touched.map(
+      (t) =>
+        `  contract touched: ${t.interface} (${t.reasons.join(", ")}${t.symbols.length ? `: ${t.symbols.join(", ")}` : ""})`,
+    ),
+    ...change.unmapped.map(
+      (u) => `  not placed ${u.component ? `under ${u.component}` : "in any component"}: ${u.files.join(", ")}`,
+    ),
+  ].join("\n");
+}
+
 export function prettyEvidence(e: MapEvidence): string {
   return [
-    `scope: ${e.scope || "."} (${e.full ? "full" : "brief"})`,
+    `scope: ${e.scope || "."} (${e.full ? "full" : "brief"})${e.baseSha ? `, base ${short(e.baseSha)}` : ""}`,
     "candidates:",
     ...e.candidates.map((c) => `  ${c.id} (${plural(c.files, "file")})`),
     "references:",
@@ -166,14 +204,17 @@ async function checkCommand(base: string, flags: Flags): Promise<MapCommandResul
 
 async function submitCommand(base: string, flags: Flags): Promise<MapCommandResult> {
   const sessionId = flag(flags, "session");
-  const { ok, report } = await submitMap(base, sessionId, readModel(flag(flags, "model")));
+  const { ok, report, change } = await submitMap(base, sessionId, readModel(flag(flags, "model")));
   const url = mapUrl(base, sessionId);
   if (!ok) {
     process.exitCode = 1;
     return { json: { ok, report }, pretty: `map not stored\n${prettyReport(report)}` };
   }
   if (flags.open) openInBrowser(url);
-  return { json: { ok, url, report }, pretty: `map stored: ${url}\n${prettyReport(report)}` };
+  return {
+    json: { ok, url, report, ...(change ? { change } : {}) },
+    pretty: [`map stored: ${url}`, prettyReport(report), ...(change ? [prettyChange(change)] : [])].join("\n"),
+  };
 }
 
 async function getCommand(base: string, flags: Flags): Promise<MapCommandResult> {
@@ -187,10 +228,15 @@ async function getCommand(base: string, flags: Flags): Promise<MapCommandResult>
     ...staleness,
     ...(stored.staleReason ? { staleReason: stored.staleReason } : {}),
     report: stored.map.report,
+    ...(stored.map.change ? { change: stored.map.change } : {}),
   };
   return {
     json,
-    pretty: `${url}${stored.stale ? ` (stale: ${stored.staleReason})` : ""}\n${prettyReport(stored.map.report)}`,
+    pretty: [
+      `${url}${stored.stale ? ` (stale: ${stored.staleReason})` : ""}`,
+      prettyReport(stored.map.report),
+      ...(stored.map.change ? [prettyChange(stored.map.change)] : []),
+    ].join("\n"),
   };
 }
 

@@ -214,51 +214,51 @@ describe("component map route errors", () => {
   });
 });
 
-describe("component map routes in a review session", () => {
-  const SAVE_JOB: SymbolDef = { ...GET_JOB, symbol: sym("src/store/jobs.ts", "saveJob"), line: 3, name: "saveJob" };
-  const BASE_INDEX: ReferenceIndex = {
-    ...INDEX,
-    files: ["src/api/handler.ts", "src/store/jobs.ts", "src/worker/run.ts"],
-    definitions: new Map([
-      [GET_JOB.symbol, GET_JOB],
-      [SAVE_JOB.symbol, SAVE_JOB],
-    ]),
-    references: [
-      ...INDEX.references,
-      { symbol: SAVE_JOB.symbol, file: "src/worker/run.ts", line: 2, caller: "run", typeOnly: false },
-    ],
-  };
-  const HEAD_INDEX: ReferenceIndex = {
-    ...BASE_INDEX,
-    references: [
-      ...BASE_INDEX.references,
-      { symbol: SAVE_JOB.symbol, file: "src/api/handler.ts", line: 3, caller: "handle", typeOnly: false },
-    ],
-  };
-  const REVIEW_MODEL = {
-    ...MODEL,
-    components: [
-      ...MODEL.components,
-      { id: "worker", name: "Worker", parent: "app", paths: ["src/worker/"], meaning: "jobs" },
-    ],
-    interfaces: [
-      ...MODEL.interfaces,
-      { id: "writes", name: "Writes", provider: "store", requirers: ["worker"], meaning: "w", bind: ["saveJob"] },
-    ],
-  };
+const SAVE_JOB: SymbolDef = { ...GET_JOB, symbol: sym("src/store/jobs.ts", "saveJob"), line: 3, name: "saveJob" };
+const BASE_INDEX: ReferenceIndex = {
+  ...INDEX,
+  files: ["src/api/handler.ts", "src/store/jobs.ts", "src/worker/run.ts"],
+  definitions: new Map([
+    [GET_JOB.symbol, GET_JOB],
+    [SAVE_JOB.symbol, SAVE_JOB],
+  ]),
+  references: [
+    ...INDEX.references,
+    { symbol: SAVE_JOB.symbol, file: "src/worker/run.ts", line: 2, caller: "run", typeOnly: false },
+  ],
+};
+const HEAD_INDEX: ReferenceIndex = {
+  ...BASE_INDEX,
+  references: [
+    ...BASE_INDEX.references,
+    { symbol: SAVE_JOB.symbol, file: "src/api/handler.ts", line: 3, caller: "handle", typeOnly: false },
+  ],
+};
+const REVIEW_MODEL = {
+  ...MODEL,
+  components: [
+    ...MODEL.components,
+    { id: "worker", name: "Worker", parent: "app", paths: ["src/worker/"], meaning: "jobs" },
+  ],
+  interfaces: [
+    ...MODEL.interfaces,
+    { id: "writes", name: "Writes", provider: "store", requirers: ["worker"], meaning: "w", bind: ["saveJob"] },
+  ],
+};
 
-  class RootedProvider extends StubGraphProvider {
-    constructor(readonly index: ReferenceIndex) {
-      super();
-    }
-    getReferenceIndex(): Promise<ReferenceIndex> {
-      return Promise.resolve(this.index);
-    }
+class RootedProvider extends StubGraphProvider {
+  constructor(readonly index: ReferenceIndex) {
+    super();
   }
+  getReferenceIndex(): Promise<ReferenceIndex> {
+    return Promise.resolve(this.index);
+  }
+}
 
-  let baseDir: string;
-  let baseRoots: string[];
-  let baseSha: string;
+let baseDir: string;
+let baseRoots: string[];
+let baseSha: string;
+function useReviewApp() {
   beforeEach(() => {
     write("src/worker/run.ts", "export function run() {\n  saveJob();\n}\n");
     git("add", ".");
@@ -283,6 +283,10 @@ describe("component map routes in a review session", () => {
     });
   });
   afterEach(() => rmSync(baseDir, { recursive: true, force: true }));
+}
+
+describe("component map routes in a review session", () => {
+  useReviewApp();
 
   it("reads evidence from the base checkout", async () => {
     const id = await session();
@@ -307,6 +311,10 @@ describe("component map routes in a review session", () => {
     ]);
     expect(Object.values(got.map.change.nodeComponents)).toContain("api");
   });
+});
+
+describe("review session map lifecycle", () => {
+  useReviewApp();
 
   it("removes the base checkout with its session", async () => {
     const id = await session();

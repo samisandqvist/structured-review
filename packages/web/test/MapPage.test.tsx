@@ -314,6 +314,31 @@ describe("MapPage in a review", () => {
     expect(navigateToSession).toHaveBeenCalledWith("s1");
   });
 
+  it("selects the interface behind each change line", async () => {
+    stubReview();
+    const { container } = renderPage();
+    await node(container, "core");
+    const line = (name: RegExp) => within(panel()).getByRole("button", { name });
+    const back = async () => {
+      window.history.replaceState(null, "", "/?session=s1&view=map&level=orchestrator");
+      fireEvent(window, new PopStateEvent("popstate"));
+      await waitFor(() => line(/^Removed: Engine/));
+    };
+    await back();
+    fireEvent.click(line(/^Removed: Engine/));
+    expect(window.location.search).toBe("?session=s1&view=map&level=core");
+    expect(panel().textContent).toContain("Removed call sites");
+    await back();
+    fireEvent.click(line(/^New surface: warm/));
+    expect(panel().textContent).toContain("New surface: warm is used across components");
+    await back();
+    fireEvent.click(line(/^Contract touched: Read models/));
+    expect(panel().textContent).toContain("Contract touched in this change (body: getJob)");
+    await back();
+    fireEvent.click(line(/^Changed: Operator API/));
+    expect(panel().textContent).toContain("New call sites");
+  });
+
   it("shows an interface's change", async () => {
     stubReview();
     const { container } = renderPage();

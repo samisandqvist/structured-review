@@ -104,6 +104,36 @@ files hold its bindings (or its provider-side evidence) receive it; when a
 component requires one, the parts holding the call sites (or requirer-side
 evidence) receive the socket.
 
+## Reviewing a change on the map
+
+In a review session (one created with a base branch or commit), the map
+describes the code before the change, and the page marks the change on top
+of it. The hub checks out the session's base commit as a shared clone in a
+per-user cache directory (nothing is written into the reviewed repository),
+indexes it, and runs the evidence and the check there. The agent models the
+base as it would any codebase; the change never enters the model.
+
+On submit the hub applies the model to the working tree and compares:
+
+| Mark | Meaning |
+|---|---|
+| Changed part | The part owns changed review items or changed files; the box shows "N changed · M reviewed". |
+| New dependency | A requirer calls an interface it did not call at the base. |
+| Removed dependency | A requirer no longer calls an interface it called at the base. |
+| Changed dependency | The calling functions differ between base and head. |
+| New surface | A call across parts reaches a symbol no interface binds; drawn as an extra interface of the provider. |
+| Contract touched | A bound function changed, a binding no longer resolves, or a cross-process interface's evidence file changed. |
+| Not placed | A changed file no part claims; listed at the level it falls to. |
+
+Selecting a part with no parts of its own lists its changed items in the
+review's walk order, tests with the item they are attached to. Selecting an
+item opens it in the review view, where marks and comments work as in the
+walk; the walk and the map share the same progress.
+
+Calls are compared by calling function and called symbol, so code that only
+moved within a file is not marked. A new or removed cross-process connection
+is not detected; only changes to its evidence files are.
+
 ## Languages and limits
 
 TypeScript/JavaScript and Python are mapped. Java and C# roots appear as index
@@ -116,7 +146,8 @@ injection and string-keyed registries can hide calls. Cross-process interfaces
 come from reading code and are not traced.
 
 The map is stored per session. When the working tree changes, the page marks
-it stale; recreate the session and the map for the current code.
+it stale; recreate the session and the map for the current code. A
+whole-repository session (`--base empty`) maps the working tree.
 
 ## Third-party software
 

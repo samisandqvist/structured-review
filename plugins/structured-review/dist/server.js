@@ -15922,9 +15922,9 @@ __export(flows_exports, {
   readFlows: () => readFlows
 });
 import { DatabaseSync as DatabaseSync2 } from "node:sqlite";
-import { join as join11 } from "node:path";
+import { join as join12 } from "node:path";
 function readFlows(root = repoRoot(), changedStableIds) {
-  const dbPath = process.env.CRG_GRAPH_DB || join11(root, ".code-review-graph", "graph.db");
+  const dbPath = process.env.CRG_GRAPH_DB || join12(root, ".code-review-graph", "graph.db");
   let db2;
   try {
     db2 = new DatabaseSync2(dbPath, { readOnly: true });
@@ -15980,8 +15980,9 @@ var init_flows = __esm({
 });
 
 // packages/server/src/index.ts
-import { existsSync as existsSync6 } from "node:fs";
-import { dirname as dirname2, join as join12 } from "node:path";
+import { existsSync as existsSync7 } from "node:fs";
+import { homedir } from "node:os";
+import { dirname as dirname2, join as join13 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // node_modules/.pnpm/@hono+node-server@2.1.5_hono@4.13.13/node_modules/@hono/node-server/dist/constants-BLSFu_RU.mjs
@@ -17318,8 +17319,8 @@ var serve = (options, listeningListener) => {
 };
 
 // packages/server/src/app.ts
-import { existsSync as existsSync5 } from "node:fs";
-import { join as join10 } from "node:path";
+import { existsSync as existsSync6 } from "node:fs";
+import { join as join11 } from "node:path";
 
 // node_modules/.pnpm/hono@4.13.13/node_modules/hono/dist/request/constants.js
 var GET_MATCH_RESULT = /* @__PURE__ */ Symbol();
@@ -19136,19 +19137,35 @@ function randomId(prefix) {
 var isTestFile = (p) => /\.(test|spec)\.[cm]?[jt]sx?$/.test(p) || /(^|\/)(test_[^/]*|[^/]+_test|conftest)\.py$/.test(p) || /(^|\/)src\/test\/java\//.test(p) || /(Test|IT)\.java$/.test(p) || /(Tests?|Specs?)\.cs$/.test(p) || /(^|\/)[^/]+\.(Tests?|Specs?)\//.test(p) || /(^|\/)(test|tests|__tests__)\//.test(p);
 
 // packages/server/src/repo/sessions.ts
-function createSession(db2, branch, baseRef, headSha = "", repoFingerprint2 = "", indexWarnings = []) {
+function createSession(db2, branch, baseRef, snapshot2 = {}) {
+  const { baseSha = "", headSha = "", repoFingerprint: repoFingerprint2 = "", indexWarnings = [] } = snapshot2;
   const id = randomId("ses");
   const createdAt = Date.now();
   db2.prepare(
-    "INSERT INTO review_sessions (id, branch, base_ref, status, created_at, head_sha, repo_fingerprint, index_warnings) VALUES (?, ?, ?, 'planning', ?, ?, ?, ?)"
-  ).run(id, branch, baseRef, createdAt, headSha, repoFingerprint2, JSON.stringify(indexWarnings));
-  return { id, branch, baseRef, status: "planning", createdAt, headSha, repoFingerprint: repoFingerprint2, indexWarnings, overview: "" };
+    "INSERT INTO review_sessions (id, branch, base_ref, base_sha, status, created_at, head_sha, repo_fingerprint, index_warnings) VALUES (?, ?, ?, ?, 'planning', ?, ?, ?, ?)"
+  ).run(id, branch, baseRef, baseSha, createdAt, headSha, repoFingerprint2, JSON.stringify(indexWarnings));
+  return {
+    id,
+    branch,
+    baseRef,
+    baseSha,
+    status: "planning",
+    createdAt,
+    headSha,
+    repoFingerprint: repoFingerprint2,
+    indexWarnings,
+    overview: ""
+  };
+}
+function diffBase(session) {
+  return session.baseSha || session.baseRef;
 }
 function rowToSession(row) {
   return {
     id: row.id,
     branch: row.branch,
     baseRef: row.base_ref,
+    baseSha: row.base_sha,
     status: row.status,
     createdAt: row.created_at,
     headSha: row.head_sha,
@@ -20286,7 +20303,10 @@ var ScipGraphProvider = class {
     const g = await this.buildGraph();
     let index = this.referenceIndexes.get(g);
     if (!index) {
-      index = buildReferenceIndex(g.documents ?? [], sourceReader(this.repoRoot), mapGaps(g, this.repoRoot));
+      const listed = trackedFiles(this.repoRoot);
+      const tracked = listed && new Set(listed);
+      const documents = (g.documents ?? []).filter((d) => !tracked || tracked.has(d.file));
+      index = buildReferenceIndex(documents, sourceReader(this.repoRoot), mapGaps(g, this.repoRoot));
       this.referenceIndexes.set(g, index);
     }
     return index;
@@ -40850,6 +40870,19 @@ async function attachmentsFor2(ctx, sessionId, flows, sessionNodes) {
   const fileRequires = await ctx.graphProvider.getFileRequires?.() ?? /* @__PURE__ */ new Map();
   return (units) => deriveAttachments(units, flows, sessionNodes, testEdges, fileRequires);
 }
+async function changeUniverse(ctx, branch, baseSha) {
+  const subgraph = await ctx.graphProvider.getChangeSubgraph(branch, baseSha);
+  const { nodes: keptNodes, status } = reconcileSubgraph(subgraph, baseSha, ctx.repoRoot);
+  const spansByFile = /* @__PURE__ */ new Map();
+  for (const n of keptNodes) {
+    const spans2 = spansByFile.get(n.file) ?? [];
+    spans2.push({ start: n.startLine, end: n.endLine });
+    spansByFile.set(n.file, spans2);
+  }
+  const residuals = computeResiduals(baseSha, spansByFile, ctx.repoRoot);
+  const indexWarnings = await ctx.graphProvider.getIndexWarnings?.() ?? [];
+  return { subgraph, keptNodes, status, residuals, indexWarnings };
+}
 function createSessionsRoute(ctx) {
   const router = new Hono3();
   router.post("/", async (c) => {
@@ -40858,7 +40891,8 @@ function createSessionsRoute(ctx) {
     const body = parsed.data;
     const headSha = gitHeadSha(ctx.repoRoot);
     if (!headSha) return c.json({ error: "not a git repository (or git unavailable)", phase: "resolve-ref" }, 400);
-    if (!resolveRef(body.baseRef, ctx.repoRoot)) {
+    const baseSha = resolveRef(body.baseRef, ctx.repoRoot);
+    if (!baseSha) {
       return c.json({ error: `cannot resolve base ref '${body.baseRef}'`, phase: "resolve-ref" }, 400);
     }
     const checkedOut = currentBranch(ctx.repoRoot);
@@ -40871,36 +40905,22 @@ function createSessionsRoute(ctx) {
         400
       );
     }
-    let subgraph;
-    let keptNodes;
-    let status;
-    let residuals;
-    let indexWarnings = [];
+    let universe;
     try {
-      subgraph = await ctx.graphProvider.getChangeSubgraph(body.branch, body.baseRef);
-      ({ nodes: keptNodes, status } = reconcileSubgraph(subgraph, body.baseRef, ctx.repoRoot));
-      const spansByFile = /* @__PURE__ */ new Map();
-      for (const n of keptNodes) {
-        const spans2 = spansByFile.get(n.file) ?? [];
-        spans2.push({ start: n.startLine, end: n.endLine });
-        spansByFile.set(n.file, spans2);
-      }
-      residuals = computeResiduals(body.baseRef, spansByFile, ctx.repoRoot);
-      indexWarnings = await ctx.graphProvider.getIndexWarnings?.() ?? [];
+      universe = await changeUniverse(ctx, body.branch, baseSha);
     } catch (e) {
       if (e instanceof GitError) return c.json({ error: e.message, phase: e.phase }, 400);
       if (e instanceof IndexError) return c.json({ error: e.message, phase: e.phase }, 400);
       throw e;
     }
+    const { subgraph, keptNodes, status, residuals, indexWarnings } = universe;
     const session = ctx.db.transaction(() => {
-      const session2 = createSession(
-        ctx.db,
-        body.branch,
-        body.baseRef,
+      const session2 = createSession(ctx.db, body.branch, body.baseRef, {
+        baseSha,
         headSha,
-        repoFingerprint(ctx.repoRoot) ?? "",
+        repoFingerprint: repoFingerprint(ctx.repoRoot) ?? "",
         indexWarnings
-      );
+      });
       for (const gnode of keptNodes) {
         createNode(ctx.db, {
           sessionId: session2.id,
@@ -40941,6 +40961,7 @@ function createSessionsRoute(ctx) {
   router.delete("/:id", (c) => {
     const id = c.req.param("id");
     if (!deleteSession(ctx.db, id)) return c.json({ error: "not found" }, 404);
+    ctx.bases?.drop(id);
     return c.json({ deleted: id });
   });
   router.get("/:id", (c) => {
@@ -41172,7 +41193,7 @@ function createNodesRoute(ctx) {
     if (!node2 || node2.sessionId !== sessionId) return c.json({ error: "not found" }, 404);
     const { callers, callees } = getNodeNeighbors(ctx.db, node2.id);
     const session = getSession(ctx.db, sessionId);
-    const diff = session ? node2.residualRanges && node2.residualRanges.length > 0 ? getNodeDiffForRanges(session.baseRef, node2.file, node2.residualRanges, ctx.repoRoot) ?? getNodeDiff(session.baseRef, node2.file, node2.startLine, node2.endLine, node2.changeStatus, ctx.repoRoot) : getNodeDiff(session.baseRef, node2.file, node2.startLine, node2.endLine, node2.changeStatus, ctx.repoRoot) : { oldText: "", newText: "", lines: [], totalLines: 0 };
+    const diff = session ? node2.residualRanges && node2.residualRanges.length > 0 ? getNodeDiffForRanges(diffBase(session), node2.file, node2.residualRanges, ctx.repoRoot) ?? getNodeDiff(diffBase(session), node2.file, node2.startLine, node2.endLine, node2.changeStatus, ctx.repoRoot) : getNodeDiff(diffBase(session), node2.file, node2.startLine, node2.endLine, node2.changeStatus, ctx.repoRoot) : { oldText: "", newText: "", lines: [], totalLines: 0 };
     return c.json({ node: node2, callers, callees, diff });
   });
   router.get("/:id/nodes/:nodeId/context", (c) => {
@@ -41187,7 +41208,7 @@ function createNodesRoute(ctx) {
       return c.json({ error: "start/end must be positive integers with start <= end" }, 400);
     }
     if (end - start > 5e3) return c.json({ error: "range too large (max 5000 lines)" }, 400);
-    return c.json({ lines: expandedContextSlice(session.baseRef, node2.file, start, end, ctx.repoRoot) });
+    return c.json({ lines: expandedContextSlice(diffBase(session), node2.file, start, end, ctx.repoRoot) });
   });
   router.patch("/:id/nodes", async (c) => {
     const parsed = await parseBody2(c, bulkNodeStatusSchema);
@@ -41244,7 +41265,7 @@ function createCommentsRoute(ctx) {
     }
     const node2 = getNode(ctx.db, body.nodeId);
     if (!node2 || node2.sessionId !== sessionId) return c.json({ error: "node not found in session" }, 404);
-    const diff = (node2.residualRanges && node2.residualRanges.length > 0 ? getNodeDiffForRanges(session.baseRef, node2.file, node2.residualRanges, ctx.repoRoot) : null) ?? getNodeDiff(session.baseRef, node2.file, node2.startLine, node2.endLine, node2.changeStatus, ctx.repoRoot);
+    const diff = (node2.residualRanges && node2.residualRanges.length > 0 ? getNodeDiffForRanges(diffBase(session), node2.file, node2.residualRanges, ctx.repoRoot) : null) ?? getNodeDiff(diffBase(session), node2.file, node2.startLine, node2.endLine, node2.changeStatus, ctx.repoRoot);
     let snippetLines = diff.lines;
     let anchor2 = null;
     if (body.anchor) {
@@ -41506,7 +41527,7 @@ function createChangesRoute(ctx) {
     const changed = getNodesBySession(ctx.db, sessionId).filter((n) => n.changeStatus === "changed");
     const rawByFile = /* @__PURE__ */ new Map();
     const rawFor = (file2) => {
-      if (!rawByFile.has(file2)) rawByFile.set(file2, fileUnifiedDiff(session.baseRef, file2, ctx.repoRoot));
+      if (!rawByFile.has(file2)) rawByFile.set(file2, fileUnifiedDiff(diffBase(session), file2, ctx.repoRoot));
       return rawByFile.get(file2) ?? null;
     };
     const changes = changed.map((n) => {
@@ -41528,7 +41549,7 @@ function createChangesRoute(ctx) {
         signature: nodeSignature(n.file, n.startLine, ctx.repoRoot)
       };
     });
-    return c.json({ changes, commitSubjects: commitSubjects(session.baseRef, ctx.repoRoot) });
+    return c.json({ changes, commitSubjects: commitSubjects(diffBase(session), ctx.repoRoot) });
   });
   return router;
 }
@@ -41710,12 +41731,12 @@ function createShapeRoute(ctx) {
     const session = getSession(ctx.db, c.req.param("id"));
     if (!session) return c.json({ error: "not found" }, 404);
     const root = ctx.repoRoot;
-    const changes = changedFileStatuses(session.baseRef, root);
+    const changes = changedFileStatuses(diffBase(session), root);
     if (!changes) return c.json({ error: `cannot list changes against ${session.baseRef}`, phase: "list-files" }, 500);
     const shape = buildChangeShape(
       changes,
       loadComponentMap(root),
-      (dir) => directoryExistsAt(session.baseRef, dir, root)
+      (dir) => directoryExistsAt(diffBase(session), dir, root)
     );
     return c.json(shape);
   });
@@ -41723,8 +41744,8 @@ function createShapeRoute(ctx) {
 }
 
 // packages/server/src/routes/map.ts
-import { existsSync as existsSync4 } from "node:fs";
-import { join as join9 } from "node:path";
+import { existsSync as existsSync5 } from "node:fs";
+import { join as join10 } from "node:path";
 
 // packages/server/src/repo/maps.ts
 function saveMap(db2, sessionId, record2) {
@@ -41750,6 +41771,9 @@ function getMap(db2, sessionId) {
     createdAt: row.created_at
   };
 }
+
+// packages/server/src/routes/map.ts
+init_diff();
 
 // packages/server/src/map/signals.ts
 var MAX_LINE = 160;
@@ -42385,8 +42409,6 @@ var Resolver = class {
   }
   site(requirer, provider, component, ref, def) {
     const iface = this.bound.bySymbol.get(provider)?.get(def.symbol);
-    if (!iface) return this.uncoveredRef(provider, requirer, ref, def);
-    const undeclared = !this.declared.get(iface).has(requirer);
     const site = {
       file: ref.file,
       line: ref.line,
@@ -42394,18 +42416,27 @@ var Resolver = class {
       symbol: def.name,
       component,
       requirer,
-      undeclared
+      undeclared: iface ? !this.declared.get(iface).has(requirer) : false
     };
+    if (!iface) return this.uncoveredRef(provider, site, ref, def);
     const list = this.out.sites.get(iface) ?? [];
     list.push(site);
     this.out.sites.set(iface, list);
   }
-  uncoveredRef(provider, requirer, ref, def) {
+  uncoveredRef(provider, site, ref, def) {
     const key = `${provider}\0${def.symbol}`;
-    const entry = this.uncoveredByKey.get(key) ?? { provider, def, from: /* @__PURE__ */ new Set(), where: [], count: 0 };
-    entry.from.add(requirer);
+    const entry = this.uncoveredByKey.get(key) ?? {
+      provider,
+      def,
+      from: /* @__PURE__ */ new Set(),
+      where: [],
+      count: 0,
+      sites: []
+    };
+    entry.from.add(site.requirer);
     entry.count++;
     entry.where.push(at(ref));
+    entry.sites.push(site);
     this.uncoveredByKey.set(key, entry);
   }
   violation(utility, to, ref) {
@@ -42641,14 +42672,209 @@ function unresolvedMap(model, issues, gaps) {
   };
 }
 
+// packages/server/src/map/base.ts
+init_diff();
+import { execFileSync as execFileSync3 } from "node:child_process";
+import { existsSync as existsSync4, mkdirSync, rmSync as rmSync2 } from "node:fs";
+import { join as join9 } from "node:path";
+var QUIET2 = { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] };
+function objectType(sha, root) {
+  try {
+    return execFileSync3("git", ["cat-file", "-t", sha], { cwd: root, ...QUIET2 }).trim();
+  } catch {
+    return null;
+  }
+}
+function headOf(dir) {
+  if (!existsSync4(join9(dir, ".git"))) return null;
+  try {
+    return execFileSync3("git", ["rev-parse", "HEAD"], { cwd: dir, ...QUIET2 }).trim();
+  } catch {
+    return null;
+  }
+}
+function checkout(dir, repoRoot2, sha) {
+  if (headOf(dir) === sha) return;
+  rmSync2(dir, { recursive: true, force: true });
+  mkdirSync(dir, { recursive: true, mode: 448 });
+  try {
+    execFileSync3("git", ["clone", "--shared", "--no-checkout", "-q", repoRoot2, dir], QUIET2);
+    execFileSync3("git", ["checkout", "-q", "--detach", sha], { cwd: dir, ...QUIET2 });
+  } catch (e) {
+    rmSync2(dir, { recursive: true, force: true });
+    throw new GitError("base-checkout", `cannot check out base commit ${sha}: ${e.message}`);
+  }
+}
+var BaseIndexes = class {
+  constructor(baseDir2, providerFor2) {
+    this.baseDir = baseDir2;
+    this.providerFor = providerFor2;
+  }
+  baseDir;
+  providerFor;
+  indexes = /* @__PURE__ */ new Map();
+  /** The session's base checkout and its reference index, built on first use. */
+  get(sessionId, repoRoot2, sha) {
+    const dir = join9(this.baseDir, sessionId);
+    let pending = this.indexes.get(sessionId);
+    if (!pending || !existsSync4(dir)) {
+      pending = this.build(dir, repoRoot2, sha);
+      this.indexes.set(sessionId, pending);
+      pending.catch(() => this.indexes.delete(sessionId));
+    }
+    return pending;
+  }
+  drop(sessionId) {
+    this.indexes.delete(sessionId);
+    rmSync2(join9(this.baseDir, sessionId), { recursive: true, force: true });
+  }
+  async build(dir, repoRoot2, sha) {
+    checkout(dir, repoRoot2, sha);
+    const provider = this.providerFor(dir);
+    if (!provider.getReferenceIndex) throw new Error("the graph provider has no reference index");
+    return { root: dir, index: await provider.getReferenceIndex() };
+  }
+};
+
+// packages/server/src/map/change.ts
+var MAX_SAMPLES2 = 5;
+function compareVersions(input2, baseSha) {
+  const tree = new ComponentTree(input2.model.components);
+  const bound = resolveBindings(input2.model, tree, input2.head);
+  const declared = new Map(input2.model.interfaces.map((i) => [i.id, new Set(i.requirers)]));
+  const refs = resolveReferences(input2.head, tree, bound, declared);
+  const headSites = input2.model.interfaces.map((i) => ({ id: i.id, sites: refs.sites.get(i.id) ?? [] }));
+  const surfaces2 = refs.uncovered.map((u) => ({
+    id: `new:${u.provider}:${u.def.file}:${u.def.name}`,
+    provider: u.provider,
+    requirers: [...u.from].sort(),
+    symbol: u.def.name,
+    file: u.def.file,
+    line: u.def.line,
+    references: u.count,
+    where: u.where.slice(0, MAX_SAMPLES2),
+    sites: u.sites
+  }));
+  const changed = input2.nodes.filter((n) => n.changed);
+  const crossed = crossings(input2.base.interfaces, headSites);
+  return {
+    baseSha,
+    ...placement(tree, changed, input2.files),
+    crossings: crossed,
+    surfaces: surfaces2,
+    delegations: newDelegations(tree, input2.base, crossed, surfaces2),
+    touched: touched(input2, bound, changed)
+  };
+}
+function newDelegations(tree, base, crossed, surfaces2) {
+  const shape = (id, provider, sites, bindings) => ({
+    id,
+    provider,
+    requirers: [],
+    sites,
+    bindings,
+    evidenceFiles: []
+  });
+  const synthetic = [
+    ...crossed.map((c) => shape(c.interface, "", c.added, [])),
+    ...surfaces2.map(
+      (s) => shape(s.id, s.provider, s.sites, [
+        { symbol: s.id, name: s.symbol, file: s.file, line: s.line, component: tree.ownerOf(s.file) }
+      ])
+    )
+  ];
+  const key = (d) => `${d.interface}\0${d.side}\0${d.outer}\0${d.inner}`;
+  const known = new Set(base.delegations.map(key));
+  return deriveDelegations(synthetic, tree).filter((d) => !known.has(key(d)));
+}
+var crossingKey = (iface, requirer) => `${iface}\0${requirer}`;
+var siteKey = (s) => `${s.file}|${s.caller}|${s.symbol}`;
+function byCrossing(interfaces) {
+  const out = /* @__PURE__ */ new Map();
+  for (const i of interfaces) {
+    for (const site of i.sites) {
+      const key = crossingKey(i.id, site.requirer);
+      out.set(key, [...out.get(key) ?? [], site]);
+    }
+  }
+  return out;
+}
+function crossings(base, head) {
+  const before = byCrossing(base);
+  const after = byCrossing(head);
+  const out = [];
+  for (const key of [.../* @__PURE__ */ new Set([...before.keys(), ...after.keys()])].sort()) {
+    const [iface, requirer] = key.split("\0");
+    const old = before.get(key) ?? [];
+    const now = after.get(key) ?? [];
+    const oldKeys = new Set(old.map(siteKey));
+    const newKeys = new Set(now.map(siteKey));
+    const added = now.filter((s) => !oldKeys.has(siteKey(s)));
+    const removed = old.filter((s) => !newKeys.has(siteKey(s)));
+    if (added.length === 0 && removed.length === 0) continue;
+    const status = old.length === 0 ? "new" : now.length === 0 ? "removed" : "changed";
+    out.push({ interface: iface, requirer, status, added, removed });
+  }
+  return out;
+}
+function touched(input2, bound, changed) {
+  const spans2 = changed.filter((n) => !n.residual && !n.isTest);
+  const inBody = (file2, line) => spans2.some((n) => n.file === file2 && n.startLine <= line && line <= n.endLine) || input2.changedLines(file2).some((r) => r.start <= line && line <= r.end);
+  const changedPaths = new Set(input2.files.flatMap((f) => [f.path, ...f.oldPath ? [f.oldPath] : []]));
+  const baseBindings = new Map(input2.base.interfaces.map((i) => [i.id, i.bindings]));
+  const out = [];
+  for (const iface of input2.model.interfaces) {
+    const head = bound.bindings.get(iface.id) ?? [];
+    const headSymbols = new Set(head.map((b) => b.symbol));
+    const body = head.filter((b) => inBody(b.file, b.line)).map((b) => b.name);
+    const lost = (baseBindings.get(iface.id) ?? []).filter((b) => !headSymbols.has(b.symbol)).map((b) => b.name);
+    const evidence = iface.evidence.some((f) => changedPaths.has(f));
+    const reasons = [
+      ...body.length > 0 ? ["body"] : [],
+      ...lost.length > 0 ? ["binding-lost"] : [],
+      ...evidence ? ["evidence"] : []
+    ];
+    if (reasons.length > 0) out.push({ interface: iface.id, reasons, symbols: [...body, ...lost] });
+  }
+  return out;
+}
+function placement(tree, changed, files) {
+  const counts = /* @__PURE__ */ new Map();
+  const bump = (owner, field) => {
+    for (const id of owner ? tree.ancestors(owner) : []) {
+      const entry = counts.get(id) ?? { items: 0, files: 0 };
+      entry[field]++;
+      counts.set(id, entry);
+    }
+  };
+  const nodeComponents = {};
+  for (const node2 of changed) {
+    const owner = tree.ownerOf(node2.file);
+    nodeComponents[node2.id] = owner ?? null;
+    if (!node2.isTest) bump(owner, "items");
+  }
+  const unmapped = /* @__PURE__ */ new Map();
+  for (const file2 of files) {
+    for (const path of [file2.path, ...file2.oldPath ? [file2.oldPath] : []]) bump(tree.ownerOf(path), "files");
+    const owner = tree.ownerOf(file2.path) ?? null;
+    if (owner !== null && !tree.childrenOf(owner).some((c) => !c.external)) continue;
+    unmapped.set(owner, [...unmapped.get(owner) ?? [], file2.path]);
+  }
+  return {
+    components: [...counts].sort(([a], [b]) => a.localeCompare(b)).map(([id, c]) => ({ id, ...c })),
+    nodeComponents,
+    unmapped: [...unmapped].map(([component, list]) => ({ component, files: list }))
+  };
+}
+
 // packages/server/src/routes/map.ts
 function createMapRoute(ctx) {
   const router = new Hono3();
   const root = ctx.repoRoot;
-  const fileExists = (file2) => existsSync4(join9(root, file2));
-  const withIndex = (handler) => async (c) => {
-    const sessionId = c.req.param("id");
-    if (!getSession(ctx.db, sessionId)) return c.json({ error: "not found" }, 404);
+  const fileExistsIn = (dir) => (file2) => existsSync5(join10(dir, file2));
+  const withSource = (handler) => async (c) => {
+    const session = getSession(ctx.db, c.req.param("id"));
+    if (!session) return c.json({ error: "not found" }, 404);
     if (!ctx.graphProvider.getReferenceIndex) {
       return c.json(
         {
@@ -42659,42 +42885,47 @@ function createMapRoute(ctx) {
       );
     }
     try {
-      return await handler(c, sessionId, await ctx.graphProvider.getReferenceIndex());
+      return await handler(c, session, await mapSource(ctx, session));
     } catch (e) {
-      if (e instanceof IndexError) return c.json({ error: e.message, phase: e.phase }, 400);
+      if (e instanceof IndexError || e instanceof GitError) return c.json({ error: e.message, phase: e.phase }, 400);
       throw e;
     }
   };
   router.get(
     "/:id/map/evidence",
-    withIndex((c, _sessionId, index) => {
+    withSource((c, _session, source) => {
       const within = c.req.query("within");
       const full = ["1", "true"].includes(c.req.query("full") ?? "");
       const evidence = buildEvidence(
-        index,
-        { readSource: sourceReader(root), roots: findMarkerRoots(root), manifest: loadComponentMap(root) },
+        source.index,
+        {
+          readSource: sourceReader(source.root),
+          roots: findMarkerRoots(source.root),
+          manifest: loadComponentMap(source.root)
+        },
         { full, ...within ? { within } : {} }
       );
-      return c.json(evidence);
+      return c.json(source.baseSha ? { ...evidence, baseSha: source.baseSha } : evidence);
     })
   );
   router.post(
     "/:id/map/check",
-    withIndex(async (c, _sessionId, index) => {
+    withSource(async (c, _session, source) => {
       const body = await jsonBody(c);
       if (body === void 0) return badBody(c);
-      return c.json({ report: checkMap(body, index, fileExists).map.report });
+      return c.json({ report: checkMap(body, source.index, fileExistsIn(source.root)).map.report });
     })
   );
   router.put(
     "/:id/map",
-    withIndex(async (c, sessionId, index) => {
+    withSource(async (c, session, source) => {
       const body = await jsonBody(c);
       if (body === void 0) return badBody(c);
-      const { model, map: map2 } = checkMap(body, index, fileExists);
+      const { model, map: map2 } = checkMap(body, source.index, fileExistsIn(source.root));
       if (!map2.report.ok) return c.json({ error: "the map fails the fidelity check", report: map2.report }, 422);
-      saveMap(ctx.db, sessionId, { model, map: map2, ...snapshot(root) });
-      return c.json({ report: map2.report });
+      const stored = await withChange(ctx, session, source, { model, base: map2 });
+      saveMap(ctx.db, session.id, { model, map: stored, ...snapshot(root) });
+      return c.json({ report: map2.report, ...stored.change ? { change: stored.change } : {} });
     })
   );
   router.get("/:id/map", (c) => {
@@ -42710,6 +42941,37 @@ function createMapRoute(ctx) {
     });
   });
   return router;
+}
+var headIndex = (ctx) => ctx.graphProvider.getReferenceIndex();
+async function mapSource(ctx, session) {
+  const root = ctx.repoRoot;
+  const sha = diffBase(session);
+  const type = objectType(sha, root);
+  if (type === null) throw new GitError("base-checkout", `the session's base ${sha} is not in the repository`);
+  if (ctx.bases && type === "commit") return { ...await ctx.bases.get(session.id, root, sha), baseSha: sha };
+  return { root, index: await headIndex(ctx) };
+}
+async function withChange(ctx, session, source, checked) {
+  if (!source.baseSha) return checked.base;
+  const root = ctx.repoRoot;
+  const sha = source.baseSha;
+  const ranges = /* @__PURE__ */ new Map();
+  const changedLines = (file2) => {
+    if (!ranges.has(file2)) ranges.set(file2, fileChangedRanges(sha, file2, root) ?? []);
+    return ranges.get(file2);
+  };
+  const nodes = getNodesBySession(ctx.db, session.id).map((n) => ({
+    id: n.id,
+    file: n.file,
+    startLine: n.startLine,
+    endLine: n.endLine,
+    isTest: n.isTest,
+    residual: (n.residualRanges?.length ?? 0) > 0,
+    changed: n.changeStatus === "changed"
+  }));
+  const files = changedFileStatuses(sha, root) ?? [];
+  const head = await headIndex(ctx);
+  return { ...checked.base, change: compareVersions({ ...checked, head, nodes, files, changedLines }, sha) };
 }
 async function jsonBody(c) {
   try {
@@ -42744,6 +43006,7 @@ var localRequestsOnly = createMiddleware(async (c, next) => {
 // packages/server/src/app.ts
 function createApp(ctx) {
   const resolved = { ...ctx, repoRoot: ctx.repoRoot ?? repoRoot() };
+  if (ctx.providerFor && ctx.baseDir) resolved.bases = new BaseIndexes(ctx.baseDir, ctx.providerFor);
   const app2 = new Hono3();
   app2.use("*", localRequestsOnly);
   app2.get(
@@ -42764,7 +43027,7 @@ function createApp(ctx) {
   app2.route("/api/sessions", createChangesRoute(resolved));
   app2.route("/api/sessions", createShapeRoute(resolved));
   app2.route("/api/sessions", createMapRoute(resolved));
-  if (resolved.webDistPath && existsSync5(join10(resolved.webDistPath, "index.html"))) {
+  if (resolved.webDistPath && existsSync6(join11(resolved.webDistPath, "index.html"))) {
     app2.route("/", createStaticRoute(resolved.webDistPath));
   }
   return app2;
@@ -42833,7 +43096,7 @@ CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_node_id);
 CREATE INDEX IF NOT EXISTS idx_comments_session ON comments(session_id);
 CREATE INDEX IF NOT EXISTS idx_comments_node ON comments(node_id);
 `;
-var SCHEMA_VERSION = 11;
+var SCHEMA_VERSION = 12;
 var MIGRATIONS = {
   1: SCHEMA_SQL,
   2: `ALTER TABLE review_sessions ADD COLUMN repo_fingerprint TEXT NOT NULL DEFAULT '';`,
@@ -42880,7 +43143,10 @@ CREATE TABLE IF NOT EXISTS component_maps (
   repo_fingerprint TEXT NOT NULL,
   created_at INTEGER NOT NULL
 );
-`
+`,
+  // v12: the base commit a session's diffs use, resolved once at creation so
+  // a base ref that moves later does not change the review.
+  12: `ALTER TABLE review_sessions ADD COLUMN base_sha TEXT NOT NULL DEFAULT '';`
 };
 
 // packages/server/src/db/connection.ts
@@ -46734,9 +47000,11 @@ function detectRepoRoot() {
 var db = createDatabase(process.env.SREV_DB_PATH || "review.db");
 var which = (process.env.GRAPH_PROVIDER || "scip").toLowerCase();
 var graphProvider;
+var providerFor;
 switch (which) {
   case "scip":
     graphProvider = new ScipGraphProvider();
+    providerFor = (root) => new ScipGraphProvider({ repoRoot: root });
     break;
   case "crg":
     graphProvider = new CrgGraphProvider((process.env.CRG_COMMAND ?? "code-review-graph serve").split(" "));
@@ -46744,9 +47012,13 @@ switch (which) {
   default:
     graphProvider = new StubGraphProvider();
 }
+function baseDir() {
+  if (process.env.SREV_BASE_DIR) return process.env.SREV_BASE_DIR;
+  return join13(process.env.XDG_CACHE_HOME || join13(homedir(), ".cache"), "structured-review", "bases");
+}
 var here = dirname2(fileURLToPath2(import.meta.url));
-var webDistPath = [process.env.SREV_WEB_DIST, join12(here, "..", "..", "web", "dist"), join12(here, "..", "web")].find(
-  (p) => p && existsSync6(join12(p, "index.html"))
+var webDistPath = [process.env.SREV_WEB_DIST, join13(here, "..", "..", "web", "dist"), join13(here, "..", "web")].find(
+  (p) => p && existsSync7(join13(p, "index.html"))
 );
 var webBuilt = webDistPath !== void 0;
 var hostname3 = process.env.SREV_HOST || "127.0.0.1";
@@ -46760,6 +47032,7 @@ var app = createApp({
   graphProvider,
   ...webBuilt ? { webDistPath } : {},
   providerName: which,
+  ...providerFor ? { providerFor, baseDir: baseDir() } : {},
   onShutdown: () => process.exit(0)
 });
 var port = Number(process.env.PORT) || 3456;

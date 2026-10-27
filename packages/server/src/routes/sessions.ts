@@ -85,6 +85,30 @@ async function attachmentsFor(
   return (units) => deriveAttachments(units, flows, sessionNodes, testEdges, fileRequires);
 }
 
+interface ChangeUniverse {
+  subgraph: ChangeSubgraph;
+  keptNodes: GraphNode[];
+  status: Map<string, ChangeStatus>;
+  residuals: ReturnType<typeof computeResiduals>;
+  indexWarnings: string[];
+}
+
+/** The change's nodes against the pinned base, plus a residual per file for
+ *  changed lines outside every node span (types, imports, configuration). */
+async function changeUniverse(ctx: AppContext, branch: string, baseSha: string): Promise<ChangeUniverse> {
+  const subgraph = await ctx.graphProvider.getChangeSubgraph(branch, baseSha);
+  const { nodes: keptNodes, status } = reconcileSubgraph(subgraph, baseSha, ctx.repoRoot!);
+  const spansByFile = new Map<string, LineRange[]>();
+  for (const n of keptNodes) {
+    const spans = spansByFile.get(n.file) ?? [];
+    spans.push({ start: n.startLine, end: n.endLine });
+    spansByFile.set(n.file, spans);
+  }
+  const residuals = computeResiduals(baseSha, spansByFile, ctx.repoRoot!);
+  const indexWarnings = (await ctx.graphProvider.getIndexWarnings?.()) ?? [];
+  return { subgraph, keptNodes, status, residuals, indexWarnings };
+}
+
 export function createSessionsRoute(ctx: AppContext) {
   const router = new Hono();
 
@@ -120,30 +144,15 @@ export function createSessionsRoute(ctx: AppContext) {
 
     // All git-dependent work happens before any row is written, so a GitError
     // mid-creation cannot leave an orphaned zero-node session behind.
-    let subgraph: ChangeSubgraph;
-    let keptNodes: GraphNode[];
-    let status: Map<string, ChangeStatus>;
-    let residuals: ReturnType<typeof computeResiduals>;
-    let indexWarnings: string[] = [];
+    let universe: ChangeUniverse;
     try {
-      subgraph = await ctx.graphProvider.getChangeSubgraph(body.branch, baseSha);
-      ({ nodes: keptNodes, status } = reconcileSubgraph(subgraph, baseSha, ctx.repoRoot!));
-
-      // Residual coverage: changed lines outside every node span become one
-      // pseudo-node per file, so types/imports/configs still enter the universe.
-      const spansByFile = new Map<string, LineRange[]>();
-      for (const n of keptNodes) {
-        const spans = spansByFile.get(n.file) ?? [];
-        spans.push({ start: n.startLine, end: n.endLine });
-        spansByFile.set(n.file, spans);
-      }
-      residuals = computeResiduals(baseSha, spansByFile, ctx.repoRoot!);
-      indexWarnings = (await ctx.graphProvider.getIndexWarnings?.()) ?? [];
+      universe = await changeUniverse(ctx, body.branch, baseSha);
     } catch (e) {
       if (e instanceof GitError) return c.json({ error: e.message, phase: e.phase }, 400);
       if (e instanceof IndexError) return c.json({ error: e.message, phase: e.phase }, 400);
       throw e;
     }
+    const { subgraph, keptNodes, status, residuals, indexWarnings } = universe;
 
     const session = ctx.db.transaction(() => {
       const session = createSession(ctx.db, body.branch, body.baseRef, {

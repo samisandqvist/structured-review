@@ -45,6 +45,15 @@ function ancestry(map: ResolvedMap): (id: string) => string[] {
   };
 }
 
+/** The delegation a connector draws, as a key of the change's delegations; undefined for assembly connectors. */
+function delegationKey(level: Level, edge: { from: string; to: string; iface: string }): string | undefined {
+  const from = level.ports.get(edge.from)!;
+  const to = level.ports.get(edge.to)!;
+  if (to.boundary && to.role === "require") return key(edge.iface, "required", to.node, from.node);
+  if (from.boundary && from.role === "provide") return key(edge.iface, "provided", from.node, to.node);
+  return undefined;
+}
+
 /** Change marks of a level's connectors, by edge id; unmarked connectors are absent. */
 export function edgeChanges(map: ResolvedMap, level: Level): Map<string, ChangeStatus> {
   const out = new Map<string, ChangeStatus>();
@@ -56,13 +65,7 @@ export function edgeChanges(map: ResolvedMap, level: Level): Map<string, ChangeS
   const up = ancestry(map);
   for (const edge of level.edges.values()) {
     const from = level.ports.get(edge.from)!;
-    const to = level.ports.get(edge.to)!;
-    const delegation =
-      to.boundary && to.role === "require"
-        ? key(edge.iface, "required", to.node, from.node)
-        : from.boundary && from.role === "provide"
-          ? key(edge.iface, "provided", from.node, to.node)
-          : undefined;
+    const delegation = delegationKey(level, edge);
     let status: ChangeStatus | undefined =
       surfaces.has(edge.iface) || (delegation && delegated.has(delegation)) ? "new" : undefined;
     if (!status && from.role === "require") {

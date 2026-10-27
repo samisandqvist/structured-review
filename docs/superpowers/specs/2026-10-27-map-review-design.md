@@ -1,6 +1,6 @@
 # Reviewing a change on the component map
 
-Status: design, not implemented. Builds on the
+Status: implemented on the feature branch. Builds on the
 [component map](2026-10-26-component-map-design.md) and on the review model in
 [review model](../../review-model.md).
 
@@ -60,17 +60,18 @@ it cannot absorb it.
 A review session compares the working tree (the head) with a base ref. When
 the reviewer asks for a map in such a session, the hub:
 
-1. exports the tree of the session's base commit (`git archive`) into the
-   hub's data directory;
+1. makes a shared clone (`git clone --shared`) of the repository checked out at
+   the session's base commit, in a per-user cache directory;
 2. indexes that copy with the same provider and indexers as the head;
 3. keeps both reference indexes for the session.
 
-The export leaves no trace in the reviewed repository: no worktree entry, no
-branch, nothing under `.git` (my call: a crashed hub or a skipped cleanup must
-not leave entries in the user's `git worktree list`). The evidence signals
-(header comments, registrations) and the evidence-file checks read base
-sources, so the copy lives as long as the session and is removed with it
-(`srev session delete`, `srev gc`).
+The clone borrows the repository's objects and leaves no trace in the reviewed
+repository: no worktree entry, no branch, nothing under `.git`, so a crashed
+hub or a skipped cleanup leaves nothing in the user's `git worktree list`. The
+clone keeps a `.git` of its own, so every git-based code path of the indexers
+and the hub works on it. The evidence signals (header comments, registrations)
+and the evidence-file checks read base sources, so the copy lives as long as
+the session and is removed with it; a missing copy is rebuilt on demand.
 
 The base commit is resolved once, when the session is created, and stored
 with the session; the session's diff and the base copy both use that commit
@@ -158,30 +159,24 @@ The map is an optional view. The review skill offers it when the change spans
 more than one top-level component of the shape, and the reviewer can ask for it
 at any time. A two-file fix does not need it.
 
-## Spike before implementation
+## Indexing the base without dependencies
 
-The exported base tree has no `.git` and no installed dependencies (`node_modules`, a virtual
-environment). References between the repository's own files should resolve
-from source, but this is unverified.
+The base copy has no installed dependencies (`node_modules`, a virtual
+environment). References between the repository's own files resolve from
+source: on a TypeScript monorepo, the cross-file reference keys between its own
+files were identical with and without the head's `node_modules` linked in.
+scip-python resolves packages from the interpreter environment, which base and
+head share. The copy is indexed bare.
 
-Spike: on two TypeScript and one Python validation repository, export an older
-commit with `git archive` and index it twice, once bare and once with the
-head's dependency directories linked in, and compare the cross-file references between the
-repository's own files.
-
-- If the in-repo reference sets are equal, the copy is indexed bare.
-- If they differ, link the head's dependency directories into the copy and
-  record the remaining difference as a known limit when the lockfile changed
-  between base and head.
-- If an indexer needs `.git` in the tree, record it and use a `git worktree`
-  for that case, with cleanup in `srev gc`.
-- If neither gives equal sets, stop and revisit this design.
+Both indexes are limited to tracked files. Indexers also pick up gitignored
+build output in the working tree, which a clean checkout of the base lacks;
+counting it would mark its references as new.
 
 ## Costs and limits
 
 - A second indexer run per review that opens the map. Indexing time is the main
   cost; the base index is built once per session.
-- An exported copy of the base tree for the session's lifetime.
+- A shared clone of the base commit for the session's lifetime.
 - Static references only, as for the overview map.
 - A change that moves code between components shows as removed in one and new
   in the other. That is the intended picture of a restructuring.

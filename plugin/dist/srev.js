@@ -464,7 +464,8 @@ async function checkMap(base, sessionId, model) {
 }
 async function submitMap(base, sessionId, model) {
   const { status, body } = await request(mapPath(base, sessionId), { method: "PUT", body: JSON.stringify(model) });
-  return { ok: status === 200, report: body.report };
+  const { report, change } = body;
+  return { ok: status === 200, report, ...change ? { change } : {} };
 }
 async function getMap(base, sessionId) {
   return (await request(mapPath(base, sessionId))).body;
@@ -484,9 +485,28 @@ function prettyReport(report) {
     ...report.gaps.length ? report.gaps.map((g) => `! ${g}`) : ["gaps: none"]
   ].join("\n");
 }
+var short = (sha) => sha.slice(0, 7);
+function prettyChange(change) {
+  const sites = (n) => plural(n, "call site");
+  const crossing = (c) => c.status === "changed" ? `  changed dependency: ${c.requirer} -> ${c.interface} (+${c.added.length} / -${c.removed.length} call sites)` : `  ${c.status} dependency: ${c.requirer} -> ${c.interface} (${sites(c.status === "new" ? c.added.length : c.removed.length)})`;
+  return [
+    `change against base ${short(change.baseSha)}`,
+    `  changed components: ${change.components.map((c) => `${c.id} (${plural(c.items, "item")}, ${plural(c.files, "file")})`).join(", ") || "none"}`,
+    ...change.crossings.map(crossing),
+    ...change.surfaces.map(
+      (s) => `  new surface: ${s.symbol} of ${s.provider}, used by ${s.requirers.join(", ")} (${plural(s.references, "reference")})`
+    ),
+    ...change.touched.map(
+      (t) => `  contract touched: ${t.interface} (${t.reasons.join(", ")}${t.symbols.length ? `: ${t.symbols.join(", ")}` : ""})`
+    ),
+    ...change.unmapped.map(
+      (u) => `  not placed ${u.component ? `under ${u.component}` : "in any component"}: ${u.files.join(", ")}`
+    )
+  ].join("\n");
+}
 function prettyEvidence(e) {
   return [
-    `scope: ${e.scope || "."} (${e.full ? "full" : "brief"})`,
+    `scope: ${e.scope || "."} (${e.full ? "full" : "brief"})${e.baseSha ? `, base ${short(e.baseSha)}` : ""}`,
     "candidates:",
     ...e.candidates.map((c) => `  ${c.id} (${plural(c.files, "file")})`),
     "references:",
@@ -538,7 +558,7 @@ async function checkCommand(base, flags) {
 }
 async function submitCommand(base, flags) {
   const sessionId = flag(flags, "session");
-  const { ok, report } = await submitMap(base, sessionId, readModel(flag(flags, "model")));
+  const { ok, report, change } = await submitMap(base, sessionId, readModel(flag(flags, "model")));
   const url = mapUrl(base, sessionId);
   if (!ok) {
     process.exitCode = 1;
@@ -546,8 +566,10 @@ async function submitCommand(base, flags) {
 ${prettyReport(report)}` };
   }
   if (flags.open) openInBrowser(url);
-  return { json: { ok, url, report }, pretty: `map stored: ${url}
-${prettyReport(report)}` };
+  return {
+    json: { ok, url, report, ...change ? { change } : {} },
+    pretty: [`map stored: ${url}`, prettyReport(report), ...change ? [prettyChange(change)] : []].join("\n")
+  };
 }
 async function getCommand(base, flags) {
   const sessionId = flag(flags, "session");
@@ -559,12 +581,16 @@ async function getCommand(base, flags) {
     url,
     ...staleness,
     ...stored.staleReason ? { staleReason: stored.staleReason } : {},
-    report: stored.map.report
+    report: stored.map.report,
+    ...stored.map.change ? { change: stored.map.change } : {}
   };
   return {
     json,
-    pretty: `${url}${stored.stale ? ` (stale: ${stored.staleReason})` : ""}
-${prettyReport(stored.map.report)}`
+    pretty: [
+      `${url}${stored.stale ? ` (stale: ${stored.staleReason})` : ""}`,
+      prettyReport(stored.map.report),
+      ...stored.map.change ? [prettyChange(stored.map.change)] : []
+    ].join("\n")
   };
 }
 var MAP_COMMANDS = {
