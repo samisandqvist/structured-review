@@ -1241,6 +1241,8 @@ textarea:focus {
   --cm-accent-soft: rgba(147, 166, 255, 0.14);
   --cm-bad: #ff7d6e;
   --cm-bad-soft: rgba(255, 125, 110, 0.13);
+  --cm-new: #6fdca4;
+  --cm-new-soft: rgba(111, 220, 164, 0.14);
   --cm-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
   --cm-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   color-scheme: dark;
@@ -1267,6 +1269,8 @@ textarea:focus {
     --cm-accent-soft: rgba(39, 71, 196, 0.1);
     --cm-bad: #b8352a;
     --cm-bad-soft: rgba(184, 53, 42, 0.1);
+    --cm-new: #18804c;
+    --cm-new-soft: rgba(24, 128, 76, 0.1);
     color-scheme: light;
   }
 }
@@ -1405,6 +1409,62 @@ textarea:focus {
 }
 .cmap-legend .bad {
   color: var(--cm-bad);
+}
+.cmap-legend .chg-new {
+  color: var(--cm-new);
+}
+.cmap-panel .items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cmap-panel .items button {
+  display: flex;
+  width: 100%;
+  gap: 8px;
+  align-items: baseline;
+  padding: 5px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--cm-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cmap-panel .items button:hover {
+  background: var(--cm-accent-soft);
+}
+.cmap-panel .items .loc {
+  margin-left: auto;
+  font-family: var(--cm-mono);
+  font-size: 11.5px;
+  color: var(--cm-muted);
+}
+.cmap-panel .items .state {
+  font-size: 11.5px;
+  color: var(--cm-new);
+}
+.cmap-panel .items .state.todo {
+  color: var(--cm-muted);
+}
+.cmap-panel .change-line {
+  display: block;
+  width: 100%;
+  margin: 4px 0;
+  padding: 6px 8px;
+  border: 1px solid var(--cm-rule);
+  border-left: 3px solid var(--cm-new);
+  border-radius: 4px;
+  background: var(--cm-new-soft);
+  color: var(--cm-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cmap-panel .change-line.removed {
+  border-left-color: var(--cm-muted);
+  background: none;
 }
 .cmap-legend svg {
   width: 34px;
@@ -1684,6 +1744,39 @@ textarea:focus {
 .cmap .d-node.hl rect.body {
   stroke: var(--cm-accent);
   stroke-width: 2.2;
+}
+.cmap .d-edge.chg-new path.vis {
+  stroke: var(--cm-new);
+  stroke-width: 2.2;
+}
+.cmap .d-edge.chg-changed path.vis {
+  stroke: var(--cm-new);
+}
+.cmap .d-edge.chg-removed path.vis {
+  stroke: var(--cm-muted);
+  stroke-dasharray: 2 4;
+}
+.cmap .d-node.changed rect.body {
+  stroke: var(--cm-new);
+  stroke-width: 1.6;
+}
+.cmap .d-node text.chg {
+  font: 500 10.5px var(--cm-mono);
+  fill: var(--cm-new);
+}
+.cmap .d-port.touched .ball,
+.cmap .d-port.touched .box,
+.cmap .d-port.touched .cup {
+  stroke: var(--cm-new);
+  stroke-width: 2;
+}
+.cmap .d-port.surface .ball {
+  fill: var(--cm-new-soft);
+  stroke: var(--cm-new);
+  stroke-dasharray: 2 2;
+}
+.cmap .d-port.surface text {
+  fill: var(--cm-new);
 }
 .cmap .dimmed .d-edge:not(.hl),
 .cmap .dimmed .d-node:not(.hl):not(.keep) {

@@ -66,7 +66,7 @@ export interface CallSite {
   undeclared: boolean;
 }
 
-interface Delegation {
+export interface Delegation {
   interface: string;
   side: "provided" | "required";
   outer: string;
@@ -96,12 +96,53 @@ export interface CheckReport {
   gaps: string[];
 }
 
+export type ChangeStatus = "new" | "removed" | "changed";
+
+export interface CrossingChange {
+  interface: string;
+  requirer: string;
+  status: ChangeStatus;
+  added: CallSite[];
+  removed: CallSite[];
+}
+
+export interface NewSurface {
+  id: string;
+  provider: string;
+  requirers: string[];
+  symbol: string;
+  file: string;
+  line: number;
+  references: number;
+  where: string[];
+  sites: CallSite[];
+}
+
+export interface TouchedContract {
+  interface: string;
+  reasons: ("body" | "binding-lost" | "evidence")[];
+  symbols: string[];
+}
+
+/** A review's change on a map built from its base (see the hub's map/change.ts). */
+export interface MapChange {
+  baseSha: string;
+  components: { id: string; items: number; files: number }[];
+  nodeComponents: Record<string, string | null>;
+  crossings: CrossingChange[];
+  surfaces: NewSurface[];
+  delegations: Delegation[];
+  touched: TouchedContract[];
+  unmapped: { component: string | null; files: string[] }[];
+}
+
 export interface ResolvedMap {
   title: string;
   components: ResolvedComponent[];
   interfaces: ResolvedInterface[];
   delegations: Delegation[];
   report: CheckReport;
+  change?: MapChange;
 }
 
 export interface StoredMapResponse {

@@ -1,15 +1,28 @@
 // The component map page: one level at a time, a breadcrumb back up, a URL
-// per level, and a detail panel for the level or the selected element.
+// per level, and a detail panel for the level or the selected element. In a
+// review the map shows the change, and a part's changed items open in the
+// review view.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import ELK from "elkjs/lib/elk.bundled.js";
 import type { ElkNode } from "elkjs/lib/elk-api.js";
 import { useMap } from "../api/hooks.js";
-import { ApiError } from "../api/client.js";
-import { mapUrl, sessionUrl } from "../navigation.js";
-import { buildLevel, defaultLevel, highlighted, levelTrail, visibleChildren, type Selection } from "./levels.js";
+import { api, ApiError } from "../api/client.js";
+import { mapUrl, navigateToSession, sessionUrl } from "../navigation.js";
+import { useUIStore } from "../store/ui.js";
+import {
+  buildLevel,
+  defaultLevel,
+  highlighted,
+  levelTrail,
+  visibleChildren,
+  type Level,
+  type Selection,
+} from "./levels.js";
 import { layoutLevel } from "./layout.js";
-import { Legend, MapDiagram } from "./MapDiagram.js";
-import { MapPanel } from "./MapPanel.js";
+import { Legend, MapDiagram, type DiagramMarks } from "./MapDiagram.js";
+import { MapPanel, type PanelReview } from "./MapPanel.js";
+import { drawnMap, edgeChanges, itemCounts, placeItems } from "./review.js";
 import { usePanZoom } from "./usePanZoom.js";
 import type { ResolvedMap, StoredMapResponse } from "./types.js";
 
@@ -154,8 +167,38 @@ function Toolbar({
   );
 }
 
+/** The review's changed items placed on the map; undefined outside a review or while loading. */
+function useReview(sessionId: string, map: ResolvedMap): PanelReview | undefined {
+  const enabled = map.change !== undefined;
+  const nodes = useQuery({ queryKey: ["nodes", sessionId], queryFn: () => api.getNodes(sessionId), enabled });
+  const session = useQuery({ queryKey: ["session", sessionId], queryFn: () => api.getSession(sessionId), enabled });
+  const flows = useQuery({ queryKey: ["flows", sessionId], queryFn: () => api.getFlows(sessionId), enabled });
+  return useMemo(() => {
+    if (!map.change || !nodes.data) return undefined;
+    return {
+      change: map.change,
+      placed: placeItems(map.change, nodes.data.nodes, session.data?.units ?? [], flows.data?.flows ?? []),
+      onReview: (nodeId: string) => {
+        useUIStore.getState().setCurrentNode(nodeId, "walk");
+        navigateToSession(sessionId);
+      },
+    };
+  }, [map.change, nodes.data, session.data, flows.data, sessionId]);
+}
+
+function marksFor(map: ResolvedMap, level: Level, review: PanelReview | undefined): DiagramMarks | undefined {
+  if (!map.change) return undefined;
+  return {
+    edges: edgeChanges(map, level),
+    counts: review ? itemCounts(map, review.placed) : new Map(),
+    touched: new Set(map.change.touched.map((t) => t.interface)),
+    surfaces: new Set(map.change.surfaces.map((s) => s.id)),
+  };
+}
+
 function MapView({ sessionId, stored }: { sessionId: string; stored: StoredMapResponse }) {
-  const { map } = stored;
+  const map = useMemo(() => drawnMap(stored.map), [stored.map]);
+  const review = useReview(sessionId, map);
   const [levelId, setLevelId] = useState(() => levelFromUrl(map, window.location.search));
   const [selection, setSelection] = useState<Selection>(null);
   const { level, layout, error } = useLevelLayout(map, levelId);
@@ -163,6 +206,7 @@ function MapView({ sessionId, stored }: { sessionId: string; stored: StoredMapRe
   const size = useMemo(() => (layout ? { width: layout.width!, height: layout.height! } : null), [layout]);
   const view = usePanZoom(canvas, size, () => setSelection(null));
   const { hl, keep } = useMemo(() => highlighted(level, selection), [level, selection]);
+  const marks = useMemo(() => marksFor(map, level, review), [map, level, review]);
 
   useEffect(() => {
     const onPop = () => {
@@ -197,6 +241,7 @@ function MapView({ sessionId, stored }: { sessionId: string; stored: StoredMapRe
                   layout={layout}
                   hl={hl}
                   keep={keep}
+                  {...(marks ? { marks } : {})}
                   onSelectNode={(id) => setSelection({ type: "node", id })}
                   onSelectIface={(id) => setSelection({ type: "iface", id })}
                   onOpen={(id) => open(id)}
@@ -204,13 +249,14 @@ function MapView({ sessionId, stored }: { sessionId: string; stored: StoredMapRe
               )}
             </g>
           </svg>
-          <Legend />
+          <Legend review={map.change !== undefined} />
         </div>
         <MapPanel
           map={map}
           level={levelId}
           connections={level.edges.size}
           selection={selection}
+          {...(review ? { review } : {})}
           onSelect={setSelection}
           onOpen={open}
         />

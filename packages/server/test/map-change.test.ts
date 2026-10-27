@@ -26,7 +26,8 @@ const BASE_REFS: Ref[] = [
 
 function index(refs: Ref[], defs: Def[] = DEFS): ReferenceIndex {
   const definitions = new Map<string, SymbolDef>();
-  for (const [file, name, line] of defs) definitions.set(S(file, name), { symbol: S(file, name), file, line, name, kind: "function" });
+  for (const [file, name, line] of defs)
+    definitions.set(S(file, name), { symbol: S(file, name), file, line, name, kind: "function" });
   const symbolOf = (target: string) => {
     const [file, name] = target.split(":");
     return S(file!, name!);
@@ -34,7 +35,13 @@ function index(refs: Ref[], defs: Def[] = DEFS): ReferenceIndex {
   return {
     files: [...new Set(defs.map((d) => d[0]))].sort(),
     definitions,
-    references: refs.map(([file, target, caller, line]) => ({ file, symbol: symbolOf(target), caller, line, typeOnly: false })),
+    references: refs.map(([file, target, caller, line]) => ({
+      file,
+      symbol: symbolOf(target),
+      caller,
+      line,
+      typeOnly: false,
+    })),
     implementations: new Map(),
     barrels: [],
     gaps: [],
@@ -100,7 +107,9 @@ describe("compareVersions", () => {
   });
 
   it("marks a crossing the head adds as new", () => {
-    const change = compare({ head: index([...BASE_REFS, ["src/api/handler.ts", "src/store/jobs.ts:saveJob", "handle", 6]]) });
+    const change = compare({
+      head: index([...BASE_REFS, ["src/api/handler.ts", "src/store/jobs.ts:saveJob", "handle", 6]]),
+    });
     expect(change.crossings).toEqual([
       {
         interface: "writes",
@@ -115,14 +124,26 @@ describe("compareVersions", () => {
   it("marks a crossing the head drops as removed", () => {
     const change = compare({ head: index(BASE_REFS.filter((r) => r[1] !== "src/core/run.ts:run")) });
     expect(change.crossings).toEqual([
-      expect.objectContaining({ interface: "runs", requirer: "api", status: "removed", added: [], removed: [expect.objectContaining({ line: 5 })] }),
+      expect.objectContaining({
+        interface: "runs",
+        requirer: "api",
+        status: "removed",
+        added: [],
+        removed: [expect.objectContaining({ line: 5 })],
+      }),
     ]);
   });
 
   it("marks a crossing with a new caller as changed", () => {
     const change = compare({ head: index([...BASE_REFS, ["src/core/run.ts", "src/store/jobs.ts:getJob", "tick", 9]]) });
     expect(change.crossings).toEqual([
-      expect.objectContaining({ interface: "reads", requirer: "core", status: "changed", added: [expect.objectContaining({ caller: "tick" })], removed: [] }),
+      expect.objectContaining({
+        interface: "reads",
+        requirer: "core",
+        status: "changed",
+        added: [expect.objectContaining({ caller: "tick" })],
+        removed: [],
+      }),
     ]);
   });
 
@@ -133,7 +154,9 @@ describe("compareVersions", () => {
 
   it("reports a renamed bound symbol as a lost binding and its uses as a new surface", () => {
     const defs = DEFS.map((d): Def => (d[1] === "getJob" ? [d[0], "fetchJob", d[2]] : d));
-    const refs = BASE_REFS.map((r): Ref => (r[1].endsWith(":getJob") ? [r[0], "src/store/jobs.ts:fetchJob", r[2], r[3]] : r));
+    const refs = BASE_REFS.map((r): Ref =>
+      r[1].endsWith(":getJob") ? [r[0], "src/store/jobs.ts:fetchJob", r[2], r[3]] : r,
+    );
     const change = compare({ head: index(refs, defs) });
     expect(change.touched).toEqual([{ interface: "reads", reasons: ["binding-lost"], symbols: ["getJob"] }]);
     expect(change.surfaces).toEqual([
@@ -160,7 +183,17 @@ describe("compareVersions", () => {
 
   it("marks a contract touched when a bound function's body or line changed", () => {
     const change = compare({
-      nodes: [{ id: "n1", file: "src/store/jobs.ts", startLine: 5, endLine: 7, isTest: false, residual: false, changed: true }],
+      nodes: [
+        {
+          id: "n1",
+          file: "src/store/jobs.ts",
+          startLine: 5,
+          endLine: 7,
+          isTest: false,
+          residual: false,
+          changed: true,
+        },
+      ],
       changedLines: (file) => (file === "src/store/jobs.ts" ? [{ start: 1, end: 1 }] : []),
     });
     expect(change.touched).toEqual([
@@ -171,7 +204,9 @@ describe("compareVersions", () => {
 
   it("does not take a residual's span for a function body", () => {
     const change = compare({
-      nodes: [{ id: "r1", file: "src/store/jobs.ts", startLine: 1, endLine: 9, isTest: false, residual: true, changed: true }],
+      nodes: [
+        { id: "r1", file: "src/store/jobs.ts", startLine: 1, endLine: 9, isTest: false, residual: true, changed: true },
+      ],
     });
     expect(change.touched).toEqual([]);
   });

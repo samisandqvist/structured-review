@@ -1,7 +1,15 @@
 // A small resolved component map: a job orchestrator with an operator API,
 // a core with two parts, a persistence facade, a hidden utility and two
 // external systems.
-import type { CallSite, CheckReport, ResolvedComponent, ResolvedInterface, ResolvedMap } from "../src/map/types.js";
+import type {
+  CallSite,
+  CheckReport,
+  MapChange,
+  ResolvedComponent,
+  ResolvedInterface,
+  ResolvedMap,
+} from "../src/map/types.js";
+import type { Flow, Node, Unit } from "../src/api/client.js";
 
 const component = (
   id: string,
@@ -119,4 +127,103 @@ export function fixtureMap(): ResolvedMap {
     ],
     report,
   };
+}
+
+/** The fixture map in a review: the engine starts writing through a new
+ *  helper of the store, the support helper loses its caller, and the API
+ *  gains a write call site. */
+export function fixtureChange(): MapChange {
+  return {
+    baseSha: "base123",
+    components: [
+      { id: "core", items: 1, files: 1 },
+      { id: "engine", items: 1, files: 1 },
+      { id: "orchestrator", items: 3, files: 3 },
+      { id: "store", items: 1, files: 1 },
+    ],
+    nodeComponents: { n1: "engine", n5: "engine", n2: "store", n3: "orchestrator", t1: null },
+    crossings: [
+      {
+        interface: "help",
+        requirer: "engine",
+        status: "removed",
+        added: [],
+        removed: [site("src/core/engine/run.ts", "helper", "engine", "engine")],
+      },
+      {
+        interface: "writes",
+        requirer: "api",
+        status: "changed",
+        added: [{ ...site("src/api/admin.ts", "saveJob", "api", "api", true), caller: "purge" }],
+        removed: [],
+      },
+    ],
+    surfaces: [
+      {
+        id: "new:store:src/store/cache.ts:warm",
+        provider: "store",
+        requirers: ["core"],
+        symbol: "warm",
+        file: "src/store/cache.ts",
+        line: 4,
+        references: 1,
+        where: ["src/core/engine/run.ts:9 (run)"],
+        sites: [{ ...site("src/core/engine/run.ts", "warm", "engine", "core"), line: 9, caller: "run" }],
+      },
+    ],
+    delegations: [{ interface: "new:store:src/store/cache.ts:warm", side: "required", outer: "core", inner: "engine" }],
+    touched: [{ interface: "reads", reasons: ["body"], symbols: ["getJob"] }],
+    unmapped: [{ component: "orchestrator", files: ["src/main.ts"] }],
+  };
+}
+
+const node = (id: string, file: string, startLine: number, extra: Partial<Node> = {}): Node => ({
+  id,
+  sessionId: "s1",
+  stableId: `s-${id}`,
+  label: id,
+  file,
+  startLine,
+  endLine: startLine + 2,
+  changeStatus: "changed",
+  reviewStatus: "unreviewed",
+  reviewedInUnit: null,
+  isTest: false,
+  ...extra,
+});
+
+const NODES: Node[] = [
+  node("n1", "src/core/engine/run.ts", 2),
+  node("n5", "src/core/engine/run.ts", 20, { reviewStatus: "reviewed-clean" }),
+  node("t1", "test/run.test.ts", 1, { isTest: true }),
+  node("n2", "src/store/jobs.ts", 1, { reviewStatus: "reviewed-commented" }),
+  node("n3", "src/main.ts", 1),
+  node("n4", "src/store/jobs.ts", 9, { changeStatus: "unchanged" }),
+];
+const UNITS: Unit[] = [
+  {
+    id: "u1",
+    sessionId: "s1",
+    position: 0,
+    label: "Run",
+    rationale: "",
+    kind: "flow",
+    memberStableIds: ["entry"],
+    auto: false,
+    attached: [{ stableId: "s-t1", parentStableId: "s-n1", reason: "tested-by", counted: true }],
+  },
+];
+const FLOWS = [
+  {
+    entryStableId: "entry",
+    steps: [
+      { stableId: "s-n5", nodeId: "n5", changeStatus: "changed" },
+      { stableId: "s-n1", nodeId: "n1", changeStatus: "changed" },
+    ],
+  },
+] as unknown as Flow[];
+
+/** Review items of the fixture change: nodes, a plan unit with an attached test, and its flow. */
+export function fixtureReview(): { nodes: Node[]; units: Unit[]; flows: Flow[] } {
+  return { nodes: NODES, units: UNITS, flows: FLOWS };
 }

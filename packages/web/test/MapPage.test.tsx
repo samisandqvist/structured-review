@@ -3,7 +3,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MapPage, levelFromUrl } from "../src/map/MapPage.js";
-import { fixtureMap } from "./map-fixture.js";
+import { navigateToSession } from "../src/navigation.js";
+import { useUIStore } from "../src/store/ui.js";
+import { fixtureChange, fixtureMap, fixtureReview } from "./map-fixture.js";
+
+vi.mock("../src/navigation.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/navigation.js")>()),
+  navigateToSession: vi.fn(),
+}));
 
 function stubMap(status: number, extra: Record<string, unknown> = {}) {
   const body = { model: {}, map: fixtureMap(), headSha: "abc", createdAt: 1, stale: false, ...extra };
@@ -254,5 +261,65 @@ describe("MapPage edge cases", () => {
     const second = renderPage();
     await node(second.container, "api");
     expect(panel().textContent).toContain("Operator API uses Job state writes of Persistence.");
+  });
+});
+
+describe("MapPage in a review", () => {
+  function stubReview() {
+    const { nodes, units, flows } = fixtureReview();
+    const bodies: [string, unknown][] = [
+      ["/map", { model: {}, map: { ...fixtureMap(), change: fixtureChange() }, headSha: "abc", createdAt: 1 }],
+      ["/nodes", { nodes, edges: [] }],
+      ["/flows", { flows, orphans: [] }],
+      ["/sessions/s1", { session: { id: "s1" }, units, coverage: { changedTotal: 5, covered: 5, unassigned: 0 } }],
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => ({
+        ok: true,
+        status: 200,
+        json: async () => bodies.find(([path]) => String(url).includes(path))![1],
+      })),
+    );
+  }
+
+  it("marks changed components, connectors and contracts", async () => {
+    stubReview();
+    const { container } = renderPage();
+    await waitFor(() => expect(container.querySelector('[data-node="core"] text.chg')).toBeTruthy());
+    expect(container.querySelector('[data-node="core"] text.chg')!.textContent).toBe("3 changed · 1 reviewed");
+    expect(container.querySelector('[data-node="api"] text.chg')).toBeNull();
+    expect(
+      container
+        .querySelector('[data-edge="api|writes|require>store|writes|provide"]')!
+        .classList.contains("chg-changed"),
+    ).toBe(true);
+    expect(container.querySelector('[data-port="store|reads|provide"]')!.classList.contains("touched")).toBe(true);
+    expect(container.querySelector('[data-port="store|new:store:src/store/cache.ts:warm|provide"]')).toBeTruthy();
+    expect(panel().textContent).toContain("New surface");
+    expect(panel().textContent).toContain("warm");
+    expect(panel().textContent).toContain("Contract touched");
+    expect(within(panel()).getByRole("button", { name: /n3/ })).toBeTruthy();
+  });
+
+  it("lists a changed part's items and opens one in the review", async () => {
+    stubReview();
+    window.history.replaceState(null, "", "/?session=s1&view=map&level=core");
+    const { container } = renderPage();
+    fireEvent.click(await node(container, "engine"));
+    const items = await within(panel()).findAllByRole("button", { name: /^(n5|n1|t1)/ });
+    expect(items.map((b) => b.textContent!.split(" ")[0])).toEqual(["n5", "n1", "t1"]);
+    fireEvent.click(items[1]!);
+    expect(useUIStore.getState().currentNodeId).toBe("n1");
+    expect(navigateToSession).toHaveBeenCalledWith("s1");
+  });
+
+  it("shows an interface's change", async () => {
+    stubReview();
+    const { container } = renderPage();
+    await node(container, "store");
+    fireEvent.click(container.querySelector('[data-port="store|writes|provide"]')!);
+    expect(panel().textContent).toContain("New call sites");
+    expect(panel().textContent).toContain("purge → saveJob");
   });
 });

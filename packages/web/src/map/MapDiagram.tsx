@@ -6,7 +6,15 @@ import type { ElkExtendedEdge, ElkNode, ElkPort } from "elkjs/lib/elk-api.js";
 import type { Level, LevelPort } from "./levels.js";
 import { visibleChildren } from "./levels.js";
 import { subtitle } from "./layout.js";
-import type { ResolvedMap } from "./types.js";
+import type { ChangeStatus, ResolvedMap } from "./types.js";
+
+/** A review's change on the drawn level (see review.ts). */
+export interface DiagramMarks {
+  edges: Map<string, ChangeStatus>;
+  counts: Map<string, { changed: number; reviewed: number }>;
+  touched: Set<string>;
+  surfaces: Set<string>;
+}
 
 export interface DiagramProps {
   map: ResolvedMap;
@@ -14,6 +22,7 @@ export interface DiagramProps {
   layout: ElkNode;
   hl: Set<string>;
   keep: Set<string>;
+  marks?: DiagramMarks;
   onSelectNode: (id: string) => void;
   onSelectIface: (id: string) => void;
   onOpen: (id: string) => void;
@@ -102,7 +111,12 @@ function Ports({ node, ox, oy, props }: { node: ElkNode; ox: number; oy: number;
         return (
           <g
             key={port.id}
-            className={cls("d-port", props.hl.has(port.id) && "hl")}
+            className={cls(
+              "d-port",
+              props.hl.has(port.id) && "hl",
+              props.marks?.touched.has(meta.iface) && "touched",
+              props.marks?.surfaces.has(meta.iface) && "surface",
+            )}
             data-port={port.id}
             data-iface={meta.iface}
             onClick={(e) => {
@@ -136,12 +150,14 @@ function Leaf({
   const y = oy + node.y!;
   const sub = subtitle(props.map, node.id);
   const parts = visibleChildren(props.map, node.id).length;
+  const count = props.marks?.counts.get(node.id);
   return (
     <g
       className={cls(
         "d-node",
         role,
         component.external && "external",
+        count && "changed",
         props.hl.has(node.id) && "hl",
         props.keep.has(node.id) && "keep",
       )}
@@ -156,6 +172,11 @@ function Leaf({
       }}
     >
       <rect className="body" x={x} y={y} width={node.width} height={node.height} rx={3} />
+      {count && (
+        <text className="chg" x={x + 2} y={y - 6}>
+          {`${count.changed} changed · ${count.reviewed} reviewed`}
+        </text>
+      )}
       <Glyph x={x + node.width! - 22} y={y + 9} />
       <text className="name" x={x + node.width! / 2} y={y + 24} textAnchor="middle">
         {component.name}
@@ -176,6 +197,7 @@ function Edges({ edges, ox, oy, props }: { edges: ElkExtendedEdge[]; ox: number;
     <>
       {edges.map((e) => {
         const meta = props.level.edges.get(e.id)!;
+        const change = props.marks?.edges.get(e.id);
         const paths = e.sections!.map((s) =>
           [
             "M",
@@ -185,7 +207,13 @@ function Edges({ edges, ox, oy, props }: { edges: ElkExtendedEdge[]; ox: number;
         return (
           <g
             key={e.id}
-            className={cls("d-edge", meta.kind, meta.crossProcess && "cross", props.hl.has(e.id) && "hl")}
+            className={cls(
+              "d-edge",
+              meta.kind,
+              meta.crossProcess && "cross",
+              change && `chg-${change}`,
+              props.hl.has(e.id) && "hl",
+            )}
             data-edge={e.id}
             data-iface={meta.iface}
             onClick={(ev) => {
@@ -193,7 +221,7 @@ function Edges({ edges, ox, oy, props }: { edges: ElkExtendedEdge[]; ox: number;
               props.onSelectIface(meta.iface);
             }}
           >
-            <title>{`${names.get(meta.iface)} (${meta.kind}${meta.crossProcess ? ", cross-process" : ""})`}</title>
+            <title>{`${names.get(meta.iface)} (${meta.kind}${meta.crossProcess ? ", cross-process" : ""}${change ? `, ${change} in this change` : ""})`}</title>
             {paths.map((d, i) => (
               <g key={i}>
                 <path className="vis" d={d} />
@@ -246,9 +274,25 @@ export function MapDiagram(props: DiagramProps) {
   );
 }
 
-export function Legend() {
+export function Legend({ review = false }: { review?: boolean }) {
   return (
     <div className="cmap-legend" aria-label="Legend">
+      {review && (
+        <>
+          <span className="chg-new">
+            <svg viewBox="0 0 34 14" aria-hidden>
+              <line x1={0} y1={7} x2={34} y2={7} stroke="currentColor" strokeWidth={2.2} />
+            </svg>
+            new in this change
+          </span>
+          <span className="chg-removed">
+            <svg viewBox="0 0 34 14" aria-hidden>
+              <line x1={0} y1={7} x2={34} y2={7} stroke="currentColor" strokeDasharray="2 4" />
+            </svg>
+            removed
+          </span>
+        </>
+      )}
       <span>
         <svg viewBox="0 0 34 14" aria-hidden>
           <circle cx={27} cy={7} r={5} fill="none" stroke="currentColor" />

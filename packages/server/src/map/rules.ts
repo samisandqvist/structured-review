@@ -88,7 +88,10 @@ export function resolveEvidence(
   return { files, issues };
 }
 
-type DelegationSource = Pick<ResolvedInterface, "id" | "provider" | "requirers" | "bindings" | "sites" | "evidenceFiles">;
+type DelegationSource = Pick<
+  ResolvedInterface,
+  "id" | "provider" | "requirers" | "bindings" | "sites" | "evidenceFiles"
+>;
 
 export function deriveDelegations(interfaces: DelegationSource[], tree: ComponentTree): Delegation[] {
   const seen = new Set<string>();

@@ -1,15 +1,26 @@
 // Detail panel of the component map: the opened level (meaning, coverage,
 // undeclared uses, hidden utilities, unclaimed files, index gaps), a selected
 // component (files, interfaces, type-only dependencies) or a selected
-// interface (bound functions or evidence, call sites by requirer).
-import type { CallSite, ResolvedComponent, ResolvedInterface, ResolvedMap } from "./types.js";
+// interface (bound functions or evidence, call sites by requirer). In a
+// review the panels add the change: what it adds and removes, and the
+// changed items of a part, which open in the review.
+import type { Node } from "../api/client.js";
+import type { CallSite, MapChange, ResolvedComponent, ResolvedInterface, ResolvedMap } from "./types.js";
 import { requirersOf, undeclaredFindings, visibleChildren, type Selection } from "./levels.js";
+
+/** A review's change and its changed items by component ("" for none). */
+export interface PanelReview {
+  change: MapChange;
+  placed: Map<string, Node[]>;
+  onReview: (nodeId: string) => void;
+}
 
 export interface PanelProps {
   map: ResolvedMap;
   level: string | null;
   connections: number;
   selection: Selection;
+  review?: PanelReview;
   onSelect: (selection: Selection) => void;
   onOpen: (level: string | null, selection?: Selection) => void;
 }
@@ -86,7 +97,88 @@ function Findings({ map, onOpen }: Pick<PanelProps, "map" | "onOpen">) {
   );
 }
 
-function LevelPanel({ map, level, connections, onOpen }: PanelProps) {
+function Items({ items, onReview }: { items: Node[]; onReview: PanelReview["onReview"] }) {
+  return (
+    <ul className="items">
+      {items.map((n) => (
+        <li key={n.id}>
+          <button type="button" onClick={() => onReview(n.id)}>
+            <span className="sym">{n.label}</span>{" "}
+            <span className={n.reviewStatus === "unreviewed" ? "state todo" : "state"}>
+              {n.reviewStatus === "unreviewed" ? "to review" : "reviewed"}
+            </span>{" "}
+            <span className="loc">
+              {n.file}:{n.startLine}
+            </span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ChangeLines({ map, review, onOpen }: Pick<PanelProps, "map" | "onOpen"> & { review: PanelReview }) {
+  const name = (id: string) => nameOf(map, id);
+  const iface = (id: string) => map.interfaces.find((i) => i.id === id)!;
+  const go = (id: string) =>
+    onOpen(map.components.find((c) => c.id === iface(id).provider)!.parent, { type: "iface", id });
+  const { change } = review;
+  const verb = { new: "New dependency", removed: "Removed", changed: "Changed" } as const;
+  return (
+    <>
+      {change.crossings.map((c) => (
+        <button
+          type="button"
+          key={`${c.interface}:${c.requirer}`}
+          className={c.status === "removed" ? "change-line removed" : "change-line"}
+          onClick={() => go(c.interface)}
+        >
+          {verb[c.status]}: <b>{name(c.requirer)}</b> → {iface(c.interface).name} of {name(iface(c.interface).provider)}
+          {c.status === "changed" && ` (+${c.added.length} / −${c.removed.length} call sites)`}
+        </button>
+      ))}
+      {change.surfaces.map((s) => (
+        <button type="button" key={s.id} className="change-line" onClick={() => go(s.id)}>
+          New surface: <b>{s.symbol}</b> of {name(s.provider)}, used by {s.requirers.map(name).join(", ")}
+        </button>
+      ))}
+      {change.touched.map((t) => (
+        <button type="button" key={t.interface} className="change-line" onClick={() => go(t.interface)}>
+          Contract touched: <b>{iface(t.interface).name}</b> ({t.reasons.join(", ")}
+          {t.symbols.length > 0 && `: ${t.symbols.join(", ")}`})
+        </button>
+      ))}
+    </>
+  );
+}
+
+function ChangeSummary({
+  map,
+  level,
+  review,
+  onOpen,
+}: Pick<PanelProps, "map" | "level" | "onOpen"> & { review: PanelReview }) {
+  const all = [...review.placed.values()].flat();
+  const here = review.placed.get(level ?? "") ?? [];
+  return (
+    <>
+      <h3>Change</h3>
+      <p className="muted">
+        Against base {review.change.baseSha.slice(0, 7)}: {plural(all.length, "changed item")},{" "}
+        {all.filter((n) => n.reviewStatus !== "unreviewed").length} reviewed.
+      </p>
+      <ChangeLines map={map} review={review} onOpen={onOpen} />
+      {here.length > 0 && (
+        <>
+          <h3>Changed here, outside the parts</h3>
+          <Items items={here} onReview={review.onReview} />
+        </>
+      )}
+    </>
+  );
+}
+
+function LevelPanel({ map, level, connections, review, onOpen }: PanelProps) {
   const component = level === null ? undefined : map.components.find((c) => c.id === level);
   const { report } = map;
   const unclaimed = report.unclaimedFiles.reduce((n, u) => n + u.files.length, 0);
@@ -104,6 +196,7 @@ function LevelPanel({ map, level, connections, onOpen }: PanelProps) {
         {report.coverage.covered}/{report.coverage.references} cross-component references are call sites of an
         interface; {report.coverage.undeclared} undeclared.
       </p>
+      {review && <ChangeSummary map={map} level={level} review={review} onOpen={onOpen} />}
       <Findings map={map} onOpen={onOpen} />
       {report.utilities.length > 0 && <h3>Hidden utilities</h3>}
       {report.utilities.map((u) => (
@@ -137,10 +230,12 @@ function LevelPanel({ map, level, connections, onOpen }: PanelProps) {
 function ComponentPanel({
   map,
   component,
+  review,
   onSelect,
   onOpen,
-}: { map: ResolvedMap; component: ResolvedComponent } & Pick<PanelProps, "onSelect" | "onOpen">) {
+}: { map: ResolvedMap; component: ResolvedComponent } & Pick<PanelProps, "review" | "onSelect" | "onOpen">) {
   const parts = visibleChildren(map, component.id);
+  const items = parts.length === 0 ? (review?.placed.get(component.id) ?? []) : [];
   const name = (id: string) => nameOf(map, id);
   const types = map.report.typeDependencies.filter((t) => t.from === component.id || t.to === component.id);
   return (
@@ -154,6 +249,12 @@ function ComponentPanel({
             Open {component.name} ({plural(parts.length, "part")})
           </button>
         </p>
+      )}
+      {items.length > 0 && (
+        <>
+          <h3>Changed items ({items.length})</h3>
+          <Items items={items} onReview={review!.onReview} />
+        </>
       )}
       {component.paths.length > 0 && (
         <>
@@ -230,11 +331,50 @@ function Realization({ iface }: { iface: ResolvedInterface }) {
   );
 }
 
+function SiteList({ sites }: { sites: CallSite[] }) {
+  return (
+    <ul className="list">
+      {sites.map((s) => (
+        <li key={`${s.file}:${s.line}:${s.symbol}`}>
+          <span className="sym">
+            {s.caller} → {s.symbol}
+          </span>
+          <span className="loc">
+            {s.file}:{s.line}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function InterfaceChange({ iface, change }: { iface: ResolvedInterface; change: MapChange }) {
+  const crossings = change.crossings.filter((c) => c.interface === iface.id);
+  const added = crossings.flatMap((c) => c.added);
+  const removed = crossings.flatMap((c) => c.removed);
+  const touched = change.touched.find((t) => t.interface === iface.id);
+  return (
+    <>
+      {touched && (
+        <p className="reason">
+          Contract touched in this change ({touched.reasons.join(", ")}
+          {touched.symbols.length > 0 && `: ${touched.symbols.join(", ")}`}).
+        </p>
+      )}
+      {added.length > 0 && <h3>New call sites</h3>}
+      {added.length > 0 && <SiteList sites={added} />}
+      {removed.length > 0 && <h3>Removed call sites</h3>}
+      {removed.length > 0 && <SiteList sites={removed} />}
+    </>
+  );
+}
+
 function InterfacePanel({
   map,
   iface,
+  change,
   onSelect,
-}: { map: ResolvedMap; iface: ResolvedInterface } & Pick<PanelProps, "onSelect">) {
+}: { map: ResolvedMap; iface: ResolvedInterface; change?: MapChange } & Pick<PanelProps, "onSelect">) {
   const requirers = requirersOf(iface);
   return (
     <>
@@ -257,6 +397,7 @@ function InterfacePanel({
           {nameOf(map, r.requirer)}: {r.reason}
         </p>
       ))}
+      {change && <InterfaceChange iface={iface} change={change} />}
       <Realization iface={iface} />
       <h3>Call sites</h3>
       <Sites map={map} iface={iface} />
@@ -270,8 +411,23 @@ export function MapPanel(props: PanelProps) {
   const iface = selection?.type === "iface" ? map.interfaces.find((i) => i.id === selection.id) : undefined;
   return (
     <aside className="cmap-panel" aria-live="polite" data-testid="map-panel">
-      {component && <ComponentPanel map={map} component={component} onSelect={props.onSelect} onOpen={props.onOpen} />}
-      {iface && <InterfacePanel map={map} iface={iface} onSelect={props.onSelect} />}
+      {component && (
+        <ComponentPanel
+          map={map}
+          component={component}
+          {...(props.review ? { review: props.review } : {})}
+          onSelect={props.onSelect}
+          onOpen={props.onOpen}
+        />
+      )}
+      {iface && (
+        <InterfacePanel
+          map={map}
+          iface={iface}
+          {...(props.review ? { change: props.review.change } : {})}
+          onSelect={props.onSelect}
+        />
+      )}
       {!component && !iface && <LevelPanel {...props} />}
     </aside>
   );

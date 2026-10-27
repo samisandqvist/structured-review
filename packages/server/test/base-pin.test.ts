@@ -43,8 +43,16 @@ describe("pinned base commit", () => {
       input: "export const a = 'three';\n",
       encoding: "utf8",
     }).trim();
-    const srcTree = execFileSync("git", ["mktree"], { cwd: root, input: `100644 blob ${blob}\ta.ts\n`, encoding: "utf8" }).trim();
-    const top = execFileSync("git", ["mktree"], { cwd: root, input: `040000 tree ${srcTree}\tsrc\n`, encoding: "utf8" }).trim();
+    const srcTree = execFileSync("git", ["mktree"], {
+      cwd: root,
+      input: `100644 blob ${blob}\ta.ts\n`,
+      encoding: "utf8",
+    }).trim();
+    const top = execFileSync("git", ["mktree"], {
+      cwd: root,
+      input: `040000 tree ${srcTree}\tsrc\n`,
+      encoding: "utf8",
+    }).trim();
     git("update-ref", "refs/heads/main", git("commit-tree", top, "-p", baseSha, "-m", "main moves"));
 
     const nodes = (await (await app.request(`/api/sessions/${session.id}/nodes`)).json()) as {
