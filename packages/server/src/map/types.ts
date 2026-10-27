@@ -107,6 +107,8 @@ export interface CrossingChange {
 
 /** A head reference across components to a symbol no interface of its provider binds. */
 export interface NewSurface {
+  /** `new:<provider>:<file>:<symbol>`; the map draws it as an interface with this id. */
+  id: string;
   provider: string;
   requirers: string[];
   symbol: string;
@@ -115,6 +117,7 @@ export interface NewSurface {
   references: number;
   /** Sample locations, `file:line (caller)`. */
   where: string[];
+  sites: CallSite[];
 }
 
 export interface TouchedContract {
@@ -132,6 +135,8 @@ export interface MapChange {
   nodeComponents: Record<string, string | null>;
   crossings: CrossingChange[];
   surfaces: NewSurface[];
+  /** Delegations of new call sites and new surfaces that the base map lacks. */
+  delegations: Delegation[];
   touched: TouchedContract[];
   /** Changed files no leaf claims: owned by no component (null) or by a component with parts. */
   unmapped: { component: string | null; files: string[] }[];

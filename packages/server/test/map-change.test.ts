@@ -93,6 +93,7 @@ describe("compareVersions", () => {
       nodeComponents: {},
       crossings: [],
       surfaces: [],
+      delegations: [],
       touched: [],
       unmapped: [],
     });
@@ -137,6 +138,7 @@ describe("compareVersions", () => {
     expect(change.touched).toEqual([{ interface: "reads", reasons: ["binding-lost"], symbols: ["getJob"] }]);
     expect(change.surfaces).toEqual([
       {
+        id: "new:store:src/store/jobs.ts:fetchJob",
         provider: "store",
         requirers: ["api", "core"],
         symbol: "fetchJob",
@@ -144,6 +146,10 @@ describe("compareVersions", () => {
         line: 1,
         references: 2,
         where: ["src/api/handler.ts:4 (handle)", "src/core/run.ts:3 (run)"],
+        sites: [
+          expect.objectContaining({ file: "src/api/handler.ts", requirer: "api" }),
+          expect.objectContaining({ file: "src/core/run.ts", requirer: "core" }),
+        ],
       },
     ]);
     expect(change.crossings.map((c) => [c.interface, c.requirer, c.status])).toEqual([
@@ -211,6 +217,49 @@ describe("compareVersions", () => {
       { id: "app", items: 0, files: 4 },
       { id: "core", items: 0, files: 2 },
       { id: "store", items: 0, files: 1 },
+    ]);
+  });
+});
+
+describe("compareVersions delegations", () => {
+  const nested = {
+    ...MODEL,
+    components: [
+      ...MODEL.components,
+      { id: "engine", name: "Engine", parent: "core", paths: ["src/core/run.ts"], meaning: "runs" },
+      { id: "clock", name: "Clock", parent: "core", paths: ["src/core/clock.ts"], meaning: "ticks" },
+      { id: "repo", name: "Repo", parent: "store", paths: ["src/store/jobs.ts"], meaning: "rows" },
+      { id: "cache", name: "Cache", parent: "store", paths: ["src/store/cache.ts"], meaning: "memo" },
+    ],
+  };
+  const defs: Def[] = [...DEFS, ["src/core/clock.ts", "tock", 1], ["src/store/cache.ts", "warm", 1]];
+  const base = checkMap(nested, index(BASE_REFS, defs), () => true);
+
+  it("derives where new crossings and new surfaces enter and leave nested parts", () => {
+    const head = index(
+      [
+        ...BASE_REFS,
+        ["src/core/clock.ts", "src/store/jobs.ts:getJob", "tock", 2],
+        ["src/core/clock.ts", "src/store/jobs.ts:saveJob", "tock", 3],
+        ["src/api/handler.ts", "src/store/cache.ts:warm", "handle", 7],
+      ],
+      defs,
+    );
+    expect(base.map.report.ok).toBe(true);
+    const change = compareVersions(
+      { model: base.model, base: base.map, head, nodes: [], files: [], changedLines: () => [] },
+      "abc123",
+    );
+    expect(change.surfaces).toEqual([
+      expect.objectContaining({
+        id: "new:store:src/store/cache.ts:warm",
+        sites: [expect.objectContaining({ file: "src/api/handler.ts", line: 7, requirer: "api", component: "api" })],
+      }),
+    ]);
+    expect(change.delegations).toEqual([
+      { interface: "reads", side: "required", outer: "core", inner: "clock" },
+      { interface: "writes", side: "required", outer: "core", inner: "clock" },
+      { interface: "new:store:src/store/cache.ts:warm", side: "provided", outer: "store", inner: "cache" },
     ]);
   });
 });

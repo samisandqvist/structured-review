@@ -16,6 +16,7 @@ interface Uncovered {
   from: Set<string>;
   where: string[];
   count: number;
+  sites: CallSite[];
 }
 
 export interface ReferenceResolution {
@@ -98,8 +99,6 @@ class Resolver {
 
   private site(requirer: string, provider: string, component: string, ref: SymbolRef, def: SymbolDef): void {
     const iface = this.bound.bySymbol.get(provider)?.get(def.symbol);
-    if (!iface) return this.uncoveredRef(provider, requirer, ref, def);
-    const undeclared = !this.declared.get(iface)!.has(requirer);
     const site = {
       file: ref.file,
       line: ref.line,
@@ -107,19 +106,28 @@ class Resolver {
       symbol: def.name,
       component,
       requirer,
-      undeclared,
+      undeclared: iface ? !this.declared.get(iface)!.has(requirer) : false,
     };
+    if (!iface) return this.uncoveredRef(provider, site, ref, def);
     const list = this.out.sites.get(iface) ?? [];
     list.push(site);
     this.out.sites.set(iface, list);
   }
 
-  private uncoveredRef(provider: string, requirer: string, ref: SymbolRef, def: SymbolDef): void {
+  private uncoveredRef(provider: string, site: CallSite, ref: SymbolRef, def: SymbolDef): void {
     const key = `${provider}\0${def.symbol}`;
-    const entry = this.uncoveredByKey.get(key) ?? { provider, def, from: new Set<string>(), where: [], count: 0 };
-    entry.from.add(requirer);
+    const entry = this.uncoveredByKey.get(key) ?? {
+      provider,
+      def,
+      from: new Set<string>(),
+      where: [],
+      count: 0,
+      sites: [],
+    };
+    entry.from.add(site.requirer);
     entry.count++;
     entry.where.push(at(ref));
+    entry.sites.push(site);
     this.uncoveredByKey.set(key, entry);
   }
 

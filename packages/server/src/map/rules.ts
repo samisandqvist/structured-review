@@ -88,7 +88,9 @@ export function resolveEvidence(
   return { files, issues };
 }
 
-export function deriveDelegations(interfaces: ResolvedInterface[], tree: ComponentTree): Delegation[] {
+type DelegationSource = Pick<ResolvedInterface, "id" | "provider" | "requirers" | "bindings" | "sites" | "evidenceFiles">;
+
+export function deriveDelegations(interfaces: DelegationSource[], tree: ComponentTree): Delegation[] {
   const seen = new Set<string>();
   const out: Delegation[] = [];
   const add = (iface: string, side: Delegation["side"], from: string, to: string) => {

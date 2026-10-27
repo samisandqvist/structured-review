@@ -7,7 +7,18 @@ import type { ReferenceIndex } from "../graph/references.js";
 import { resolveBindings, type ResolvedBindings } from "./bindings.js";
 import { ComponentTree } from "./ownership.js";
 import { resolveReferences } from "./resolve.js";
-import type { CallSite, CrossingChange, MapChange, MapModel, NewSurface, ResolvedMap, TouchedContract } from "./types.js";
+import { deriveDelegations } from "./rules.js";
+import type {
+  CallSite,
+  CrossingChange,
+  Delegation,
+  MapChange,
+  MapModel,
+  NewSurface,
+  ResolvedInterface,
+  ResolvedMap,
+  TouchedContract,
+} from "./types.js";
 
 const MAX_SAMPLES = 5;
 
@@ -38,6 +49,7 @@ export function compareVersions(input: ChangeInput, baseSha: string): MapChange 
   const refs = resolveReferences(input.head, tree, bound, declared);
   const headSites = input.model.interfaces.map((i) => ({ id: i.id, sites: refs.sites.get(i.id) ?? [] }));
   const surfaces: NewSurface[] = refs.uncovered.map((u) => ({
+    id: `new:${u.provider}:${u.def.file}:${u.def.name}`,
     provider: u.provider,
     requirers: [...u.from].sort(),
     symbol: u.def.name,
@@ -45,15 +57,46 @@ export function compareVersions(input: ChangeInput, baseSha: string): MapChange 
     line: u.def.line,
     references: u.count,
     where: u.where.slice(0, MAX_SAMPLES),
+    sites: u.sites,
   }));
   const changed = input.nodes.filter((n) => n.changed);
+  const crossed = crossings(input.base.interfaces, headSites);
   return {
     baseSha,
     ...placement(tree, changed, input.files),
-    crossings: crossings(input.base.interfaces, headSites),
+    crossings: crossed,
     surfaces,
+    delegations: newDelegations(tree, input.base, crossed, surfaces),
     touched: touched(input, bound, changed),
   };
+}
+
+/** Delegations of the head's added call sites and new surfaces, minus those the base map has. */
+function newDelegations(
+  tree: ComponentTree,
+  base: ResolvedMap,
+  crossed: CrossingChange[],
+  surfaces: NewSurface[],
+): Delegation[] {
+  const shape = (id: string, provider: string, sites: CallSite[], bindings: ResolvedInterface["bindings"]) => ({
+    id,
+    provider,
+    requirers: [],
+    sites,
+    bindings,
+    evidenceFiles: [],
+  });
+  const synthetic = [
+    ...crossed.map((c) => shape(c.interface, "", c.added, [])),
+    ...surfaces.map((s) =>
+      shape(s.id, s.provider, s.sites, [
+        { symbol: s.id, name: s.symbol, file: s.file, line: s.line, component: tree.ownerOf(s.file)! },
+      ]),
+    ),
+  ];
+  const key = (d: Delegation) => `${d.interface}\0${d.side}\0${d.outer}\0${d.inner}`;
+  const known = new Set(base.delegations.map(key));
+  return deriveDelegations(synthetic, tree).filter((d) => !known.has(key(d)));
 }
 
 const crossingKey = (iface: string, requirer: string) => `${iface}\0${requirer}`;
