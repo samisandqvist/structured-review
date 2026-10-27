@@ -227,7 +227,7 @@ describe("comments repo", () => {
 describe("structuralContextFor", () => {
   it("structuralContextFor lists callers, callees, and tests", () => {
     const db = createMemoryDatabase();
-    const session = createSession(db, "HEAD", "main", "sha", "fp");
+    const session = createSession(db, "HEAD", "main", { headSha: "sha", repoFingerprint: "fp" });
     const base = {
       sessionId: session.id,
       startLine: 1,
@@ -267,7 +267,7 @@ describe("units repo (kind-tagged)", () => {
 describe("bulkUpdateNodeReviewStatus", () => {
   it("updates all nodes in one call, normalizing commented nodes", () => {
     const db = createMemoryDatabase();
-    const session = createSession(db, "HEAD", "main", "sha", "fp");
+    const session = createSession(db, "HEAD", "main", { headSha: "sha", repoFingerprint: "fp" });
     const base = {
       sessionId: session.id,
       startLine: 1,
@@ -286,7 +286,7 @@ describe("bulkUpdateNodeReviewStatus", () => {
 
   it("is atomic: one unknown id writes nothing", () => {
     const db = createMemoryDatabase();
-    const session = createSession(db, "HEAD", "main", "sha", "fp");
+    const session = createSession(db, "HEAD", "main", { headSha: "sha", repoFingerprint: "fp" });
     const base = {
       sessionId: session.id,
       startLine: 1,
@@ -305,8 +305,8 @@ describe("bulkUpdateNodeReviewStatus", () => {
 
   it("rejects a node from another session", () => {
     const db = createMemoryDatabase();
-    const s1 = createSession(db, "HEAD", "main", "sha", "fp");
-    const s2 = createSession(db, "HEAD", "main", "sha", "fp");
+    const s1 = createSession(db, "HEAD", "main", { headSha: "sha", repoFingerprint: "fp" });
+    const s2 = createSession(db, "HEAD", "main", { headSha: "sha", repoFingerprint: "fp" });
     const base = {
       startLine: 1,
       endLine: 5,

@@ -97,7 +97,8 @@ export function createSessionsRoute(ctx: AppContext) {
     // empty-but-complete-looking session (see diff.ts changedFilesStrict).
     const headSha = gitHeadSha(ctx.repoRoot);
     if (!headSha) return c.json({ error: "not a git repository (or git unavailable)", phase: "resolve-ref" }, 400);
-    if (!resolveRef(body.baseRef, ctx.repoRoot)) {
+    const baseSha = resolveRef(body.baseRef, ctx.repoRoot);
+    if (!baseSha) {
       return c.json({ error: `cannot resolve base ref '${body.baseRef}'`, phase: "resolve-ref" }, 400);
     }
 
@@ -125,8 +126,8 @@ export function createSessionsRoute(ctx: AppContext) {
     let residuals: ReturnType<typeof computeResiduals>;
     let indexWarnings: string[] = [];
     try {
-      subgraph = await ctx.graphProvider.getChangeSubgraph(body.branch, body.baseRef);
-      ({ nodes: keptNodes, status } = reconcileSubgraph(subgraph, body.baseRef, ctx.repoRoot!));
+      subgraph = await ctx.graphProvider.getChangeSubgraph(body.branch, baseSha);
+      ({ nodes: keptNodes, status } = reconcileSubgraph(subgraph, baseSha, ctx.repoRoot!));
 
       // Residual coverage: changed lines outside every node span become one
       // pseudo-node per file, so types/imports/configs still enter the universe.
@@ -136,7 +137,7 @@ export function createSessionsRoute(ctx: AppContext) {
         spans.push({ start: n.startLine, end: n.endLine });
         spansByFile.set(n.file, spans);
       }
-      residuals = computeResiduals(body.baseRef, spansByFile, ctx.repoRoot!);
+      residuals = computeResiduals(baseSha, spansByFile, ctx.repoRoot!);
       indexWarnings = (await ctx.graphProvider.getIndexWarnings?.()) ?? [];
     } catch (e) {
       if (e instanceof GitError) return c.json({ error: e.message, phase: e.phase }, 400);
@@ -145,14 +146,12 @@ export function createSessionsRoute(ctx: AppContext) {
     }
 
     const session = ctx.db.transaction(() => {
-      const session = createSession(
-        ctx.db,
-        body.branch,
-        body.baseRef,
+      const session = createSession(ctx.db, body.branch, body.baseRef, {
+        baseSha,
         headSha,
-        repoFingerprint(ctx.repoRoot) ?? "",
+        repoFingerprint: repoFingerprint(ctx.repoRoot) ?? "",
         indexWarnings,
-      );
+      });
       for (const gnode of keptNodes) {
         createNode(ctx.db, {
           sessionId: session.id,

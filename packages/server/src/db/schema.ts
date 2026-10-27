@@ -58,7 +58,7 @@ CREATE INDEX IF NOT EXISTS idx_comments_session ON comments(session_id);
 CREATE INDEX IF NOT EXISTS idx_comments_node ON comments(node_id);
 `;
 
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 12;
 /**
  * SQL applied when upgrading TO each version. Version 1 = baseline tables.
  * `repo_fingerprint` is deliberately NOT in the baseline SCHEMA_SQL: v2 adds it
@@ -112,4 +112,7 @@ CREATE TABLE IF NOT EXISTS component_maps (
   created_at INTEGER NOT NULL
 );
 `,
+  // v12: the base commit a session's diffs use, resolved once at creation so
+  // a base ref that moves later does not change the review.
+  12: `ALTER TABLE review_sessions ADD COLUMN base_sha TEXT NOT NULL DEFAULT '';`,
 };

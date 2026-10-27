@@ -2,26 +2,45 @@ import type { DB } from "../db/connection.js";
 import type { ReviewSession, SessionStatus } from "../types.js";
 import { randomId } from "../util.js";
 
-export function createSession(
-  db: DB,
-  branch: string,
-  baseRef: string,
-  headSha = "",
-  repoFingerprint = "",
-  indexWarnings: string[] = [],
-): ReviewSession {
+interface SessionSnapshot {
+  baseSha?: string;
+  headSha?: string;
+  repoFingerprint?: string;
+  indexWarnings?: string[];
+}
+
+export function createSession(db: DB, branch: string, baseRef: string, snapshot: SessionSnapshot = {}): ReviewSession {
+  const { baseSha = "", headSha = "", repoFingerprint = "", indexWarnings = [] } = snapshot;
   const id = randomId("ses");
   const createdAt = Date.now();
   db.prepare(
-    "INSERT INTO review_sessions (id, branch, base_ref, status, created_at, head_sha, repo_fingerprint, index_warnings) VALUES (?, ?, ?, 'planning', ?, ?, ?, ?)",
-  ).run(id, branch, baseRef, createdAt, headSha, repoFingerprint, JSON.stringify(indexWarnings));
-  return { id, branch, baseRef, status: "planning", createdAt, headSha, repoFingerprint, indexWarnings, overview: "" };
+    "INSERT INTO review_sessions (id, branch, base_ref, base_sha, status, created_at, head_sha, repo_fingerprint, index_warnings) VALUES (?, ?, ?, ?, 'planning', ?, ?, ?, ?)",
+  ).run(id, branch, baseRef, baseSha, createdAt, headSha, repoFingerprint, JSON.stringify(indexWarnings));
+  return {
+    id,
+    branch,
+    baseRef,
+    baseSha,
+    status: "planning",
+    createdAt,
+    headSha,
+    repoFingerprint,
+    indexWarnings,
+    overview: "",
+  };
+}
+
+/** What the session's diffs compare against: the commit pinned at creation,
+ *  or the base ref for sessions created before commits were pinned. */
+export function diffBase(session: ReviewSession): string {
+  return session.baseSha || session.baseRef;
 }
 
 interface SessionRow {
   id: string;
   branch: string;
   base_ref: string;
+  base_sha: string;
   status: SessionStatus;
   created_at: number;
   head_sha: string;
@@ -35,6 +54,7 @@ function rowToSession(row: SessionRow): ReviewSession {
     id: row.id,
     branch: row.branch,
     baseRef: row.base_ref,
+    baseSha: row.base_sha,
     status: row.status,
     createdAt: row.created_at,
     headSha: row.head_sha,

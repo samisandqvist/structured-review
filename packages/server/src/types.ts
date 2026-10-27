@@ -18,6 +18,9 @@ export interface ReviewSession {
   id: string;
   branch: string;
   baseRef: string;
+  /** The commit (or tree, for whole-repository sessions) `baseRef` resolved
+   *  to at creation; empty for sessions created before it was recorded. */
+  baseSha: string;
   status: SessionStatus;
   createdAt: number;
   headSha: string;

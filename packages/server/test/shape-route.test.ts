@@ -103,9 +103,8 @@ describe("GET /api/sessions/:id/shape", () => {
 
   it("reports a git failure when the base no longer resolves", async () => {
     git("checkout", "-q", "-b", "feature");
-    git("tag", "gone");
-    const id = await sessionId("gone");
-    git("tag", "-d", "gone");
+    const id = await sessionId("main");
+    db.prepare("UPDATE review_sessions SET base_sha = ? WHERE id = ?").run("0".repeat(40), id);
     const res = await app.request(`/api/sessions/${id}/shape`);
     expect(res.status).toBe(500);
     expect((await res.json()).phase).toBe("list-files");

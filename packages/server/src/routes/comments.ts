@@ -9,7 +9,7 @@ import {
   getCommentsBySession,
   exportComments,
 } from "../repo/comments.js";
-import { getSession } from "../repo/sessions.js";
+import { getSession, diffBase } from "../repo/sessions.js";
 import { getNode, updateNodeReviewStatus } from "../repo/nodes.js";
 import { getNodeDiff, getNodeDiffForRanges, formatHunkSnippet, anchorRowRange } from "../diff.js";
 import type { CommentAnchor } from "../types.js";
@@ -41,9 +41,9 @@ export function createCommentsRoute(ctx: AppContext) {
     // the anchor must validate against exactly what the reviewer sees.
     const diff =
       (node.residualRanges && node.residualRanges.length > 0
-        ? getNodeDiffForRanges(session.baseRef, node.file, node.residualRanges, ctx.repoRoot)
+        ? getNodeDiffForRanges(diffBase(session), node.file, node.residualRanges, ctx.repoRoot)
         : null) ??
-      getNodeDiff(session.baseRef, node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot);
+      getNodeDiff(diffBase(session), node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot);
 
     let snippetLines = diff.lines;
     let anchor: CommentAnchor | null = null;

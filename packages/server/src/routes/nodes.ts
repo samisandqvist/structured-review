@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { AppContext } from "../context.js";
 import { getNodesBySession, getNode, getNodeNeighbors, updateNodeReviewStatus } from "../repo/nodes.js";
-import { getSession } from "../repo/sessions.js";
+import { getSession, diffBase } from "../repo/sessions.js";
 import { nodeHasComments } from "../repo/comments.js";
 import { bulkUpdateNodeReviewStatus, BulkNodeError } from "../repo/bulk.js";
 import { getNodeDiff, getNodeDiffForRanges, expandedContextSlice } from "../diff.js";
@@ -34,9 +34,9 @@ export function createNodesRoute(ctx: AppContext) {
     const session = getSession(ctx.db, sessionId);
     const diff = session
       ? node.residualRanges && node.residualRanges.length > 0
-        ? (getNodeDiffForRanges(session.baseRef, node.file, node.residualRanges, ctx.repoRoot) ??
-          getNodeDiff(session.baseRef, node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot))
-        : getNodeDiff(session.baseRef, node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot)
+        ? (getNodeDiffForRanges(diffBase(session), node.file, node.residualRanges, ctx.repoRoot) ??
+          getNodeDiff(diffBase(session), node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot))
+        : getNodeDiff(diffBase(session), node.file, node.startLine, node.endLine, node.changeStatus, ctx.repoRoot)
       : { oldText: "", newText: "", lines: [], totalLines: 0 };
     return c.json({ node, callers, callees, diff });
   });
@@ -55,7 +55,7 @@ export function createNodesRoute(ctx: AppContext) {
       return c.json({ error: "start/end must be positive integers with start <= end" }, 400);
     }
     if (end - start > 5000) return c.json({ error: "range too large (max 5000 lines)" }, 400);
-    return c.json({ lines: expandedContextSlice(session.baseRef, node.file, start, end, ctx.repoRoot) });
+    return c.json({ lines: expandedContextSlice(diffBase(session), node.file, start, end, ctx.repoRoot) });
   });
 
   router.patch("/:id/nodes", async (c) => {

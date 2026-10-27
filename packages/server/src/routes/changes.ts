@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppContext } from "../context.js";
-import { getSession } from "../repo/sessions.js";
+import { getSession, diffBase } from "../repo/sessions.js";
 import { getNodesBySession } from "../repo/nodes.js";
 import { commitSubjects, fileUnifiedDiff, nodeChangeStats, nodeSignature } from "../diff.js";
 
@@ -17,7 +17,7 @@ export function createChangesRoute(ctx: AppContext) {
     const changed = getNodesBySession(ctx.db, sessionId).filter((n) => n.changeStatus === "changed");
     const rawByFile = new Map<string, string | null>();
     const rawFor = (file: string) => {
-      if (!rawByFile.has(file)) rawByFile.set(file, fileUnifiedDiff(session.baseRef, file, ctx.repoRoot));
+      if (!rawByFile.has(file)) rawByFile.set(file, fileUnifiedDiff(diffBase(session), file, ctx.repoRoot));
       return rawByFile.get(file) ?? null;
     };
 
@@ -51,7 +51,7 @@ export function createChangesRoute(ctx: AppContext) {
     });
     // Subjects of the session's commit range ride along as intent input for
     // plan authoring — the planner should not need its own git log.
-    return c.json({ changes, commitSubjects: commitSubjects(session.baseRef, ctx.repoRoot) });
+    return c.json({ changes, commitSubjects: commitSubjects(diffBase(session), ctx.repoRoot) });
   });
 
   return router;

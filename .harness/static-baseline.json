@@ -26,7 +26,6 @@
     "packages/server/src/graph/stub.ts|@typescript-eslint/no-unused-vars|'_changedStableIds' is defined but never used.|async getFlows(_changedStableIds?: Set<string>) {": 1,
     "packages/server/src/graph/stub.ts|@typescript-eslint/require-await|Async method 'getNeighbors' has no 'await' expression.|async getNeighbors(stableId: string): Promise<{ callers: GraphNode[]; callees: GraphNode[] }> {": 1,
     "packages/server/src/repo/comments.ts|max-params|Function 'createComment' has too many parameters (7). Maximum allowed is 5.|export function createComment(": 1,
-    "packages/server/src/repo/sessions.ts|max-params|Function 'createSession' has too many parameters (6). Maximum allowed is 5.|export function createSession(": 1,
     "packages/server/src/repo/units.ts|@typescript-eslint/no-unsafe-assignment|Unsafe assignment of an `any` value.|memberStableIds: JSON.parse(row.member_stable_ids),": 1,
     "packages/server/src/repo/units.ts|@typescript-eslint/no-unsafe-assignment|Unsafe assignment of an `any` value.|attached: JSON.parse(row.attached ?? \"[]\"),": 1,
     "packages/server/src/repo/units.ts|max-params|Function 'createUnit' has too many parameters (9). Maximum allowed is 5.|export function createUnit(": 1,
