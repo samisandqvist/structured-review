@@ -117,37 +117,99 @@ function Items({ items, onReview }: { items: Node[]; onReview: PanelReview["onRe
   );
 }
 
-function ChangeLines({ map, review, onOpen }: Pick<PanelProps, "map" | "onOpen"> & { review: PanelReview }) {
+/** The level a change line belongs to: where its interface's provider is a part. */
+function changeLevels(map: ResolvedMap, level: string | null) {
+  const parentOf = (id: string) => map.components.find((c) => c.id === id)!.parent;
+  const providerOf = (iface: string) => map.interfaces.find((i) => i.id === iface)!.provider;
+  const inside = (id: string) => {
+    for (let at = parentOf(id); at !== null; at = parentOf(at)) if (at === level) return true;
+    return level === null;
+  };
+  return {
+    own: (iface: string) => parentOf(providerOf(iface)) === level,
+    below: (iface: string) => parentOf(providerOf(iface)) !== level && inside(providerOf(iface)),
+    ownPart: (id: string) => parentOf(id) === level,
+  };
+}
+
+function PartLines({
+  map,
+  level,
+  review,
+  onSelect,
+}: Pick<PanelProps, "map" | "level" | "onSelect"> & { review: PanelReview }) {
+  const { ownPart } = changeLevels(map, level);
+  const lines = [
+    ...review.change.addedComponents.map((id) => ({ id, label: "New part", removed: false })),
+    ...review.change.removedComponents.map((id) => ({ id, label: "Removed part", removed: true })),
+  ].filter((l) => ownPart(l.id));
+  return (
+    <>
+      {lines.map((l) => (
+        <button
+          type="button"
+          key={l.id}
+          className={l.removed ? "change-line removed" : "change-line"}
+          onClick={() => onSelect({ type: "node", id: l.id })}
+        >
+          {l.label}: <b>{nameOf(map, l.id)}</b>
+        </button>
+      ))}
+    </>
+  );
+}
+
+function ChangeLines({
+  map,
+  level,
+  review,
+  onOpen,
+}: Pick<PanelProps, "map" | "level" | "onOpen"> & { review: PanelReview }) {
   const name = (id: string) => nameOf(map, id);
   const iface = (id: string) => map.interfaces.find((i) => i.id === id)!;
   const go = (id: string) =>
     onOpen(map.components.find((c) => c.id === iface(id).provider)!.parent, { type: "iface", id });
+  const { own, below } = changeLevels(map, level);
   const { change } = review;
   const verb = { new: "New dependency", removed: "Removed", changed: "Changed" } as const;
+  const ifaces = [
+    ...change.crossings.map((c) => c.interface),
+    ...change.surfaces.map((s) => s.id),
+    ...change.touched.map((t) => t.interface),
+  ];
+  const more = ifaces.filter(below).length;
   return (
     <>
-      {change.crossings.map((c) => (
-        <button
-          type="button"
-          key={`${c.interface}:${c.requirer}`}
-          className={c.status === "removed" ? "change-line removed" : "change-line"}
-          onClick={() => go(c.interface)}
-        >
-          {verb[c.status]}: <b>{name(c.requirer)}</b> → {iface(c.interface).name} of {name(iface(c.interface).provider)}
-          {c.status === "changed" && ` (+${c.added.length} / −${c.removed.length} call sites)`}
-        </button>
-      ))}
-      {change.surfaces.map((s) => (
-        <button type="button" key={s.id} className="change-line" onClick={() => go(s.id)}>
-          New surface: <b>{s.symbol}</b> of {name(s.provider)}, used by {s.requirers.map(name).join(", ")}
-        </button>
-      ))}
-      {change.touched.map((t) => (
-        <button type="button" key={t.interface} className="change-line" onClick={() => go(t.interface)}>
-          Contract touched: <b>{iface(t.interface).name}</b> ({t.reasons.join(", ")}
-          {t.symbols.length > 0 && `: ${t.symbols.join(", ")}`})
-        </button>
-      ))}
+      {change.crossings
+        .filter((c) => own(c.interface))
+        .map((c) => (
+          <button
+            type="button"
+            key={`${c.interface}:${c.requirer}`}
+            className={c.status === "removed" ? "change-line removed" : "change-line"}
+            onClick={() => go(c.interface)}
+          >
+            {verb[c.status]}: <b>{name(c.requirer)}</b> → {iface(c.interface).name} of{" "}
+            {name(iface(c.interface).provider)}
+            {c.status === "changed" && ` (+${c.added.length} / −${c.removed.length} call sites)`}
+          </button>
+        ))}
+      {change.surfaces
+        .filter((s) => own(s.id))
+        .map((s) => (
+          <button type="button" key={s.id} className="change-line" onClick={() => go(s.id)}>
+            New surface: <b>{s.symbol}</b> of {name(s.provider)}, used by {s.requirers.map(name).join(", ")}
+          </button>
+        ))}
+      {change.touched
+        .filter((t) => own(t.interface))
+        .map((t) => (
+          <button type="button" key={t.interface} className="change-line" onClick={() => go(t.interface)}>
+            Contract touched: <b>{iface(t.interface).name}</b> ({t.reasons.join(", ")}
+            {t.symbols.length > 0 && `: ${t.symbols.join(", ")}`})
+          </button>
+        ))}
+      {more > 0 && <p className="muted">{plural(more, "more change")} inside the parts.</p>}
     </>
   );
 }
@@ -156,10 +218,15 @@ function ChangeSummary({
   map,
   level,
   review,
+  onSelect,
   onOpen,
-}: Pick<PanelProps, "map" | "level" | "onOpen"> & { review: PanelReview }) {
+}: Pick<PanelProps, "map" | "level" | "onSelect" | "onOpen"> & { review: PanelReview }) {
   const all = [...review.placed.values()].flat();
   const here = review.placed.get(level ?? "") ?? [];
+  const itemFiles = new Set(here.map((n) => n.file));
+  const files = (review.change.unmapped.find((u) => u.component === level)?.files ?? []).filter(
+    (f) => !itemFiles.has(f),
+  );
   return (
     <>
       <h3>Change</h3>
@@ -167,18 +234,31 @@ function ChangeSummary({
         Against base {review.change.baseSha.slice(0, 7)}: {plural(all.length, "changed item")},{" "}
         {all.filter((n) => n.reviewStatus !== "unreviewed").length} reviewed.
       </p>
-      <ChangeLines map={map} review={review} onOpen={onOpen} />
+      <PartLines map={map} level={level} review={review} onSelect={onSelect} />
+      <ChangeLines map={map} level={level} review={review} onOpen={onOpen} />
       {here.length > 0 && (
         <>
           <h3>Changed here, outside the parts</h3>
           <Items items={here} onReview={review.onReview} />
         </>
       )}
+      {files.length > 0 && (
+        <>
+          <h3>Changed files no part claims</h3>
+          <ul className="list">
+            {files.map((f) => (
+              <li key={f}>
+                <span className="sym">{f}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </>
   );
 }
 
-function LevelPanel({ map, level, connections, review, onOpen }: PanelProps) {
+function LevelPanel({ map, level, connections, review, onSelect, onOpen }: PanelProps) {
   const component = level === null ? undefined : map.components.find((c) => c.id === level);
   const { report } = map;
   const unclaimed = report.unclaimedFiles.reduce((n, u) => n + u.files.length, 0);
@@ -196,7 +276,7 @@ function LevelPanel({ map, level, connections, review, onOpen }: PanelProps) {
         {report.coverage.covered}/{report.coverage.references} cross-component references are call sites of an
         interface; {report.coverage.undeclared} undeclared.
       </p>
-      {review && <ChangeSummary map={map} level={level} review={review} onOpen={onOpen} />}
+      {review && <ChangeSummary map={map} level={level} review={review} onSelect={onSelect} onOpen={onOpen} />}
       <Findings map={map} onOpen={onOpen} />
       {report.utilities.length > 0 && <h3>Hidden utilities</h3>}
       {report.utilities.map((u) => (

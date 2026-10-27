@@ -297,6 +297,15 @@ describe("component map routes in a review session", () => {
     expect(baseRoots).toEqual([join(baseDir, id)]);
   });
 
+  it("lists the files the change adds, for components the base lacks", async () => {
+    write("src/sched/plan.ts", "export function plan() {}\n");
+    git("add", ".");
+    git("commit", "-qm", "scheduler");
+    const id = await session();
+    const body = (await (await app.request(`/api/sessions/${id}/map/evidence`)).json()) as { addedFiles: string[] };
+    expect(body.addedFiles).toEqual(["src/sched/plan.ts"]);
+  });
+
   it("resolves the base ref of a session without a pinned commit in the reviewed repository", async () => {
     const id = await session();
     db.prepare("UPDATE review_sessions SET base_sha = '' WHERE id = ?").run(id);
@@ -330,6 +339,23 @@ describe("review session map lifecycle", () => {
     expect(existsSync(join(baseDir, id))).toBe(true);
     await app.request(`/api/sessions/${id}`, { method: "DELETE" });
     expect(existsSync(join(baseDir, id))).toBe(false);
+  });
+
+  it("removes base checkouts of deleted sessions when the hub starts", async () => {
+    const id = await session();
+    const kept = await session();
+    await app.request(`/api/sessions/${id}/map/evidence`);
+    await app.request(`/api/sessions/${kept}/map/evidence`);
+    db.prepare("DELETE FROM review_sessions WHERE id = ?").run(id);
+    createApp({
+      db,
+      graphProvider: new RootedProvider(HEAD_INDEX),
+      repoRoot: root,
+      baseDir,
+      providerFor: () => new RootedProvider(BASE_INDEX),
+    });
+    expect(existsSync(join(baseDir, id))).toBe(false);
+    expect(existsSync(join(baseDir, kept))).toBe(true);
   });
 
   it("maps the working tree of a whole-repository session", async () => {

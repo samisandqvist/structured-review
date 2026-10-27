@@ -128,6 +128,8 @@ interface TouchedContract {
 export interface MapChange {
   baseSha: string;
   components: { id: string; items: number; files: number }[];
+  addedComponents: string[];
+  removedComponents: string[];
   nodeComponents: Record<string, string | null>;
   crossings: CrossingChange[];
   surfaces: NewSurface[];

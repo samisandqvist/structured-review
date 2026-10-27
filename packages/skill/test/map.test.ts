@@ -234,6 +234,8 @@ const CHANGE: MapChangeSummary = {
     { id: "app", items: 3, files: 2 },
     { id: "core", items: 2, files: 1 },
   ],
+  addedComponents: ["sched"],
+  removedComponents: ["legacy"],
   crossings: [
     { interface: "writes", requirer: "api", status: "new", added: [{}], removed: [] },
     { interface: "help", requirer: "engine", status: "removed", added: [], removed: [{}, {}] },
@@ -252,6 +254,8 @@ describe("change output", () => {
     expect(prettyChange(CHANGE).split("\n")).toEqual([
       "change against base 0123456",
       "  changed components: app (3 items, 2 files), core (2 items, 1 file)",
+      "  added components: sched",
+      "  removed components: legacy",
       "  new dependency: api -> writes (1 call site)",
       "  removed dependency: engine -> help (2 call sites)",
       "  changed dependency: core -> reads (+1 / -1 call sites)",
@@ -260,6 +264,15 @@ describe("change output", () => {
       "  not placed under app: src/main.ts",
       "  not placed in any component: scripts/x.ts",
     ]);
+  });
+
+  it("lists the directories of the files a review adds", () => {
+    const text = prettyEvidence({
+      ...EVIDENCE,
+      baseSha: "0123456789abcdef",
+      addedFiles: ["src/sched/a.ts", "src/sched/b.ts", "README.md"],
+    });
+    expect(text).toContain("added by the change:\n  . (1 file)\n  src/sched/ (2 files)");
   });
 
   it("marks evidence read from a review's base", () => {

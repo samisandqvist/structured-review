@@ -71,7 +71,8 @@ export function createMapRoute(ctx: AppContext) {
         },
         { full, ...(within ? { within } : {}) },
       );
-      return c.json(source.baseSha ? { ...evidence, baseSha: source.baseSha } : evidence);
+      if (!source.baseSha) return c.json(evidence);
+      return c.json({ ...evidence, baseSha: source.baseSha, addedFiles: addedFiles(source.baseSha, root) });
     }),
   );
 
@@ -155,6 +156,14 @@ async function withChange(
   const files = changedFileStatuses(sha, root) ?? [];
   const head = await headIndex(ctx);
   return { ...checked.base, change: compareVersions({ ...checked, head, nodes, files, changedLines }, sha) };
+}
+
+/** Files the head has under a path the base lacks: candidates for components the change adds. */
+function addedFiles(sha: string, root: string): string[] {
+  return (changedFileStatuses(sha, root) ?? [])
+    .filter((f) => f.status === "added" || f.status === "renamed")
+    .map((f) => f.path)
+    .sort();
 }
 
 async function jsonBody(c: Context): Promise<unknown> {

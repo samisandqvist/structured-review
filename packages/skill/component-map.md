@@ -82,10 +82,21 @@ In a review session (a session with a base commit), the map describes the
 code before the change, and the hub marks the change on top of it. Evidence
 and the check run on the base (the evidence says `base <sha>`); the first call
 checks out and indexes the base, which takes about as long as indexing the
-working tree. Model the base exactly as you would any codebase: the change
-never enters the model, so do not add requirers, interfaces or components for
-calls the change introduces. On submit the hub compares the head with the
-base and stores the change: changed components, new, removed and changed
+working tree. Model the base exactly as you would any codebase: do not add
+requirers or interfaces for calls the change introduces.
+
+The base cannot show code the change adds. The evidence lists the directories
+of added files under `added by the change`. When one holds a new part of the
+system (a new module, package or service), add a component for it with its
+paths, where it belongs in the tree. Its paths match no base file, so the
+check accepts it; give it no interfaces and list it as no requirer. The hub
+marks it added, and calls into and out of it show as new surfaces and new
+dependencies. Files added inside an existing component need nothing. When
+`srev map submit` lists files as not placed, add components for them and
+submit again.
+
+On submit the hub compares the head with the
+base and stores the change: changed, added and removed components, new, removed and changed
 dependencies, new surfaces (head calls into a symbol no interface binds),
 touched contracts and changed files the model cannot place. `srev map submit`
 and `srev map get` print it. Give the reviewer the link and point out the new

@@ -6,6 +6,7 @@ import { MapPage, levelFromUrl } from "../src/map/MapPage.js";
 import { navigateToSession } from "../src/navigation.js";
 import { useUIStore } from "../src/store/ui.js";
 import { fixtureChange, fixtureMap, fixtureReview } from "./map-fixture.js";
+import type { MapChange } from "../src/map/types.js";
 
 vi.mock("../src/navigation.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/navigation.js")>()),
@@ -264,25 +265,25 @@ describe("MapPage edge cases", () => {
   });
 });
 
+function stubReview(over: Partial<MapChange> = {}) {
+  const { nodes, units, flows } = fixtureReview();
+  const change = { ...fixtureChange(), ...over };
+  const bodies: [string, unknown][] = [
+    ["/map", { model: {}, map: { ...fixtureMap(), change }, headSha: "abc", createdAt: 1 }],
+    ["/nodes", { nodes, edges: [] }],
+    ["/flows", { flows, orphans: [] }],
+    ["/sessions/s1", { session: { id: "s1" }, units, coverage: { changedTotal: 5, covered: 5, unassigned: 0 } }],
+  ];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => ({
+      ok: true,
+      status: 200,
+      json: async () => bodies.find(([path]) => String(url).includes(path))![1],
+    })),
+  );
+}
 describe("MapPage in a review", () => {
-  function stubReview() {
-    const { nodes, units, flows } = fixtureReview();
-    const bodies: [string, unknown][] = [
-      ["/map", { model: {}, map: { ...fixtureMap(), change: fixtureChange() }, headSha: "abc", createdAt: 1 }],
-      ["/nodes", { nodes, edges: [] }],
-      ["/flows", { flows, orphans: [] }],
-      ["/sessions/s1", { session: { id: "s1" }, units, coverage: { changedTotal: 5, covered: 5, unassigned: 0 } }],
-    ];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string) => ({
-        ok: true,
-        status: 200,
-        json: async () => bodies.find(([path]) => String(url).includes(path))![1],
-      })),
-    );
-  }
-
   it("marks changed components, connectors and contracts", async () => {
     stubReview();
     const { container } = renderPage();
@@ -319,14 +320,13 @@ describe("MapPage in a review", () => {
     const { container } = renderPage();
     await node(container, "core");
     const line = (name: RegExp) => within(panel()).getByRole("button", { name });
-    const back = async () => {
-      window.history.replaceState(null, "", "/?session=s1&view=map&level=orchestrator");
+    const back = async (level = "orchestrator") => {
+      window.history.replaceState(null, "", `/?session=s1&view=map&level=${level}`);
       fireEvent(window, new PopStateEvent("popstate"));
-      await waitFor(() => line(/^Removed: Engine/));
+      await waitFor(() => line(level === "core" ? /^Removed: Engine/ : /^New surface: warm/));
     };
-    await back();
+    await back("core");
     fireEvent.click(line(/^Removed: Engine/));
-    expect(window.location.search).toBe("?session=s1&view=map&level=core");
     expect(panel().textContent).toContain("Removed call sites");
     await back();
     fireEvent.click(line(/^New surface: warm/));
@@ -346,5 +346,37 @@ describe("MapPage in a review", () => {
     fireEvent.click(container.querySelector('[data-port="store|writes|provide"]')!);
     expect(panel().textContent).toContain("New call sites");
     expect(panel().textContent).toContain("purge → saveJob");
+  });
+});
+
+describe("MapPage levels in a review", () => {
+  it("marks the parts the change adds or removes", async () => {
+    stubReview({ addedComponents: ["api"], removedComponents: ["store"] });
+    const { container } = renderPage();
+    await waitFor(() => expect(container.querySelector('[data-node="api"]')!.classList.contains("added")).toBe(true));
+    expect(container.querySelector('[data-node="store"]')!.classList.contains("removed")).toBe(true);
+    expect(container.querySelector('[data-node="core"]')!.classList.contains("added")).toBe(false);
+    expect(panel().textContent).toContain("New part: Operator API");
+    expect(panel().textContent).toContain("Removed part: Persistence");
+    fireEvent.click(within(panel()).getByRole("button", { name: /^New part: Operator API/ }));
+    expect(panel().textContent).toContain("Operator API meaning");
+  });
+
+  it("lists the opened level's own changes and counts the rest", async () => {
+    stubReview();
+    const { container } = renderPage();
+    await node(container, "core");
+    await waitFor(() => expect(panel().textContent).toContain("New surface"));
+    expect(panel().textContent).not.toContain("Removed: Engine");
+    expect(panel().textContent).toContain("1 more change inside the parts");
+  });
+
+  it("lists changed files no part claims at their level", async () => {
+    stubReview({ unmapped: [{ component: "orchestrator", files: ["src/main.ts", "package.json"] }] });
+    const { container } = renderPage();
+    await node(container, "core");
+    await waitFor(() => expect(panel().textContent).toContain("Changed files no part claims"));
+    expect(within(panel()).getByText("package.json")).toBeTruthy();
+    expect(within(panel()).queryByText("src/main.ts")).toBeNull();
   });
 });

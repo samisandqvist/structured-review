@@ -104,6 +104,8 @@ describe("compareVersions", () => {
     expect(compare({ files: [] })).toEqual({
       baseSha: "abc123",
       components: [],
+      addedComponents: [],
+      removedComponents: [],
       nodeComponents: {},
       crossings: [],
       surfaces: [],
@@ -367,5 +369,52 @@ describe("compareVersions review fixes", () => {
     const head = index([...BASE_REFS, ["src/api/handler.ts", "src/store/jobs.ts:saveJob", "handle", 6]]);
     const change = compare({ head, files: [{ path: "src/core/run.ts", status: "modified" }] });
     expect(change.crossings).toEqual([]);
+  });
+});
+
+describe("components the change adds or removes", () => {
+  const SCHED = ["src/sched/plan.ts", "plan", 1] as Def;
+  const withSched = {
+    ...MODEL,
+    components: [
+      ...MODEL.components,
+      { id: "sched", name: "Scheduler", parent: "app", paths: ["src/sched/"], meaning: "added by the change" },
+    ],
+  };
+  const base = checkMap(withSched, index(BASE_REFS), () => true);
+  const headRefs: Ref[] = [
+    ...BASE_REFS,
+    ["src/api/handler.ts", "src/sched/plan.ts:plan", "handle", 7],
+    ["src/sched/plan.ts", "src/store/jobs.ts:getJob", "plan", 2],
+  ];
+  const files = [...CHANGED_CODE, { path: "src/sched/plan.ts", status: "added" }];
+
+  it("accepts a component whose paths match no base file and marks it added", () => {
+    expect(base.map.report.ok).toBe(true);
+    const change = compareVersions(
+      {
+        model: base.model,
+        base: base.map,
+        head: index(headRefs, [...DEFS, SCHED]),
+        nodes: [],
+        files,
+        changedLines: () => [],
+      },
+      "abc123",
+    );
+    expect(change.addedComponents).toEqual(["sched"]);
+    expect(change.removedComponents).toEqual([]);
+    expect(change.surfaces.map((s) => s.id)).toEqual(["new:sched:src/sched/plan.ts:plan"]);
+    expect(change.crossings).toContainEqual(
+      expect.objectContaining({ interface: "reads", requirer: "sched", status: "new" }),
+    );
+  });
+
+  it("marks a component whose files the head no longer has as removed", () => {
+    const defs = DEFS.filter(([file]) => !file.startsWith("src/core/"));
+    const refs = BASE_REFS.filter(([file, target]) => !file.startsWith("src/core/") && !target.startsWith("src/core/"));
+    const change = compare({ head: index(refs, defs) });
+    expect(change.removedComponents).toEqual(["core"]);
+    expect(change.addedComponents).toEqual([]);
   });
 });

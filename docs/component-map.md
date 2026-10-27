@@ -110,14 +110,20 @@ In a review session (one created with a base branch or commit), the map
 describes the code before the change, and the page marks the change on top
 of it. The hub checks out the session's base commit as a shared clone in a
 per-user cache directory (nothing is written into the reviewed repository),
-indexes it, and runs the evidence and the check there. The agent models the
-base as it would any codebase; the change never enters the model.
+indexes it, and runs the evidence and the check there. The clone runs no git
+hooks and leaves LFS files as pointers. The agent models the base as it would
+any codebase; the change never enters the model, except for components for
+code the change adds. The evidence lists the directories of added files, and
+the agent can add a component for a new module there: its paths match no base
+file, so the check accepts it, and it carries no interfaces.
 
 On submit the hub applies the model to the working tree and compares:
 
 | Mark | Meaning |
 |---|---|
 | Changed part | The part owns changed review items or changed files; the box shows "N changed · M reviewed". |
+| Added part | The part has files in the working tree and none at the base. |
+| Removed part | The part has files at the base and none in the working tree. |
 | New dependency | A requirer calls an interface it did not call at the base. |
 | Removed dependency | A requirer no longer calls an interface it called at the base. |
 | Changed dependency | The calling functions differ between base and head. |

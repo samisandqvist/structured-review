@@ -12,6 +12,8 @@ import type { ChangeStatus, ResolvedMap } from "./types.js";
 export interface DiagramMarks {
   edges: Map<string, ChangeStatus>;
   counts: Map<string, { changed: number; reviewed: number }>;
+  /** Parts with files only in the head ("added") or only at the base ("removed"). */
+  parts: Map<string, "added" | "removed">;
   touched: Set<string>;
   surfaces: Set<string>;
 }
@@ -158,6 +160,7 @@ function Leaf({
         role,
         component.external && "external",
         count && "changed",
+        props.marks?.parts.get(node.id),
         props.hl.has(node.id) && "hl",
         props.keep.has(node.id) && "keep",
       )}
@@ -290,6 +293,12 @@ export function Legend({ review = false }: { review?: boolean }) {
               <line x1={0} y1={7} x2={34} y2={7} stroke="currentColor" strokeDasharray="2 4" />
             </svg>
             removed
+          </span>
+          <span className="part-new">
+            <svg viewBox="0 0 34 14" aria-hidden>
+              <rect x={6} y={1} width={22} height={12} rx={2} strokeWidth={1.6} />
+            </svg>
+            part added
           </span>
         </>
       )}

@@ -7,7 +7,7 @@ import type { ReferenceIndex } from "../graph/references.js";
 import { resolveBindings, type ResolvedBindings } from "./bindings.js";
 import { ComponentTree } from "./ownership.js";
 import { resolveReferences } from "./resolve.js";
-import { deriveDelegations } from "./rules.js";
+import { deriveDelegations, fileCounts } from "./rules.js";
 import type {
   CallSite,
   CrossingChange,
@@ -67,10 +67,26 @@ export function compareVersions(input: ChangeInput, baseSha: string): MapChange 
   return {
     baseSha,
     ...placement(tree, changed, input.files),
+    ...componentChanges(input, tree),
     crossings: crossed,
     surfaces,
     ...delegationChanges(tree, input.base, bound, crossed, surfaces),
     touched: touched(input, bound, changed, changedPaths),
+  };
+}
+
+/** Components with files in the head and none in the base, and the reverse.
+ *  A component the change adds has paths that match no base file. */
+function componentChanges(
+  input: ChangeInput,
+  tree: ComponentTree,
+): Pick<MapChange, "addedComponents" | "removedComponents"> {
+  const before = new Map(input.base.components.map((c) => [c.id, c.fileCount]));
+  const after = fileCounts(input.head.files, tree);
+  const internal = input.model.components.filter((c) => !c.external).map((c) => c.id);
+  return {
+    addedComponents: internal.filter((id) => !before.get(id) && after.get(id)),
+    removedComponents: internal.filter((id) => before.get(id) && !after.get(id)),
   };
 }
 

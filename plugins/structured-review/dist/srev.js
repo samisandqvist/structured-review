@@ -492,6 +492,8 @@ function prettyChange(change) {
   return [
     `change against base ${short(change.baseSha)}`,
     `  changed components: ${change.components.map((c) => `${c.id} (${plural(c.items, "item")}, ${plural(c.files, "file")})`).join(", ") || "none"}`,
+    ...change.addedComponents.length ? [`  added components: ${change.addedComponents.join(", ")}`] : [],
+    ...change.removedComponents.length ? [`  removed components: ${change.removedComponents.join(", ")}`] : [],
     ...change.crossings.map(crossing),
     ...change.surfaces.map(
       (s) => `  new surface: ${s.symbol} of ${s.provider}, used by ${s.requirers.join(", ")} (${plural(s.references, "reference")})`
@@ -526,8 +528,19 @@ function prettyEvidence(e) {
     ...e.signals.headers.map((h) => `  ${h.file}: ${h.comment}`),
     "registrations:",
     ...e.signals.registrations.map((r) => `  ${r.file}:${r.line} ${r.text}`),
+    ...addedDirectories(e.addedFiles),
     ...e.gaps.length ? e.gaps.map((g) => `! ${g}`) : ["gaps: none"]
   ].join("\n");
+}
+function addedDirectories(files = []) {
+  if (files.length === 0) return [];
+  const dirs = /* @__PURE__ */ new Map();
+  for (const file of files) {
+    const dir = file.includes("/") ? `${file.slice(0, file.lastIndexOf("/"))}/` : ".";
+    dirs.set(dir, (dirs.get(dir) ?? 0) + 1);
+  }
+  const lines = [...dirs].sort(([a], [b]) => a.localeCompare(b)).map(([d, n]) => `  ${d} (${plural(n, "file")})`);
+  return ["added by the change:", ...lines];
 }
 function flag(flags, name) {
   const v = flags[name];

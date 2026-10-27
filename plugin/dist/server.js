@@ -42677,7 +42677,7 @@ function unresolvedMap(model, issues, gaps) {
 // packages/server/src/map/base.ts
 init_diff();
 import { execFileSync as execFileSync3 } from "node:child_process";
-import { existsSync as existsSync4, mkdirSync, readFileSync as readFileSync6, rmSync as rmSync2, writeFileSync } from "node:fs";
+import { existsSync as existsSync4, mkdirSync, readdirSync as readdirSync3, readFileSync as readFileSync6, rmSync as rmSync2, writeFileSync } from "node:fs";
 import { join as join9 } from "node:path";
 var QUIET2 = { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] };
 function objectType(sha, root) {
@@ -42687,10 +42687,20 @@ function objectType(sha, root) {
     return null;
   }
 }
+var UNHOOKED = ["-c", "core.hooksPath=/dev/null"];
+var checkoutOptions = () => ({ ...QUIET2, env: { ...process.env, GIT_LFS_SKIP_SMUDGE: "1" } });
 var READY = join9(".git", "srev-ready");
 function readyAt(dir) {
   try {
     return readFileSync6(join9(dir, READY), "utf8").trim();
+  } catch {
+    return null;
+  }
+}
+function originOf(dir) {
+  try {
+    const config2 = join9(dir, ".git", "config");
+    return execFileSync3("git", ["config", "--file", config2, "--get", "remote.origin.url"], QUIET2).trim();
   } catch {
     return null;
   }
@@ -42700,8 +42710,8 @@ function checkout(dir, repoRoot2, sha) {
   rmSync2(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true, mode: 448 });
   try {
-    execFileSync3("git", ["clone", "--shared", "--no-checkout", "-q", repoRoot2, dir], QUIET2);
-    execFileSync3("git", ["checkout", "-q", "--detach", sha], { cwd: dir, ...QUIET2 });
+    execFileSync3("git", [...UNHOOKED, "clone", "--shared", "--no-checkout", "-q", repoRoot2, dir], checkoutOptions());
+    execFileSync3("git", [...UNHOOKED, "checkout", "-q", "--detach", sha], { cwd: dir, ...checkoutOptions() });
     writeFileSync(join9(dir, READY), sha);
   } catch (e) {
     rmSync2(dir, { recursive: true, force: true });
@@ -42730,6 +42740,17 @@ var BaseIndexes = class {
   drop(sessionId) {
     this.indexes.delete(sessionId);
     rmSync2(join9(this.baseDir, sessionId), { recursive: true, force: true });
+  }
+  /** Removes the checkouts of `repoRoot` whose sessions are gone. Other
+   *  repositories' hubs share the directory, so a checkout cloned from
+   *  elsewhere, or one whose origin cannot be read, stays. */
+  sweep(repoRoot2, sessions) {
+    if (!existsSync4(this.baseDir)) return;
+    for (const entry of readdirSync3(this.baseDir, { withFileTypes: true })) {
+      if (!entry.isDirectory() || sessions.has(entry.name)) continue;
+      const dir = join9(this.baseDir, entry.name);
+      if (originOf(dir) === repoRoot2) this.drop(entry.name);
+    }
   }
   async build(dir, repoRoot2, sha) {
     checkout(dir, repoRoot2, sha);
@@ -42765,10 +42786,20 @@ function compareVersions(input2, baseSha) {
   return {
     baseSha,
     ...placement(tree, changed, input2.files),
+    ...componentChanges(input2, tree),
     crossings: crossed,
     surfaces: surfaces2,
     ...delegationChanges(tree, input2.base, bound, crossed, surfaces2),
     touched: touched(input2, bound, changed, changedPaths)
+  };
+}
+function componentChanges(input2, tree) {
+  const before = new Map(input2.base.components.map((c) => [c.id, c.fileCount]));
+  const after = fileCounts(input2.head.files, tree);
+  const internal = input2.model.components.filter((c) => !c.external).map((c) => c.id);
+  return {
+    addedComponents: internal.filter((id) => !before.get(id) && after.get(id)),
+    removedComponents: internal.filter((id) => before.get(id) && !after.get(id))
   };
 }
 function siteGuard(base, bound, changedPaths) {
@@ -42927,7 +42958,8 @@ function createMapRoute(ctx) {
         },
         { full, ...within ? { within } : {} }
       );
-      return c.json(source.baseSha ? { ...evidence, baseSha: source.baseSha } : evidence);
+      if (!source.baseSha) return c.json(evidence);
+      return c.json({ ...evidence, baseSha: source.baseSha, addedFiles: addedFiles(source.baseSha, root) });
     })
   );
   router.post(
@@ -42997,6 +43029,9 @@ async function withChange(ctx, session, source, checked) {
   const head = await headIndex(ctx);
   return { ...checked.base, change: compareVersions({ ...checked, head, nodes, files, changedLines }, sha) };
 }
+function addedFiles(sha, root) {
+  return (changedFileStatuses(sha, root) ?? []).filter((f) => f.status === "added" || f.status === "renamed").map((f) => f.path).sort();
+}
 async function jsonBody(c) {
   try {
     return await c.req.json();
@@ -43030,7 +43065,10 @@ var localRequestsOnly = createMiddleware(async (c, next) => {
 // packages/server/src/app.ts
 function createApp(ctx) {
   const resolved = { ...ctx, repoRoot: ctx.repoRoot ?? repoRoot() };
-  if (ctx.providerFor && ctx.baseDir) resolved.bases = new BaseIndexes(ctx.baseDir, ctx.providerFor);
+  if (ctx.providerFor && ctx.baseDir) {
+    resolved.bases = new BaseIndexes(ctx.baseDir, ctx.providerFor);
+    resolved.bases.sweep(resolved.repoRoot, new Set(listSessions(ctx.db).map((s) => s.id)));
+  }
   const app2 = new Hono3();
   app2.use("*", localRequestsOnly);
   app2.get(

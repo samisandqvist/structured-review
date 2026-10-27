@@ -191,6 +191,10 @@ function marksFor(map: ResolvedMap, level: Level, review: PanelReview | undefine
   return {
     edges: edgeChanges(map, level),
     counts: review ? itemCounts(map, review.placed) : new Map<string, { changed: number; reviewed: number }>(),
+    parts: new Map([
+      ...map.change.addedComponents.map((id) => [id, "added"] as const),
+      ...map.change.removedComponents.map((id) => [id, "removed"] as const),
+    ]),
     touched: new Set(map.change.touched.map((t) => t.interface)),
     surfaces: new Set(map.change.surfaces.map((s) => s.id)),
   };

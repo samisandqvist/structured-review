@@ -22,6 +22,8 @@ export interface MapCheckReport {
 export interface MapChangeSummary {
   baseSha: string;
   components: { id: string; items: number; files: number }[];
+  addedComponents: string[];
+  removedComponents: string[];
   crossings: { interface: string; requirer: string; status: string; added: unknown[]; removed: unknown[] }[];
   surfaces: { provider: string; requirers: string[]; symbol: string; references: number }[];
   touched: { interface: string; reasons: string[]; symbols: string[] }[];
@@ -30,6 +32,8 @@ export interface MapChangeSummary {
 export interface MapEvidence {
   /** Set in a review session: the evidence describes this base commit. */
   baseSha?: string;
+  /** Set in a review session: files the change adds, which the base cannot show. */
+  addedFiles?: string[];
   scope: string;
   full: boolean;
   tree: { path: string; files: number }[];
@@ -130,6 +134,8 @@ export function prettyChange(change: MapChangeSummary): string {
   return [
     `change against base ${short(change.baseSha)}`,
     `  changed components: ${change.components.map((c) => `${c.id} (${plural(c.items, "item")}, ${plural(c.files, "file")})`).join(", ") || "none"}`,
+    ...(change.addedComponents.length ? [`  added components: ${change.addedComponents.join(", ")}`] : []),
+    ...(change.removedComponents.length ? [`  removed components: ${change.removedComponents.join(", ")}`] : []),
     ...change.crossings.map(crossing),
     ...change.surfaces.map(
       (s) =>
@@ -167,8 +173,21 @@ export function prettyEvidence(e: MapEvidence): string {
     ...e.signals.headers.map((h) => `  ${h.file}: ${h.comment}`),
     "registrations:",
     ...e.signals.registrations.map((r) => `  ${r.file}:${r.line} ${r.text}`),
+    ...addedDirectories(e.addedFiles),
     ...(e.gaps.length ? e.gaps.map((g) => `! ${g}`) : ["gaps: none"]),
   ].join("\n");
+}
+
+/** The directories holding files a review adds, with their file counts. */
+function addedDirectories(files: string[] = []): string[] {
+  if (files.length === 0) return [];
+  const dirs = new Map<string, number>();
+  for (const file of files) {
+    const dir = file.includes("/") ? `${file.slice(0, file.lastIndexOf("/"))}/` : ".";
+    dirs.set(dir, (dirs.get(dir) ?? 0) + 1);
+  }
+  const lines = [...dirs].sort(([a], [b]) => a.localeCompare(b)).map(([d, n]) => `  ${d} (${plural(n, "file")})`);
+  return ["added by the change:", ...lines];
 }
 
 function flag(flags: Flags, name: string): string {

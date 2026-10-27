@@ -131,6 +131,10 @@ export interface MapChange {
   baseSha: string;
   /** Components owning changed review items or changed files, ancestors included. */
   components: { id: string; items: number; files: number }[];
+  /** Components with files in the head and none in the base. */
+  addedComponents: string[];
+  /** Components with files in the base and none in the head. */
+  removedComponents: string[];
   /** Changed review node id → the deepest component whose paths claim its file (null: none). */
   nodeComponents: Record<string, string | null>;
   crossings: CrossingChange[];

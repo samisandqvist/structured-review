@@ -141,6 +141,8 @@ export function fixtureChange(): MapChange {
       { id: "orchestrator", items: 3, files: 3 },
       { id: "store", items: 1, files: 1 },
     ],
+    addedComponents: [],
+    removedComponents: [],
     nodeComponents: { n1: "engine", n5: "engine", n2: "store", n3: "orchestrator", t1: null },
     crossings: [
       {
