@@ -130,10 +130,12 @@ describe("BaseIndexes and the user's git setup", () => {
       mode: 0o755,
     });
     const config = join(home, "gitconfig");
-    writeFileSync(config, `[core]\n\thooksPath = ${hooks}\n[filter "lfs"]\n\tsmudge = ${smudge}\n`);
+    writeFileSync(config, `[core]\n\thooksPath = ${hooks}\n[filter "lfs"]\n\tclean = cat\n\tsmudge = ${smudge}\n`);
+    const gitEnv = { GIT_CONFIG_GLOBAL: config, GIT_CONFIG_NOSYSTEM: "1" };
     const lfsRepo = join(home, "repo");
     mkdirSync(lfsRepo);
-    const run = (...a: string[]) => execFileSync("git", a, { cwd: lfsRepo, encoding: "utf8" }).trim();
+    const run = (...a: string[]) =>
+      execFileSync("git", a, { cwd: lfsRepo, encoding: "utf8", env: { ...process.env, ...gitEnv } }).trim();
     run("init", "-q", "-b", "main");
     run("config", "user.email", "t@example.com");
     run("config", "user.name", "t");
@@ -142,16 +144,18 @@ describe("BaseIndexes and the user's git setup", () => {
     run("add", "-A");
     run("commit", "-qm", "lfs");
     const sha = run("rev-parse", "HEAD");
-    const saved = process.env.GIT_CONFIG_GLOBAL;
-    process.env.GIT_CONFIG_GLOBAL = config;
+    const saved = { ...process.env };
+    Object.assign(process.env, gitEnv);
     try {
       const bases = new BaseIndexes(join(home, "bases"), stubProviders().providerFor);
       const { root } = await bases.get("ses_hooks", lfsRepo, sha);
       expect(readFileSync(join(root, "blob.bin"), "utf8")).toBe("data\n");
       expect(existsSync(marker)).toBe(false);
     } finally {
-      if (saved === undefined) delete process.env.GIT_CONFIG_GLOBAL;
-      else process.env.GIT_CONFIG_GLOBAL = saved;
+      for (const name of Object.keys(gitEnv)) {
+        if (saved[name] === undefined) delete process.env[name];
+        else process.env[name] = saved[name];
+      }
       rmSync(home, { recursive: true, force: true });
     }
   });
