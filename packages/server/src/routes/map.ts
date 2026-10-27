@@ -2,30 +2,54 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { Hono, type Context } from "hono";
 import type { AppContext } from "../context.js";
-import { getSession } from "../repo/sessions.js";
+import { diffBase, getSession } from "../repo/sessions.js";
+import { getNodesBySession } from "../repo/nodes.js";
 import { getMap, saveMap } from "../repo/maps.js";
 import { IndexError, sourceReader } from "../graph/scip.js";
 import { findMarkerRoots } from "../graph/roots.js";
 import type { ReferenceIndex } from "../graph/references.js";
+import { changedFileStatuses, fileChangedRanges, GitError, type LineRange } from "../diff.js";
 import { loadComponentMap } from "../component-map.js";
 import { buildEvidence } from "../map/evidence.js";
 import { checkMap } from "../map/check.js";
+import { objectType } from "../map/base.js";
+import { compareVersions } from "../map/change.js";
+import type { MapModel, ResolvedMap } from "../map/types.js";
+import type { ReviewSession } from "../types.js";
 import { snapshot, staleness } from "../staleness.js";
 
-type Handler = (c: Context, sessionId: string, index: ReferenceIndex) => Promise<Response> | Response;
+/** The code a map is built from: the session's base checkout in a review
+ *  session (`baseSha` set), otherwise the working tree. */
+interface MapSource {
+  root: string;
+  index: ReferenceIndex;
+  baseSha?: string;
+}
+
+type Handler = (c: Context, session: ReviewSession, source: MapSource) => Promise<Response> | Response;
 
 /** The component map of a session: evidence for the LLM, a dry-run check,
- *  submit (stored only when the fidelity check passes) and read. The map
- *  covers the whole indexed working tree; the session scopes storage and
- *  staleness. */
+ *  submit (stored only when the fidelity check passes) and read. A review
+ *  session's map is built from its base commit and carries the change to the
+ *  working tree; a whole-repository session maps the working tree. */
 export function createMapRoute(ctx: AppContext) {
   const router = new Hono();
   const root = ctx.repoRoot!;
-  const fileExists = (file: string) => existsSync(join(root, file));
+  const fileExistsIn = (dir: string) => (file: string) => existsSync(join(dir, file));
 
-  const withIndex = (handler: Handler) => async (c: Context) => {
-    const sessionId = c.req.param("id")!;
-    if (!getSession(ctx.db, sessionId)) return c.json({ error: "not found" }, 404);
+  const headIndex = () => ctx.graphProvider.getReferenceIndex!();
+
+  async function mapSource(session: ReviewSession): Promise<MapSource> {
+    const sha = diffBase(session);
+    const type = objectType(sha, root);
+    if (type === null) throw new GitError("base-checkout", `the session's base ${sha} is not in the repository`);
+    if (ctx.bases && type === "commit") return { ...(await ctx.bases.get(session.id, root, sha)), baseSha: sha };
+    return { root, index: await headIndex() };
+  }
+
+  const withSource = (handler: Handler) => async (c: Context) => {
+    const session = getSession(ctx.db, c.req.param("id")!);
+    if (!session) return c.json({ error: "not found" }, 404);
     if (!ctx.graphProvider.getReferenceIndex) {
       return c.json(
         {
@@ -36,45 +60,72 @@ export function createMapRoute(ctx: AppContext) {
       );
     }
     try {
-      return await handler(c, sessionId, await ctx.graphProvider.getReferenceIndex());
+      return await handler(c, session, await mapSource(session));
     } catch (e) {
-      if (e instanceof IndexError) return c.json({ error: e.message, phase: e.phase }, 400);
+      if (e instanceof IndexError || e instanceof GitError) return c.json({ error: e.message, phase: e.phase }, 400);
       throw e;
     }
   };
 
+  async function withChange(session: ReviewSession, source: MapSource, model: MapModel, base: ResolvedMap) {
+    if (!source.baseSha) return base;
+    const sha = source.baseSha;
+    const ranges = new Map<string, LineRange[]>();
+    const changedLines = (file: string) => {
+      if (!ranges.has(file)) ranges.set(file, fileChangedRanges(sha, file, root) ?? []);
+      return ranges.get(file)!;
+    };
+    const nodes = getNodesBySession(ctx.db, session.id).map((n) => ({
+      id: n.id,
+      file: n.file,
+      startLine: n.startLine,
+      endLine: n.endLine,
+      isTest: n.isTest,
+      residual: (n.residualRanges?.length ?? 0) > 0,
+      changed: n.changeStatus === "changed",
+    }));
+    const files = changedFileStatuses(sha, root) ?? [];
+    const head = await headIndex();
+    return { ...base, change: compareVersions({ model, base, head, nodes, files, changedLines }, sha) };
+  }
+
   router.get(
     "/:id/map/evidence",
-    withIndex((c, _sessionId, index) => {
+    withSource((c, _session, source) => {
       const within = c.req.query("within");
       const full = ["1", "true"].includes(c.req.query("full") ?? "");
       const evidence = buildEvidence(
-        index,
-        { readSource: sourceReader(root), roots: findMarkerRoots(root), manifest: loadComponentMap(root) },
+        source.index,
+        {
+          readSource: sourceReader(source.root),
+          roots: findMarkerRoots(source.root),
+          manifest: loadComponentMap(source.root),
+        },
         { full, ...(within ? { within } : {}) },
       );
-      return c.json(evidence);
+      return c.json(source.baseSha ? { ...evidence, baseSha: source.baseSha } : evidence);
     }),
   );
 
   router.post(
     "/:id/map/check",
-    withIndex(async (c, _sessionId, index) => {
+    withSource(async (c, _session, source) => {
       const body = await jsonBody(c);
       if (body === undefined) return badBody(c);
-      return c.json({ report: checkMap(body, index, fileExists).map.report });
+      return c.json({ report: checkMap(body, source.index, fileExistsIn(source.root)).map.report });
     }),
   );
 
   router.put(
     "/:id/map",
-    withIndex(async (c, sessionId, index) => {
+    withSource(async (c, session, source) => {
       const body = await jsonBody(c);
       if (body === undefined) return badBody(c);
-      const { model, map } = checkMap(body, index, fileExists);
+      const { model, map } = checkMap(body, source.index, fileExistsIn(source.root));
       if (!map.report.ok) return c.json({ error: "the map fails the fidelity check", report: map.report }, 422);
-      saveMap(ctx.db, sessionId, { model, map, ...snapshot(root) });
-      return c.json({ report: map.report });
+      const stored = await withChange(session, source, model, map);
+      saveMap(ctx.db, session.id, { model, map: stored, ...snapshot(root) });
+      return c.json({ report: map.report, ...(stored.change ? { change: stored.change } : {}) });
     }),
   );
 

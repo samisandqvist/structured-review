@@ -6,7 +6,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BaseIndexes, isCommit } from "../src/map/base.js";
+import { BaseIndexes, objectType } from "../src/map/base.js";
 import { EMPTY_TREE_SHA, GitError } from "../src/diff.js";
 import type { GraphProvider } from "../src/graph/provider.js";
 import type { ReferenceIndex } from "../src/graph/references.js";
@@ -99,10 +99,10 @@ describe("BaseIndexes", () => {
   });
 });
 
-describe("isCommit", () => {
+describe("objectType", () => {
   it("tells commits from the empty tree and unknown shas", () => {
-    expect(isCommit(baseSha, repo)).toBe(true);
-    expect(isCommit(EMPTY_TREE_SHA, repo)).toBe(false);
-    expect(isCommit("0".repeat(40), repo)).toBe(false);
+    expect(objectType(baseSha, repo)).toBe("commit");
+    expect(objectType(EMPTY_TREE_SHA, repo)).toBe("tree");
+    expect(objectType("0".repeat(40), repo)).toBeNull();
   });
 });

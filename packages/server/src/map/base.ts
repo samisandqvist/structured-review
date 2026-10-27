@@ -17,12 +17,12 @@ export interface BaseIndex {
 
 const QUIET = { encoding: "utf8" as const, stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"] };
 
-/** True when `sha` names a commit in `root` (the empty tree of a whole-repository session does not). */
-export function isCommit(sha: string, root: string): boolean {
+/** The git object type `sha` names in `root` (`commit`, `tree`, …), or null when it is missing. */
+export function objectType(sha: string, root: string): string | null {
   try {
-    return execFileSync("git", ["cat-file", "-t", sha], { cwd: root, ...QUIET }).trim() === "commit";
+    return execFileSync("git", ["cat-file", "-t", sha], { cwd: root, ...QUIET }).trim();
   } catch {
-    return false;
+    return null;
   }
 }
 

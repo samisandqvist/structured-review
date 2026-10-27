@@ -1,6 +1,6 @@
 // Hub routes for the component map: evidence, dry-run check, submit, read.
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -9,6 +9,7 @@ import { createMemoryDatabase } from "../src/db/connection.js";
 import { createApp } from "../src/app.js";
 import { StubGraphProvider } from "../src/graph/stub.js";
 import { IndexError } from "../src/graph/scip.js";
+import { EMPTY_TREE_SHA } from "../src/diff.js";
 import type { ReferenceIndex, SymbolDef } from "../src/graph/references.js";
 
 const sym = (file: string, name: string) => `scip-typescript npm fx 1.0 ${file.replace(/([^/]+)$/, "`$1`")}/${name}().`;
@@ -210,5 +211,128 @@ describe("component map route errors", () => {
     expect(await (await unnamed.request(`/api/sessions/${id}/map/evidence`)).json()).toMatchObject({
       error: "component maps need the scip graph provider (current: unknown)",
     });
+  });
+});
+
+describe("component map routes in a review session", () => {
+  const SAVE_JOB: SymbolDef = { ...GET_JOB, symbol: sym("src/store/jobs.ts", "saveJob"), line: 3, name: "saveJob" };
+  const BASE_INDEX: ReferenceIndex = {
+    ...INDEX,
+    files: ["src/api/handler.ts", "src/store/jobs.ts", "src/worker/run.ts"],
+    definitions: new Map([
+      [GET_JOB.symbol, GET_JOB],
+      [SAVE_JOB.symbol, SAVE_JOB],
+    ]),
+    references: [
+      ...INDEX.references,
+      { symbol: SAVE_JOB.symbol, file: "src/worker/run.ts", line: 2, caller: "run", typeOnly: false },
+    ],
+  };
+  const HEAD_INDEX: ReferenceIndex = {
+    ...BASE_INDEX,
+    references: [
+      ...BASE_INDEX.references,
+      { symbol: SAVE_JOB.symbol, file: "src/api/handler.ts", line: 3, caller: "handle", typeOnly: false },
+    ],
+  };
+  const REVIEW_MODEL = {
+    ...MODEL,
+    components: [
+      ...MODEL.components,
+      { id: "worker", name: "Worker", parent: "app", paths: ["src/worker/"], meaning: "jobs" },
+    ],
+    interfaces: [
+      ...MODEL.interfaces,
+      { id: "writes", name: "Writes", provider: "store", requirers: ["worker"], meaning: "w", bind: ["saveJob"] },
+    ],
+  };
+
+  class RootedProvider extends StubGraphProvider {
+    constructor(readonly index: ReferenceIndex) {
+      super();
+    }
+    getReferenceIndex(): Promise<ReferenceIndex> {
+      return Promise.resolve(this.index);
+    }
+  }
+
+  let baseDir: string;
+  let baseRoots: string[];
+  let baseSha: string;
+  beforeEach(() => {
+    write("src/worker/run.ts", "export function run() {\n  saveJob();\n}\n");
+    git("add", ".");
+    git("commit", "-m", "worker");
+    baseSha = git("rev-parse", "HEAD").trim();
+    git("checkout", "-q", "-b", "feature");
+    write("src/store/jobs.ts", "// Storage.\nexport function getJob() {}\nexport function saveJob() {}\n");
+    write("src/api/handler.ts", "export function handle() {\n  getJob();\n  saveJob();\n}\n");
+    git("commit", "-qam", "api writes");
+    baseDir = mkdtempSync(join(tmpdir(), "srev-map-bases-"));
+    baseRoots = [];
+    app = createApp({
+      db,
+      graphProvider: new RootedProvider(HEAD_INDEX),
+      repoRoot: root,
+      providerName: "scip",
+      baseDir,
+      providerFor: (r) => {
+        baseRoots.push(r);
+        return new RootedProvider(BASE_INDEX);
+      },
+    });
+  });
+  afterEach(() => rmSync(baseDir, { recursive: true, force: true }));
+
+  it("reads evidence from the base checkout", async () => {
+    const id = await session();
+    const body = (await (await app.request(`/api/sessions/${id}/map/evidence`)).json()) as {
+      signals: { headers: { comment: string }[] };
+    };
+    expect(body.signals.headers).toEqual([{ file: "src/store/jobs.ts", comment: "Persistence." }]);
+    expect(baseRoots).toEqual([join(baseDir, id)]);
+  });
+
+  it("checks the model on the base and stores the change on submit", async () => {
+    const id = await session();
+    const check = await send(`/api/sessions/${id}/map/check`, "POST", REVIEW_MODEL);
+    expect(await check.json()).toMatchObject({ report: { ok: true } });
+    expect((await send(`/api/sessions/${id}/map`, "PUT", REVIEW_MODEL)).status).toBe(200);
+    const got = (await (await app.request(`/api/sessions/${id}/map`)).json()) as {
+      map: { change: { baseSha: string; crossings: unknown[]; nodeComponents: Record<string, string | null> } };
+    };
+    expect(got.map.change.baseSha).toBe(baseSha);
+    expect(got.map.change.crossings).toEqual([
+      expect.objectContaining({ interface: "writes", requirer: "api", status: "new" }),
+    ]);
+    expect(Object.values(got.map.change.nodeComponents)).toContain("api");
+  });
+
+  it("removes the base checkout with its session", async () => {
+    const id = await session();
+    await app.request(`/api/sessions/${id}/map/evidence`);
+    expect(existsSync(join(baseDir, id))).toBe(true);
+    await app.request(`/api/sessions/${id}`, { method: "DELETE" });
+    expect(existsSync(join(baseDir, id))).toBe(false);
+  });
+
+  it("maps the working tree of a whole-repository session", async () => {
+    const res = await send("/api/sessions", "POST", { branch: "HEAD", baseRef: EMPTY_TREE_SHA });
+    const id = ((await res.json()) as { session: { id: string } }).session.id;
+    const headModel = {
+      ...REVIEW_MODEL,
+      interfaces: REVIEW_MODEL.interfaces.map((i) => (i.id === "writes" ? { ...i, requirers: ["worker", "api"] } : i)),
+    };
+    expect((await send(`/api/sessions/${id}/map`, "PUT", headModel)).status).toBe(200);
+    const got = (await (await app.request(`/api/sessions/${id}/map`)).json()) as { map: { change?: unknown } };
+    expect(got.map.change).toBeUndefined();
+    expect(baseRoots).toEqual([]);
+  });
+
+  it("reports a base that cannot be checked out", async () => {
+    const id = await session();
+    db.prepare("UPDATE review_sessions SET base_sha = ? WHERE id = ?").run(baseSha.replace(/^./, "f"), id);
+    const res = await app.request(`/api/sessions/${id}/map/evidence`);
+    expect(res.status).toBe(400);
   });
 });
