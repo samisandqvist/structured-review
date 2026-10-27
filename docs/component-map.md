@@ -29,7 +29,10 @@ resubmission replaces the session's map.
 
 The page is at `/?session=<id>&view=map`, with `&level=<component>` for one
 level (`level=system` for the level above the top components). The review's
-status bar links to it once a map exists.
+status bar links to it once a map exists. The map remembers, per session in
+the browser tab, the level, the selected element and the pan and zoom: after a
+visit to the code, the status bar link or the back button returns to the same
+view. A URL naming a different level opens that level at its default view.
 
 ## The model
 
@@ -37,16 +40,48 @@ status bar links to it once a map exists.
 {
   "title": "Job orchestrator",
   "components": [
-    { "id": "orchestrator", "name": "Job orchestrator", "parent": null, "paths": [""], "meaning": "Runs scheduled jobs" },
+    {
+      "id": "orchestrator",
+      "name": "Job orchestrator",
+      "parent": null,
+      "paths": [""],
+      "meaning": "Runs scheduled jobs"
+    },
     { "id": "feeds", "name": "Feed service", "parent": null, "external": true, "meaning": "Publishes new items" },
-    { "id": "store", "name": "Persistence", "parent": "orchestrator", "paths": ["src/store/"], "meaning": "Facade over repositories" },
-    { "id": "infra", "name": "Infrastructure", "parent": "orchestrator", "paths": ["src/lib/"], "utility": true, "meaning": "Helpers" }
+    {
+      "id": "store",
+      "name": "Persistence",
+      "parent": "orchestrator",
+      "paths": ["src/store/"],
+      "meaning": "Facade over repositories"
+    },
+    {
+      "id": "infra",
+      "name": "Infrastructure",
+      "parent": "orchestrator",
+      "paths": ["src/lib/"],
+      "utility": true,
+      "meaning": "Helpers"
+    }
   ],
   "interfaces": [
-    { "id": "read-models", "name": "Read models", "provider": "store", "requirers": ["api"],
-      "meaning": "Paged and point reads", "bind": ["getJob", "JobRepository#find", "src/store/page.ts:listPage"] },
-    { "id": "feed-hook", "name": "Feed notification", "provider": "orchestrator", "requirers": ["feeds"],
-      "kind": "webhook", "meaning": "POST /hooks/feed", "evidence": ["src/api/hooks.ts"] }
+    {
+      "id": "read-models",
+      "name": "Read models",
+      "provider": "store",
+      "requirers": ["api"],
+      "meaning": "Paged and point reads",
+      "bind": ["getJob", "JobRepository#find", "src/store/page.ts:listPage"]
+    },
+    {
+      "id": "feed-hook",
+      "name": "Feed notification",
+      "provider": "orchestrator",
+      "requirers": ["feeds"],
+      "kind": "webhook",
+      "meaning": "POST /hooks/feed",
+      "evidence": ["src/api/hooks.ts"]
+    }
   ],
   "undeclared": [{ "interface": "job-state", "requirer": "api", "reason": "the core owns all state transitions" }]
 }
@@ -84,15 +119,15 @@ between two sibling components.
 
 The hub stores a map only when the check finds no issue:
 
-| Rule | Issue |
-|---|---|
-| model | The model's structure: unknown ids, parent cycles, requirers that are not siblings, the utility and external rules |
-| coverage | A reference between sibling components that no interface of the provider binds |
-| binding | A bind entry that matches nothing or several files, or a symbol bound by two interfaces of one provider |
-| requirer | A declared requirer of an in-process interface with no call sites |
+| Rule       | Issue                                                                                                                               |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| model      | The model's structure: unknown ids, parent cycles, requirers that are not siblings, the utility and external rules                  |
+| coverage   | A reference between sibling components that no interface of the provider binds                                                      |
+| binding    | A bind entry that matches nothing or several files, or a symbol bound by two interfaces of one provider                             |
+| requirer   | A declared requirer of an in-process interface with no call sites                                                                   |
 | undeclared | A requirer using an interface without being declared or listed as undeclared with a reason, or an undeclared entry with no such use |
-| evidence | A cross-process interface without evidence files, or with files that do not exist or lie outside the components it connects |
-| utility | A utility calling a visible component |
+| evidence   | A cross-process interface without evidence files, or with files that do not exist or lie outside the components it connects         |
+| utility    | A utility calling a visible component                                                                                               |
 
 The report also lists, without blocking: unclaimed files (files under the
 mapped directories that no component claims, or that fall through to a
@@ -119,17 +154,17 @@ file, so the check accepts it, and it carries no interfaces.
 
 On submit the hub applies the model to the working tree and compares:
 
-| Mark | Meaning |
-|---|---|
-| Changed part | The part owns changed review items or changed files; the box shows "N changed · M reviewed". |
-| Added part | The part has files in the working tree and none at the base. |
-| Removed part | The part has files at the base and none in the working tree. |
-| New dependency | A requirer calls an interface it did not call at the base. |
-| Removed dependency | A requirer no longer calls an interface it called at the base. |
-| Changed dependency | The calling functions differ between base and head. |
-| New surface | A call across parts reaches a symbol no interface binds; drawn as an extra interface of the provider. |
-| Contract touched | A bound function changed, a binding no longer resolves, or a cross-process interface's evidence file changed. |
-| Not placed | A changed file no part claims; listed at the level it falls to. |
+| Mark               | Meaning                                                                                                       |
+| ------------------ | ------------------------------------------------------------------------------------------------------------- |
+| Changed part       | The part owns changed review items or changed files; the box shows "N changed · M reviewed".                  |
+| Added part         | The part has files in the working tree and none at the base.                                                  |
+| Removed part       | The part has files at the base and none in the working tree.                                                  |
+| New dependency     | A requirer calls an interface it did not call at the base.                                                    |
+| Removed dependency | A requirer no longer calls an interface it called at the base.                                                |
+| Changed dependency | The calling functions differ between base and head.                                                           |
+| New surface        | A call across parts reaches a symbol no interface binds; drawn as an extra interface of the provider.         |
+| Contract touched   | A bound function changed, a binding no longer resolves, or a cross-process interface's evidence file changed. |
+| Not placed         | A changed file no part claims; listed at the level it falls to.                                               |
 
 Selecting a part with no parts of its own lists its changed items in the
 review's walk order, tests with the item they are attached to. Selecting an

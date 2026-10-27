@@ -1,9 +1,9 @@
 // Wheel zoom, drag pan and fit for the map canvas. The first fit after a
 // layout keeps text readable: a wide level starts at the left edge at
-// scale 0.6.
+// scale 0.6. A view the reader comes back to replaces the first fit.
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type RefObject } from "react";
 
-interface Transform {
+export interface Transform {
   x: number;
   y: number;
   k: number;
@@ -32,8 +32,14 @@ export function zoomTransform(tf: Transform, factor: number, cx: number, cy: num
   return { k, x: cx - ((cx - tf.x) * k) / tf.k, y: cy - ((cy - tf.y) * k) / tf.k };
 }
 
-export function usePanZoom(ref: RefObject<HTMLDivElement | null>, size: Size | null, onBackgroundClick: () => void) {
+export function usePanZoom(
+  ref: RefObject<HTMLDivElement | null>,
+  size: Size | null,
+  onBackgroundClick: () => void,
+  restore: Transform | null = null,
+) {
   const [tf, setTf] = useState<Transform>({ x: 0, y: 0, k: 1 });
+  const restored = useRef(restore);
   const drag = useRef<{ x: number; y: number; tx: number; ty: number; moved: boolean } | null>(null);
   const box = useCallback((): Size => {
     const r = ref.current!.getBoundingClientRect();
@@ -46,8 +52,11 @@ export function usePanZoom(ref: RefObject<HTMLDivElement | null>, size: Size | n
   );
 
   useEffect(() => {
-    fit(true);
-  }, [fit]);
+    if (!size) return;
+    if (restored.current) setTf(restored.current);
+    else fit(true);
+    restored.current = null;
+  }, [fit, size]);
 
   useEffect(() => {
     const el = ref.current!;
@@ -81,6 +90,7 @@ export function usePanZoom(ref: RefObject<HTMLDivElement | null>, size: Size | n
   };
 
   return {
+    tf,
     transform: `translate(${tf.x},${tf.y}) scale(${tf.k})`,
     fit: () => fit(false),
     zoomIn: () => zoomCenter(1.25),

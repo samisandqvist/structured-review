@@ -373,7 +373,8 @@ describe("review session map lifecycle", () => {
 
   it("reports a base that cannot be checked out", async () => {
     const id = await session();
-    db.prepare("UPDATE review_sessions SET base_sha = ? WHERE id = ?").run(baseSha.replace(/^./, "f"), id);
+    const missingSha = (baseSha.startsWith("f") ? "e" : "f") + baseSha.slice(1);
+    db.prepare("UPDATE review_sessions SET base_sha = ? WHERE id = ?").run(missingSha, id);
     const res = await app.request(`/api/sessions/${id}/map/evidence`);
     expect(res.status).toBe(400);
   });

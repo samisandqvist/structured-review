@@ -38,7 +38,10 @@ const node = (container: HTMLElement, id: string) =>
     return el;
   });
 
-beforeEach(() => window.history.replaceState(null, "", "/?session=s1&view=map"));
+beforeEach(() => {
+  window.history.replaceState(null, "", "/?session=s1&view=map");
+  window.sessionStorage.clear();
+});
 afterEach(() => vi.unstubAllGlobals());
 
 describe("levelFromUrl", () => {
@@ -189,6 +192,40 @@ describe("MapPage canvas interactions", () => {
     fireEvent.click(container.querySelector('[data-edge="api|writes|require>store|writes|provide"]')!);
     expect(panel().textContent).toContain("Job state writes");
     expect(panel().textContent).toContain("the core owns all job state");
+  });
+});
+
+describe("MapPage after a visit to the code", () => {
+  const transform = (container: HTMLElement) => container.querySelector(".cmap-svg > g")!.getAttribute("transform");
+
+  async function leaveZoomedOnEngine() {
+    stubMap(200);
+    window.history.replaceState(null, "", "/?session=s1&view=map&level=core");
+    const first = renderPage();
+    fireEvent.click(await node(first.container, "engine"));
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    const zoomed = transform(first.container);
+    first.unmount();
+    return zoomed;
+  }
+
+  it("returns to the level, selection and zoom it left", async () => {
+    const zoomed = await leaveZoomedOnEngine();
+    window.history.replaceState(null, "", "/?session=s1&view=map");
+    const { container } = renderPage();
+    await node(container, "engine");
+    expect(panel().textContent).toContain("Engine meaning");
+    await waitFor(() => expect(transform(container)).toBe(zoomed));
+    expect(window.location.search).toBe("?session=s1&view=map&level=core");
+  });
+
+  it("opens a level the URL names afresh", async () => {
+    const zoomed = await leaveZoomedOnEngine();
+    window.history.replaceState(null, "", "/?session=s1&view=map&level=system");
+    const { container } = renderPage();
+    await node(container, "orchestrator");
+    expect(panel().textContent).not.toContain("Engine meaning");
+    await waitFor(() => expect(transform(container)).not.toBe(zoomed));
   });
 });
 
