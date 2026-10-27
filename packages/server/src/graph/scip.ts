@@ -365,7 +365,12 @@ export class ScipGraphProvider implements GraphProvider {
     const g = await this.buildGraph();
     let index = this.referenceIndexes.get(g);
     if (!index) {
-      index = buildReferenceIndex(g.documents ?? [], sourceReader(this.repoRoot), mapGaps(g, this.repoRoot));
+      // Only tracked files: build output and scratch files an indexer picks up
+      // are not part of the code a map or a base comparison describes.
+      const listed = trackedFiles(this.repoRoot);
+      const tracked = listed && new Set(listed);
+      const documents = (g.documents ?? []).filter((d) => !tracked || tracked.has(d.file));
+      index = buildReferenceIndex(documents, sourceReader(this.repoRoot), mapGaps(g, this.repoRoot));
       this.referenceIndexes.set(g, index);
     }
     return index;

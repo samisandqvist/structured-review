@@ -37,6 +37,10 @@ git("config", "user.email", "t@example.com");
 git("config", "user.name", "t");
 git("add", "-A");
 git("commit", "-qm", "base");
+write(
+  "src/api/scratch.ts",
+  'import { getJob } from "../store/jobs.js";\n\nexport function scratch(): number {\n  return getJob(3);\n}\n',
+);
 
 describe("ScipGraphProvider.getReferenceIndex", () => {
   it("resolves a namespace member call to its defining file", async () => {
@@ -46,6 +50,7 @@ describe("ScipGraphProvider.getReferenceIndex", () => {
     expect(index.definitions.get(ref!.symbol)?.file).toBe("src/store/jobs.ts");
     expect(index.files).toEqual(["src/api/handler.ts", "src/api/named.ts", "src/store/index.ts", "src/store/jobs.ts"]);
     expect(index.references.filter((r) => r.file === "src/api/named.ts").map((r) => r.line)).toEqual([4]);
+    expect(index.references.some((r) => r.file === "src/api/scratch.ts")).toBe(false);
     expect(index.gaps).toEqual([
       "1 TypeScript/JavaScript file in scripts/ is not in the index (outside every indexed project); the map does not cover it",
     ]);
