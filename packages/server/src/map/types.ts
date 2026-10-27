@@ -96,10 +96,53 @@ export interface CheckReport {
   gaps: string[];
 }
 
+/** A crossing (requirer, interface) whose call sites differ between base and head. */
+export interface CrossingChange {
+  interface: string;
+  requirer: string;
+  status: "new" | "removed" | "changed";
+  added: CallSite[];
+  removed: CallSite[];
+}
+
+/** A head reference across components to a symbol no interface of its provider binds. */
+export interface NewSurface {
+  provider: string;
+  requirers: string[];
+  symbol: string;
+  file: string;
+  line: number;
+  references: number;
+  /** Sample locations, `file:line (caller)`. */
+  where: string[];
+}
+
+export interface TouchedContract {
+  interface: string;
+  reasons: ("body" | "binding-lost" | "evidence")[];
+  symbols: string[];
+}
+
+/** A review's change on a map built from its base. */
+export interface MapChange {
+  baseSha: string;
+  /** Components owning changed review items or changed files, ancestors included. */
+  components: { id: string; items: number; files: number }[];
+  /** Changed review node id → the deepest component whose paths claim its file (null: none). */
+  nodeComponents: Record<string, string | null>;
+  crossings: CrossingChange[];
+  surfaces: NewSurface[];
+  touched: TouchedContract[];
+  /** Changed files no leaf claims: owned by no component (null) or by a component with parts. */
+  unmapped: { component: string | null; files: string[] }[];
+}
+
 export interface ResolvedMap {
   title: string;
   components: ResolvedComponent[];
   interfaces: ResolvedInterface[];
   delegations: Delegation[];
   report: CheckReport;
+  /** Set on a review session's map: the change between its base and the head. */
+  change?: MapChange;
 }
