@@ -15,10 +15,14 @@ import { createShapeRoute } from "./routes/shape.js";
 import { createMapRoute } from "./routes/map.js";
 import { localRequestsOnly } from "./request-security.js";
 import { BaseIndexes } from "./map/base.js";
+import { listSessions } from "./repo/sessions.js";
 
 export function createApp(ctx: AppContext) {
   const resolved: AppContext = { ...ctx, repoRoot: ctx.repoRoot ?? defaultRepoRoot() };
-  if (ctx.providerFor && ctx.baseDir) resolved.bases = new BaseIndexes(ctx.baseDir, ctx.providerFor);
+  if (ctx.providerFor && ctx.baseDir) {
+    resolved.bases = new BaseIndexes(ctx.baseDir, ctx.providerFor);
+    resolved.bases.sweep(resolved.repoRoot!, new Set(listSessions(ctx.db).map((s) => s.id)));
+  }
   const app = new Hono();
   app.use("*", localRequestsOnly);
   // repoRoot + pid let a CLI tell "the right hub for this repo" apart from a

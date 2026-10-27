@@ -117,3 +117,70 @@ describe("objectType", () => {
     expect(objectType("0".repeat(40), repo)).toBeNull();
   });
 });
+
+describe("BaseIndexes and the user's git setup", () => {
+  it("runs no git hooks and downloads no LFS content while checking out", async () => {
+    const home = mkdtempSync(join(tmpdir(), "srev-base-home-"));
+    const marker = join(home, "ran");
+    const hooks = join(home, "hooks");
+    mkdirSync(hooks);
+    writeFileSync(join(hooks, "post-checkout"), `#!/bin/sh\necho hook >> "${marker}"\n`, { mode: 0o755 });
+    const smudge = join(home, "smudge");
+    writeFileSync(smudge, `#!/bin/sh\n[ -z "$GIT_LFS_SKIP_SMUDGE" ] && echo smudge >> "${marker}"\ncat\n`, {
+      mode: 0o755,
+    });
+    const config = join(home, "gitconfig");
+    writeFileSync(config, `[core]\n\thooksPath = ${hooks}\n[filter "lfs"]\n\tsmudge = ${smudge}\n`);
+    const lfsRepo = join(home, "repo");
+    mkdirSync(lfsRepo);
+    const run = (...a: string[]) => execFileSync("git", a, { cwd: lfsRepo, encoding: "utf8" }).trim();
+    run("init", "-q", "-b", "main");
+    run("config", "user.email", "t@example.com");
+    run("config", "user.name", "t");
+    writeFileSync(join(lfsRepo, ".gitattributes"), "*.bin filter=lfs\n");
+    writeFileSync(join(lfsRepo, "blob.bin"), "data\n");
+    run("add", "-A");
+    run("commit", "-qm", "lfs");
+    const sha = run("rev-parse", "HEAD");
+    const saved = process.env.GIT_CONFIG_GLOBAL;
+    process.env.GIT_CONFIG_GLOBAL = config;
+    try {
+      const bases = new BaseIndexes(join(home, "bases"), stubProviders().providerFor);
+      const { root } = await bases.get("ses_hooks", lfsRepo, sha);
+      expect(readFileSync(join(root, "blob.bin"), "utf8")).toBe("data\n");
+      expect(existsSync(marker)).toBe(false);
+    } finally {
+      if (saved === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+      else process.env.GIT_CONFIG_GLOBAL = saved;
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("BaseIndexes.sweep", () => {
+  it("removes this repository's checkouts of sessions that no longer exist", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "srev-base-sweep-"));
+    const other = mkdtempSync(join(tmpdir(), "srev-base-other-"));
+    execFileSync("git", ["init", "-q", other]);
+    try {
+      const bases = new BaseIndexes(dir, stubProviders().providerFor);
+      const live = await bases.get("ses_live", repo, baseSha);
+      const gone = await bases.get("ses_gone", repo, baseSha);
+      execFileSync("git", ["clone", "-q", other, join(dir, "ses_other")], { stdio: "ignore" });
+      mkdirSync(join(dir, "notes"));
+      new BaseIndexes(dir, stubProviders().providerFor).sweep(repo, new Set(["ses_live"]));
+      expect(existsSync(live.root)).toBe(true);
+      expect(existsSync(gone.root)).toBe(false);
+      expect(existsSync(join(dir, "ses_other"))).toBe(true);
+      expect(existsSync(join(dir, "notes"))).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(other, { recursive: true, force: true });
+    }
+  });
+
+  it("does nothing when the base directory does not exist yet", () => {
+    const bases = new BaseIndexes(join(tmpdir(), "srev-base-missing-dir"), stubProviders().providerFor);
+    expect(() => bases.sweep(repo, new Set())).not.toThrow();
+  });
+});
