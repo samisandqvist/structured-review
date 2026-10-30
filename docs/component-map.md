@@ -10,6 +10,17 @@ The map is built per session by the `component-map` skill. An LLM writes the
 model from index evidence; the hub checks it against the code's references and
 stores it only when it matches. The hub never calls a model.
 
+The skill builds the model top-down. It first lists what the system does, from
+the repository's design when there is one (OpenSpec specs and change designs,
+architecture documents, ADRs, the component manifest) and otherwise from the
+docs and the system's entry points, and then assigns the code to those
+responsibilities. Components are named for what they do; interfaces are named
+for the information that crosses them, with the transport recorded as `kind`.
+It decides where state lives, merges siblings that require each other, and
+reviews the names for channels and layers before it submits. The check proves
+the model matches the code; this process keeps it at a logical level. Where
+the code departs from the repository's design, the skill reports it.
+
 ## Using it
 
 Ask your agent, for example: "Use component-map to map this codebase and open
