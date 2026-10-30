@@ -14,13 +14,18 @@ You write the model; the hub checks it against the code's references and
 refuses it until it matches how the code actually calls itself.
 
 1. Ensure the hub runs and a session exists (`srev serve`, `srev session create`)
-2. Read the evidence (`srev map evidence`)
-3. Write the model and check it until it passes (`srev map check`)
-4. Store it and give the user the link (`srev map submit`)
-5. Revise it when the user says something is wrong (`srev map get`, check, submit)
+2. List what the system does, from its design and docs, before reading code
+3. Read the evidence (`srev map evidence`) and assign the code to those responsibilities
+4. Write the model and check it until it passes (`srev map check`)
+5. Review the model's abstraction level, then store it and give the user the link (`srev map submit`)
+6. Revise it when the user says something is wrong (`srev map get`, check, submit)
 
-The value of the map is fidelity. A plausible diagram that does not match the
-code is worse than none, so never weaken the model to make the check pass.
+The map has to be true and it has to be logical. True: it matches how the code
+calls itself, so never weaken the model to make the check pass. Logical: each
+component is something the system does and each interface is the information
+or responsibility that crosses a boundary. The check proves the first; the
+second is your job, and a map that only mirrors directories, layers and
+transports fails it even when the check passes.
 
 ## The srev CLI
 
@@ -59,7 +64,17 @@ srev map get --session <id>                         # stored model, URL, stalene
    `indexWarnings`. TypeScript/JavaScript and Python are mapped; Java and C#
    roots appear in the report as gaps "not yet mapped". Tell the user about
    every gap.
-2. `srev map evidence --session <id> --pretty` for orientation, then the JSON
+2. **Responsibilities first.** Before you read the evidence, write down the
+   five to nine top-level things the system does, each as a short phrase with
+   a verb ("runs remits on a schedule", "decides who may use which agent").
+   Take them from the design when the repository has one: OpenSpec specs and
+   change designs (`openspec/specs/`, `openspec/changes/*/design.md`),
+   architecture documents, ADRs, the component manifest. Otherwise take them
+   from the README, the docs, entry points and the descriptions of the tools
+   and routes the system offers. Then make the design decisions in
+   [Logical structure](#logical-structure) for that list. This list is the
+   draft of the top level; the code decides where its edges fall.
+3. `srev map evidence --session <id> --pretty` for orientation, then the JSON
    form for detail. It holds:
    - `candidates`: the scope's direct subdirectories and files with file counts;
    - `matrix`: call/value references between candidates;
@@ -73,15 +88,26 @@ srev map get --session <id>                         # stored model, URL, stalene
    `(outside)` stands for files outside the scope (with `--within`, the rest of
    the repository). The brief form caps symbol lists (`+N more`); run `--full`
    before writing bind entries so you see every symbol a surface needs.
+   Assign the candidates to your responsibilities. Directories are evidence
+   for the assignment: one directory can serve several responsibilities, and
+   one responsibility can span directories (list files or globs in `paths`).
+   When code fits no responsibility, the list is missing one or the code is
+   support (a utility or tooling); decide which. When a responsibility has no
+   code, tell the user.
    For a large codebase, model the top level first, then run
-   `--within <dir>` for each component you nest, so each level stays readable.
-3. Write the model file (format below) and run `srev map check`. Read every
+   `--within <dir>` for each component you nest, and repeat step 2 for its
+   parts, so each level stays readable.
+4. Write the model file (format below) and run `srev map check`. Read every
    issue and fix the model, then check again, until it prints
    `fidelity check: passed`.
-4. `srev map submit --session <id> --model <file>`; give the user the printed
-   `url` (or pass `--open`). Summarize: the top-level parts, the undeclared
-   uses you kept and why, hidden utilities, unclaimed files and gaps.
-5. Corrections: when the user says a concept is wrong ("these two are one
+5. Review the model against [Reviewing the abstraction](#reviewing-the-abstraction)
+   and fix what fails, checking again after each change. Then
+   `srev map submit --session <id> --model <file>`; give the user the printed
+   `url` (or pass `--open`). Summarize: the top-level parts, the design
+   decisions you made (where state lives, what you merged), where the code
+   departs from the repository's design, the undeclared uses you kept and
+   why, hidden utilities, unclaimed files and gaps.
+6. Corrections: when the user says a concept is wrong ("these two are one
    thing", "the API should not write state"), run `srev map get`, edit the
    model, check and resubmit. A resubmission replaces the session's map.
 
@@ -113,10 +139,52 @@ dependencies and new surfaces; they are the structural questions of the
 review. The reviewer can open each changed part on the map and review its
 changed items from there.
 
+## Logical structure
+
+A component map is a design view. Build it the way a designer would, from
+responsibilities down, and use the code to place and verify them.
+
+- **A component is a responsibility.** Name it for what it does for the
+  system or its users ("Remit scheduling", "Directory", "Feed delivery").
+  Mechanisms such as an HTTP edge, transport and auth, a rate limiter, a
+  persistence layer, a runtime host or a vendor stack are how a responsibility
+  is carried out. They belong inside the responsibility they serve, as parts
+  of it or as a utility, at a lower level.
+- **An interface is the information or responsibility that crosses the
+  boundary**: "Job status", "Delegation grants", "Information feed". The
+  transport (REST, MCP, a queue), the URL prefix, the auth guard and the
+  caller's role are attributes; record the transport in `kind` and the rest
+  in `meaning`. Test each interface name: if the transport changed, or admin
+  and user calls moved to one endpoint, would the name change? If yes, it
+  names a channel; rename it after what flows through it, and split it when
+  several kinds of information flow through the same channel.
+- **Decide where state lives.** By default, state belongs to the component
+  that owns its rules, even when every component writes to the same database;
+  a shared database is a deployment fact. Make data storage its own component
+  only when the design says so or when several components read the same data
+  and none owns it, and say which case applies in its `meaning`.
+- **Components that require each other are one component.** When two
+  siblings each use an interface the other provides, merge them at this level
+  and show the split one level down, unless the design says they are separate
+  and the mutual use is a finding (then keep the wrong direction as an
+  undeclared use).
+- **About five to nine parts per level.** Fewer suggests the level adds
+  nothing; more suggests a missing grouping. Above about 15 visible parts
+  (external systems do not count), nest.
+- **Recurse.** Open each component and repeat: its responsibilities, its
+  state, its interfaces. The lower the level, the closer the parts may come
+  to mechanisms; at the leaves, a part may be a single module.
+
+When the repository has a design (OpenSpec, an architecture document, the
+manifest), its components and interfaces are the model's, and the code is
+mapped onto them. Code that does not fit the design is a finding: report it,
+and show it as an undeclared use where it is a call the design does not allow.
+
 ## Modelling rules
 
-- **Components** come from the candidates and the explicit signals: a
-  directory, a facade module, a set of files with one responsibility. Give each
+- **Components** are the responsibilities from step 2, placed on the code
+  through the candidates and the explicit signals: a directory, a facade
+  module, a set of files with one responsibility. Give each
   an `id` (lowercase, digits, `.`, `_`, `-`; `system` is reserved), a short
   `name` and a one-line `meaning` taken from header comments where possible.
   `paths` are repository-relative prefixes ending in `/`, files, or globs. A
@@ -127,9 +195,9 @@ changed items from there.
   repository, or the service directory in a monorepo). External systems
   (other services, people, model providers) are root-level components with
   `"external": true` and no paths.
-- **Nest** when a level has more than about 15 visible parts (external systems
-  do not count): group siblings into a parent component and give the parent
-  interfaces of its own. When you nest a directory that has a barrel or facade
+- **Nest** by grouping siblings into a parent component and giving the
+  parent interfaces of its own (see the part counts in
+  [Logical structure](#logical-structure)). When you nest a directory that has a barrel or facade
   module (`index.ts`, `__init__.py`), give that module a part of its own or put
   it in a part; otherwise its re-exports show up as unclaimed files and
   unattributed references.
@@ -138,10 +206,11 @@ changed items from there.
   paths. Test support that is not named like a test (fixtures, harnesses) is
   mapped like any code; give it its own component so its calls do not blur
   the production parts.
-- **Interfaces** are named responsibilities ("Job lifecycle", "Read models"),
-  not file names. Start from the `usedBy` groups of a surface: symbols used by
-  the same set of components usually form one interface; split a group when it
-  mixes responsibilities. An interface has one `provider` and `requirers` that
+- **Interfaces** are named for the information or responsibility they carry
+  ("Job status", "Job requests"). Start from the `usedBy` groups of a surface:
+  symbols used by the same set of components usually form one interface; split
+  a group when it mixes responsibilities, and merge groups that carry the same
+  information to different requirers. An interface has one `provider` and `requirers` that
   are siblings of the provider. `bind` lists provider symbols: `name`,
   `Type#method`, `Type#*` (a type, its constructor and all its members) or
   `path/file.ts:name` when a name exists in several files. A symbol may be
@@ -172,7 +241,10 @@ changed items from there.
 - **Cross-process interfaces** (HTTP routes, MCP tools, webhooks, queues,
   databases, clients of other services) set `kind` (free text such as `http`,
   `mcp`, `webhook`, `queue`, `database`) and list `evidence` files. They have
-  no `bind`. Use the registrations and client modules from the signals.
+  no `bind`. Use the registrations and client modules from the signals, and
+  group the routes by the information they carry: routes that share a prefix
+  or a guard but serve different responsibilities are different interfaces,
+  and an admin route and a client route over the same data are one.
   External systems are root-level, so connect them to the root component that
   contains your code (provider or requirer), and list as evidence the files
   that serve or call them, wherever they sit inside. The hub delegates the
@@ -187,37 +259,61 @@ changed items from there.
   "title": "Job orchestrator",
   "components": [
     { "id": "orchestrator", "name": "Job orchestrator", "parent": null, "paths": [""],
-      "meaning": "Runs scheduled jobs and records their results" },
+      "meaning": "Runs jobs for new feed items and reports their results" },
     { "id": "feeds", "name": "Feed service", "parent": null, "external": true,
       "meaning": "Upstream service that publishes new items" },
-    { "id": "store", "name": "Persistence", "parent": "orchestrator",
-      "paths": ["src/store/"], "meaning": "One repository per aggregate behind a facade" },
-    { "id": "api", "name": "Operator API", "parent": "orchestrator",
-      "paths": ["src/api/"], "meaning": "HTTP routes for operators" },
-    { "id": "core", "name": "Core", "parent": "orchestrator",
-      "paths": ["src/core/"], "meaning": "Owns all job state transitions" },
+    { "id": "intake", "name": "Item intake", "parent": "orchestrator",
+      "paths": ["src/intake/", "src/api/hooks.ts"],
+      "meaning": "Accepts new items from the feed service and requests a job for each" },
+    { "id": "jobs", "name": "Job lifecycle", "parent": "orchestrator",
+      "paths": ["src/core/", "src/store/jobs.ts"],
+      "meaning": "Owns job state and its transitions; keeps that state in its own tables" },
+    { "id": "reporting", "name": "Result reporting", "parent": "orchestrator",
+      "paths": ["src/api/", "src/store/results.ts"],
+      "meaning": "Answers operators' questions about jobs and their results" },
     { "id": "infra", "name": "Infrastructure", "parent": "orchestrator",
       "paths": ["src/lib/", "src/config.ts"], "utility": true,
       "meaning": "Configuration, helpers and shared types" }
   ],
   "interfaces": [
-    { "id": "read-models", "name": "Read models", "provider": "store",
-      "requirers": ["api", "core"], "meaning": "Paged and point reads",
-      "bind": ["getJob", "listJobsPage", "JobRepository#find"] },
-    { "id": "job-state", "name": "Job state writes", "provider": "store",
-      "requirers": ["core"], "meaning": "Transactional writes of job state",
-      "bind": ["saveJob", "updateJob"] },
-    { "id": "feed-hook", "name": "Feed notification", "provider": "orchestrator",
+    { "id": "job-requests", "name": "Job requests", "provider": "jobs",
+      "requirers": ["intake"], "meaning": "Ask for a job, retry or cancel one",
+      "bind": ["requestJob", "retryJob", "cancelJob"] },
+    { "id": "job-status", "name": "Job status", "provider": "jobs",
+      "requirers": ["reporting"], "meaning": "Paged and point reads of jobs",
+      "bind": ["getJob", "listJobsPage"] },
+    { "id": "new-items", "name": "New items", "provider": "orchestrator",
       "requirers": ["feeds"], "kind": "webhook",
-      "meaning": "The feed service calls POST /hooks/feed when new items arrive",
+      "meaning": "The feed service posts each new item to POST /hooks/feed",
       "evidence": ["src/api/hooks.ts"] }
   ],
   "undeclared": [
-    { "interface": "job-state", "requirer": "api",
-      "reason": "src/core/index.ts says the core owns all state transitions; the API writes job state directly" }
+    { "interface": "job-requests", "requirer": "reporting",
+      "reason": "src/core/index.ts says operators only read jobs; the results page cancels jobs directly" }
   ]
 }
 ```
+
+## Reviewing the abstraction
+
+Before you submit, go through every level of the model:
+
+- Read the component names aloud as "the system ...": "the system delivers
+  feeds" works; "the system HTTP edge" does not. Rename or regroup the parts
+  that fail.
+- Look for interface and component names built on transport or technology
+  words (API, REST, HTTP, MCP, endpoint, controller, client, server, store,
+  database, host). Some are right, such as an external system's own API at
+  the root level; most name a channel or a layer.
+- Look for an interface whose bindings land in several unrelated parts of its
+  provider, and for two interfaces of one provider that carry the same
+  information. The first is a channel holding several responsibilities; the
+  second is one responsibility split by caller or prefix.
+- Look for siblings that require each other, and for a data storage
+  component whose existence nobody decided.
+- Compare the top level with the responsibility list from step 2. A
+  responsibility that disappeared, or a part nobody would list as something
+  the system does, needs a reason.
 
 ## Reading the check
 
