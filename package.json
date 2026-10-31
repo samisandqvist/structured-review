@@ -37,7 +37,7 @@
     "@axe-core/playwright": "4.14.0",
     "@eslint/js": "10.0.1",
     "@playwright/test": "1.64.1",
-    "@stryker-mutator/core": "10.0.0",
+    "@stryker-mutator/core": "10.1.1",
     "@stryker-mutator/vitest-runner": "10.0.0",
     "@types/node": "22.20.5",
     "@typescript/native": "npm:typescript@^7.0.2",
@@ -49,10 +49,10 @@
     "eslint-plugin-sonarjs": "4.2.2",
     "fast-check": "4.10.2",
     "globals": "17.13.0",
-    "knip": "6.42.1",
+    "knip": "6.43.0",
     "prettier": "3.9.10",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
-    "typescript-eslint": "8.72.0",
+    "typescript-eslint": "8.72.1",
     "vitest": "^5.0.5"
   },
   "pnpm": {
