@@ -1541,7 +1541,8 @@ textarea:focus {
   font-family: var(--cm-mono);
   font-size: 12px;
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 0 8px;
   justify-content: space-between;
   padding: 3px 6px;
   border-radius: 4px;
@@ -1550,13 +1551,17 @@ textarea:focus {
 .cmap-panel ul.list li:nth-child(odd) {
   background: var(--cm-bg);
 }
+/* The symbol keeps a readable width; a long location wraps onto its own line. */
 .cmap-panel ul.list .sym {
+  flex: 1 1 14ch;
   overflow-wrap: anywhere;
   min-width: 0;
 }
 .cmap-panel ul.list .loc {
+  margin-left: auto;
   color: var(--cm-muted);
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 .cmap-panel ul.list li.bad .sym,
 .cmap-panel ul.list li.bad .loc {

@@ -16,7 +16,8 @@ architecture documents, ADRs, the component manifest) and otherwise from the
 docs and the system's entry points, and then assigns the code to those
 responsibilities. Components are named for what they do; interfaces are named
 for the information that crosses them, with the transport recorded as `kind`.
-It decides where state lives, merges siblings that require each other, and
+It decides where state lives, resolves siblings that require each other (by
+merging them, moving the edge, or recording the wrong direction as a fault), and
 reviews the names for channels and layers before it submits. The check proves
 the model matches the code; this process keeps it at a logical level. Where
 the code departs from the repository's design, the skill reports it.

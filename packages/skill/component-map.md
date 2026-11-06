@@ -95,7 +95,8 @@ srev map get --session <id>                         # stored model, URL, stalene
    and fix what fails, checking again after each change. Then
    `srev map submit --session <id> --model <file>`; give the user the printed
    `url` (or pass `--open`). Summarize: the top-level parts, the design
-   decisions you made (where state lives, what you merged), where the code
+   decisions you made (where state lives, how you resolved each pair of
+   siblings that required each other), where the code
    departs from the repository's design, the undeclared uses you kept and
    why, hidden utilities, unclaimed files and gaps.
 6. Corrections: when the user says a concept is wrong ("these two are one
@@ -154,11 +155,23 @@ responsibilities down, and use the code to place and verify them.
   a shared database is a deployment fact. Make data storage its own component
   only when the design says so or when several components read the same data
   and none owns it, and say which case applies in its `meaning`.
-- **Components that require each other are one component.** When two
-  siblings each use an interface the other provides, merge them at this level
-  and show the split one level down, unless the design says they are separate
-  and the mutual use is a finding (then keep the wrong direction as an
-  undeclared use).
+- **Siblings that require each other need a decision.** When two siblings
+  each use an interface the other provides, find out which of three cases
+  applies and resolve it:
+  - *One responsibility cut in two*: the calls in both directions serve the
+    same purpose. Merge the siblings at this level and show the split one
+    level down.
+  - *The edge falls in the wrong place*: one sibling holds a piece the other
+    needs (a guard, a lookup, a shared rule). Move that piece to the sibling
+    that owns its rules, or give it a sibling of its own, so the dependency
+    runs one way.
+  - *An architecture fault*: the design allows only one direction and the
+    code calls the other way. Keep both siblings and record the wrong
+    direction as an undeclared use, citing the design.
+
+  Report which case you chose for each pair and why. Leave a cycle in the
+  model only when the design explicitly allows both directions, and say so in
+  the summary.
 - **About five to nine parts per level.** Fewer suggests the level adds
   nothing; more suggests a missing grouping. Above about 15 visible parts
   (external systems do not count), nest.
@@ -300,8 +313,9 @@ Before you submit, go through every level of the model:
   provider, and for two interfaces of one provider that carry the same
   information. The first is a channel holding several responsibilities; the
   second is one responsibility split by caller or prefix.
-- Look for siblings that require each other, and for a data storage
-  component whose existence nobody decided.
+- Look for siblings that require each other and check that each pair has a
+  decision (merged, edge moved, or a fault recorded as an undeclared use).
+  Look for a data storage component whose existence nobody decided.
 - Compare the top level with the responsibility list from step 2. A
   responsibility that disappeared, or a part nobody would list as something
   the system does, needs a reason.
