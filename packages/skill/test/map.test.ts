@@ -1,6 +1,6 @@
 // `srev map …`: the component-map client, its pretty output and the CLI commands.
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -193,6 +193,35 @@ describe("srev map commands", () => {
     writeFileSync(bad, "{");
     await expect(runCli(["map", "check", "--session", "s1", "--model", bad])).rejects.toThrow(/is not valid JSON/);
     rmSync(bad);
+  });
+});
+
+describe("srev map export", () => {
+  it("exports the stored map as a page file", async () => {
+    const out = join(dir, "map.html");
+    const fetchSpy = stubFetch({ ...respond(200, {}), text: async () => "<!doctype html>ünï" });
+    const log = captureLog();
+    await runCli(["map", "export", "--session", "s1", "--port", "4999", "--out", out]);
+    expect(fetchSpy.mock.calls[0]![0]).toBe(`${BASE}/api/sessions/s1/map/export`);
+    expect(readFileSync(out, "utf8")).toBe("<!doctype html>ünï");
+    expect(JSON.parse(log.mock.calls[0]![0] as string)).toEqual({ file: out, bytes: 20 });
+  });
+
+  it("exports to component-map.html by default and reports hub errors", async () => {
+    const cwd = process.cwd();
+    process.chdir(dir);
+    try {
+      stubFetch({ ...respond(200, {}), text: async () => "x".repeat(2048) });
+      const log = captureLog();
+      await runCli(["map", "export", "--session", "s1", "--port", "4999", "--pretty"]);
+      expect(log.mock.calls[0]![0]).toBe(`map exported: ${join(dir, "component-map.html")} (2 KB)`);
+      stubFetch(respond(404, { error: "no component map for this session" }));
+      await expect(runCli(["map", "export", "--session", "s1", "--port", "4999"])).rejects.toThrow(
+        /^API error 404: .*no component map/,
+      );
+    } finally {
+      process.chdir(cwd);
+    }
   });
 });
 

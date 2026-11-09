@@ -15,11 +15,15 @@ const artifactPaths = [
 ];
 export function buildPluginArtifacts(root, output) {
   const webDist = join(output, "web-dist");
-  execFileSync("pnpm", ["--filter", "@srev/web", "exec", "vite", "build", "--outDir", webDist, "--emptyOutDir"], {
-    cwd: root,
-    env: { ...process.env, NODE_ENV: "production" },
-    stdio: "inherit",
-  });
+  const vite = (args) =>
+    execFileSync("pnpm", ["--filter", "@srev/web", "exec", "vite", "build", ...args, "--emptyOutDir"], {
+      cwd: root,
+      env: { ...process.env, NODE_ENV: "production" },
+      stdio: "inherit",
+    });
+  // The hub's UI, then the exported map page bundle inside it (as `pnpm build` does).
+  vite(["--outDir", webDist]);
+  vite(["-c", "vite.export.config.ts", "--outDir", join(webDist, "export")]);
   execFileSync(process.execPath, ["scripts/build-plugin.mjs"], {
     cwd: root,
     env: { ...process.env, SREV_PLUGIN_OUTPUT_ROOT: output, SREV_WEB_DIST: webDist },

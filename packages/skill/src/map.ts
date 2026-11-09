@@ -1,6 +1,7 @@
 // `srev map …`: evidence for component inference, the dry-run fidelity
-// check, submit and read, as served by /api/sessions/:id/map.
-import { readFileSync } from "node:fs";
+// check, submit, read and export, as served by /api/sessions/:id/map.
+import { readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { openInBrowser } from "./api.js";
 
 interface MapCheckIssue {
@@ -104,6 +105,12 @@ export async function submitMap(
 
 async function getMap(base: string, sessionId: string): Promise<StoredMap> {
   return (await request(mapPath(base, sessionId))).body as StoredMap;
+}
+
+async function getMapPage(base: string, sessionId: string): Promise<string> {
+  const res = await fetch(`${mapPath(base, sessionId)}/export`);
+  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  return res.text();
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -259,10 +266,21 @@ async function getCommand(base: string, flags: Flags): Promise<MapCommandResult>
   };
 }
 
+/** Writes the stored map as one self-contained HTML page (default `component-map.html`). */
+async function exportCommand(base: string, flags: Flags): Promise<MapCommandResult> {
+  const sessionId = flag(flags, "session");
+  const file = resolve(typeof flags.out === "string" && flags.out !== "" ? flags.out : "component-map.html");
+  const page = await getMapPage(base, sessionId);
+  writeFileSync(file, page);
+  const bytes = Buffer.byteLength(page);
+  return { json: { file, bytes }, pretty: `map exported: ${file} (${Math.ceil(bytes / 1024)} KB)` };
+}
+
 /** `srev map <sub>` handlers keyed by the full command name. */
 export const MAP_COMMANDS: Record<string, (base: string, flags: Flags) => Promise<MapCommandResult>> = {
   "map evidence": evidenceCommand,
   "map check": checkCommand,
   "map submit": submitCommand,
   "map get": getCommand,
+  "map export": exportCommand,
 };

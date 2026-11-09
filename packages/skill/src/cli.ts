@@ -51,6 +51,7 @@ const USAGE = `usage:
   srev map check --session <id> --model <file.json>
   srev map submit --session <id> --model <file.json> [--open]
   srev map get --session <id>
+  srev map export --session <id> [--out <file.html>]
   srev gc [--repo <path>] [--all]
   srev shutdown
 global flags: --port N (hub port), --pretty (human-readable output)`;

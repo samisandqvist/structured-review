@@ -158,6 +158,49 @@ describe("component map routes", () => {
   });
 });
 
+describe("component map export route", () => {
+  let web: string;
+  beforeEach(() => {
+    web = mkdtempSync(join(tmpdir(), "srev-web-"));
+    mkdirSync(join(web, "export"));
+    writeFileSync(join(web, "index.html"), "<!doctype html>");
+    writeFileSync(join(web, "export", "map.js"), "console.log('map')");
+    writeFileSync(join(web, "export", "map.css"), "body{margin:0}");
+  });
+  afterEach(() => rmSync(web, { recursive: true, force: true }));
+  const withWeb = () =>
+    createApp({ db, graphProvider: provider, repoRoot: root, providerName: "scip", webDistPath: web });
+
+  it("serves the stored map as a self-contained page", async () => {
+    app = withWeb();
+    const id = await session();
+    await send(`/api/sessions/${id}/map`, "PUT", MODEL);
+    const res = await app.request(`/api/sessions/${id}/map/export`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toContain("text/html");
+    const html = await res.text();
+    expect(html).toContain("<title>Fixture · component map</title>");
+    expect(html).toContain("<style>body{margin:0}</style>");
+    expect(html).toContain(`<script type="module">console.log('map')</script>`);
+    const data = /<script type="application\/json" id="srev-map">(.*?)<\/script>/s.exec(html)![1]!;
+    expect(JSON.parse(data)).toMatchObject({ model: { title: "Fixture" }, map: { title: "Fixture" }, stale: false });
+  });
+
+  it("answers 404 without a session or a map and 503 without an export bundle", async () => {
+    app = withWeb();
+    expect((await app.request("/api/sessions/nope/map/export")).status).toBe(404);
+    const id = await session();
+    expect((await app.request(`/api/sessions/${id}/map/export`)).status).toBe(404);
+    await send(`/api/sessions/${id}/map`, "PUT", MODEL);
+    rmSync(join(web, "export"), { recursive: true });
+    const res = await app.request(`/api/sessions/${id}/map/export`);
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: "the hub's web UI has no export bundle; rebuild it with `pnpm build`" });
+    const bare = createApp({ db, graphProvider: provider, repoRoot: root, providerName: "scip" });
+    expect((await bare.request(`/api/sessions/${id}/map/export`)).status).toBe(503);
+  });
+});
+
 describe("component map route errors", () => {
   it("answers 404 for an unknown session", async () => {
     for (const [path, method] of [

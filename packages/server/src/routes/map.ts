@@ -14,6 +14,7 @@ import { buildEvidence } from "../map/evidence.js";
 import { checkMap } from "../map/check.js";
 import { objectType } from "../map/base.js";
 import { compareVersions } from "../map/change.js";
+import { exportPage, loadExportAssets } from "../map/export.js";
 import type { MapModel, ResolvedMap } from "../map/types.js";
 import type { ReviewSession } from "../types.js";
 import { snapshot, staleness } from "../staleness.js";
@@ -98,20 +99,44 @@ export function createMapRoute(ctx: AppContext) {
     }),
   );
 
-  router.get("/:id/map", (c) => {
-    if (!getSession(ctx.db, c.req.param("id"))) return c.json({ error: "not found" }, 404);
-    const stored = getMap(ctx.db, c.req.param("id"));
-    if (!stored) return c.json({ error: "no component map for this session" }, 404);
-    return c.json({
+  addStoredMapRoutes(router, ctx);
+  return router;
+}
+
+/** Reading the stored map: as JSON for the web view, and as a self-contained page. */
+function addStoredMapRoutes(router: Hono, ctx: AppContext): void {
+  const storedMap = (id: string) => {
+    const stored = getMap(ctx.db, id);
+    if (!stored) return undefined;
+    return {
       model: stored.model,
       map: stored.map,
       headSha: stored.headSha,
       createdAt: stored.createdAt,
-      ...staleness(root, stored.headSha, stored.repoFingerprint),
-    });
-  });
+      ...staleness(ctx.repoRoot!, stored.headSha, stored.repoFingerprint),
+    };
+  };
+  const withStored = (handler: (c: Context, stored: NonNullable<ReturnType<typeof storedMap>>) => Response) => {
+    return (c: Context) => {
+      if (!getSession(ctx.db, c.req.param("id")!)) return c.json({ error: "not found" }, 404);
+      const stored = storedMap(c.req.param("id")!);
+      if (!stored) return c.json({ error: "no component map for this session" }, 404);
+      return handler(c, stored);
+    };
+  };
 
-  return router;
+  router.get(
+    "/:id/map",
+    withStored((c, stored) => c.json(stored)),
+  );
+  router.get(
+    "/:id/map/export",
+    withStored((c, stored) => {
+      const assets = ctx.webDistPath ? loadExportAssets(ctx.webDistPath) : undefined;
+      if (!assets) return c.json({ error: "the hub's web UI has no export bundle; rebuild it with `pnpm build`" }, 503);
+      return c.html(exportPage(stored, assets));
+    }),
+  );
 }
 
 const headIndex = (ctx: AppContext) => ctx.graphProvider.getReferenceIndex!();
