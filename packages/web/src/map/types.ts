@@ -77,7 +77,8 @@ export interface ResolvedInterface extends MapInterface {
   bindings: Binding[];
   sites: CallSite[];
   evidenceFiles: { file: string; component: string }[];
-  reasons: { requirer: string; reason: string }[];
+  /** Why a requirer, or one part inside it (`component`), uses the interface without being declared. */
+  reasons: { requirer: string; component?: string; reason: string }[];
 }
 
 export interface ResolvedComponent extends MapComponent {

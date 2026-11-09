@@ -7,7 +7,7 @@ import type { ReferenceIndex } from "../graph/references.js";
 import { resolveBindings, type ResolvedBindings } from "./bindings.js";
 import { ComponentTree } from "./ownership.js";
 import { resolveReferences } from "./resolve.js";
-import { deriveDelegations, fileCounts } from "./rules.js";
+import { deriveDelegations, fileCounts, undeclaredRule } from "./rules.js";
 import type {
   CallSite,
   CrossingChange,
@@ -44,8 +44,7 @@ export interface ChangeInput {
 export function compareVersions(input: ChangeInput, baseSha: string): MapChange {
   const tree = new ComponentTree(input.model.components);
   const bound = resolveBindings(input.model, tree, input.head);
-  const declared = new Map(input.model.interfaces.map((i) => [i.id, new Set(i.requirers)]));
-  const refs = resolveReferences(input.head, tree, bound, declared);
+  const refs = resolveReferences(input.head, tree, bound, undeclaredRule(input.model, tree));
   const changedPaths = new Set(input.files.flatMap((f) => [f.path, ...(f.oldPath ? [f.oldPath] : [])]));
   const keep = siteGuard(input.base, bound, changedPaths);
   const headSites = input.model.interfaces.map((i) => ({ id: i.id, sites: refs.sites.get(i.id) ?? [] }));

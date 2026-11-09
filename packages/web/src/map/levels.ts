@@ -57,14 +57,46 @@ export function requirersOf(i: ResolvedInterface): Map<string, boolean> {
   return out;
 }
 
-export function undeclaredFindings(
-  map: ResolvedMap,
-): { iface: ResolvedInterface; requirer: string; sites: CallSite[] }[] {
+/** Whether a component is `root` or inside it. */
+function withinOf(map: ResolvedMap): (id: string, root: string) => boolean {
+  const parentOf = new Map(map.components.map((c) => [c.id, c.parent]));
+  return (id, root) => {
+    for (let at: string | null | undefined = id; at != null; at = parentOf.get(at)) if (at === root) return true;
+    return false;
+  };
+}
+
+export interface UndeclaredFinding {
+  iface: ResolvedInterface;
+  requirer: string;
+  /** Set when the requirer is declared and only this part inside it is kept out of the interface. */
+  part?: string;
+  reason?: string;
+  sites: CallSite[];
+}
+
+/** Undeclared call sites grouped by requirer and, for scoped entries, by the part they come from. */
+export function undeclaredFindings(map: ResolvedMap): UndeclaredFinding[] {
+  const within = withinOf(map);
   return map.interfaces.flatMap((iface) => {
-    const byRequirer = new Map<string, CallSite[]>();
-    for (const s of iface.sites.filter((x) => x.undeclared))
-      byRequirer.set(s.requirer, [...(byRequirer.get(s.requirer) ?? []), s]);
-    return [...byRequirer].map(([requirer, sites]) => ({ iface, requirer, sites }));
+    const groups = new Map<string, UndeclaredFinding>();
+    for (const s of iface.sites.filter((x) => x.undeclared)) {
+      const own = iface.reasons.filter((r) => r.requirer === s.requirer);
+      const entry =
+        own.find((r) => r.component !== undefined && within(s.component, r.component)) ??
+        own.find((r) => r.component === undefined);
+      const key = `${s.requirer}\0${entry?.component ?? ""}`;
+      const group = groups.get(key) ?? {
+        iface,
+        requirer: s.requirer,
+        ...(entry?.component ? { part: entry.component } : {}),
+        ...(entry ? { reason: entry.reason } : {}),
+        sites: [],
+      };
+      group.sites.push(s);
+      groups.set(key, group);
+    }
+    return [...groups.values()];
   });
 }
 
@@ -72,6 +104,7 @@ class LevelBuilder {
   readonly level: Level;
   private parentOf: Map<string, string | null>;
   private inLevel: Set<string>;
+  private within: (id: string, root: string) => boolean;
 
   constructor(
     private map: ResolvedMap,
@@ -81,6 +114,7 @@ class LevelBuilder {
     this.level = { id, children, neighbors: [], ports: new Map(), portsOf: new Map(), edges: new Map() };
     this.parentOf = new Map(map.components.map((c) => [c.id, c.parent]));
     this.inLevel = new Set(children);
+    this.within = withinOf(map);
   }
 
   build(): Level {
@@ -160,11 +194,6 @@ class LevelBuilder {
         );
       }
     }
-  }
-
-  private within(id: string, root: string): boolean {
-    for (let at: string | null | undefined = id; at != null; at = this.parentOf.get(at)) if (at === root) return true;
-    return false;
   }
 }
 

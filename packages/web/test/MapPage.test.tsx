@@ -130,6 +130,25 @@ describe("MapPage panel and states", () => {
     expect(panel().textContent).toContain("Red: uses this interface, but the model does not list it as a requirer.");
   });
 
+  it("words a scoped finding as a part kept out of a declared requirer", async () => {
+    const m = fixtureMap();
+    const reads = m.interfaces.find((i) => i.id === "reads")!;
+    reads.sites[1]!.undeclared = true;
+    reads.reasons = [{ requirer: "core", component: "engine", reason: "engine reads through support" }];
+    stubMap(200, { map: m });
+    const { container } = renderPage();
+    await node(container, "api");
+    const finding = within(panel()).getByRole("button", { name: /Engine \(in Core\) uses Read models/ });
+    expect(finding.textContent).toContain(
+      "Engine (in Core) uses Read models of Persistence. Core may use it, but the model keeps this part out of it.",
+    );
+    expect(finding.textContent).toContain("engine reads through support");
+    expect(finding.textContent).not.toContain("reserves");
+    fireEvent.click(finding);
+    expect(panel().textContent).toContain("Red call sites: a part the model keeps out of this interface");
+    expect(panel().textContent).toContain("Core › Engine: engine reads through support");
+  });
+
   it("warns when the code changed since the map was built", async () => {
     stubMap(200, { stale: true, staleReason: "head-moved" });
     renderPage();

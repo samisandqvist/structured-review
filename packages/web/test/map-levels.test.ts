@@ -91,6 +91,21 @@ describe("buildLevel", () => {
     expect(undeclaredFindings(map).map((f) => `${f.requirer} ${f.iface.id} ${f.sites.length}`)).toEqual([
       "api writes 1",
     ]);
+    expect(undeclaredFindings(map)[0]).toMatchObject({ reason: "the core owns all job state" });
+    expect(undeclaredFindings(map)[0]!.part).toBeUndefined();
+  });
+
+  it("groups a scoped finding by the part inside its declared requirer", () => {
+    const m = fixtureMap();
+    const reads = m.interfaces.find((i) => i.id === "reads")!;
+    reads.sites[1]!.undeclared = true;
+    reads.reasons = [{ requirer: "core", component: "engine", reason: "engine reads through support" }];
+    const scoped = undeclaredFindings(m).find((f) => f.iface.id === "reads")!;
+    expect(scoped).toMatchObject({ requirer: "core", part: "engine", reason: "engine reads through support" });
+    expect(scoped.sites.map((s) => s.component)).toEqual(["engine"]);
+    const level = buildLevel(m, "core");
+    expect(level.edges.get("engine|reads|require>core|reads|require")!.kind).toBe("undeclared");
+    expect(level.edges.get("core|reads|require>store|reads|provide")!.kind).toBe("assembly");
   });
 });
 

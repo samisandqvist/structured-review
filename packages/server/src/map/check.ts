@@ -14,6 +14,7 @@ import {
   resolveEvidence,
   unclaimedFiles,
   undeclaredIssues,
+  undeclaredRule,
 } from "./rules.js";
 import type { CheckIssue, CheckReport, MapModel, ResolvedInterface, ResolvedMap } from "./types.js";
 
@@ -26,8 +27,7 @@ export function checkMap(
   if (issues.length > 0) return { model, map: unresolvedMap(model, issues, index.gaps) };
   const tree = new ComponentTree(model.components);
   const bound = resolveBindings(model, tree, index);
-  const declared = new Map(model.interfaces.map((i) => [i.id, new Set(i.requirers)]));
-  const refs = resolveReferences(index, tree, bound, declared);
+  const refs = resolveReferences(index, tree, bound, undeclaredRule(model, tree));
   const evidenceIssues: CheckIssue[] = [];
   const interfaces = model.interfaces.map((i): ResolvedInterface => {
     const resolved: ResolvedInterface = {
@@ -37,7 +37,7 @@ export function checkMap(
       evidenceFiles: [],
       reasons: model.undeclared
         .filter((u) => u.interface === i.id)
-        .map((u) => ({ requirer: u.requirer, reason: u.reason })),
+        .map((u) => ({ requirer: u.requirer, ...(u.component ? { component: u.component } : {}), reason: u.reason })),
     };
     const evidence = resolveEvidence(resolved, tree, fileExists);
     evidenceIssues.push(...evidence.issues);
@@ -47,7 +47,7 @@ export function checkMap(
     ...bound.issues,
     ...referenceIssues(refs),
     ...requirerIssues(interfaces),
-    ...undeclaredIssues(model, interfaces),
+    ...undeclaredIssues(model, interfaces, tree),
     ...evidenceIssues,
   ];
   const counts = fileCounts(index.files, tree);

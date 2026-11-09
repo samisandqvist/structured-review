@@ -35,7 +35,13 @@ const modelSchema = z.object({
   title: z.string(),
   components: z.array(componentSchema),
   interfaces: z.array(interfaceSchema).default([]),
-  undeclared: z.array(z.object({ interface: z.string(), requirer: z.string(), reason: z.string() })).default([]),
+  undeclared: z
+    .array(
+      z
+        .object({ interface: z.string(), requirer: z.string(), component: z.string().optional(), reason: z.string() })
+        .strict(),
+    )
+    .default([]),
 });
 
 const EMPTY_MODEL: MapModel = { title: "", components: [], interfaces: [], undeclared: [] };
@@ -169,13 +175,39 @@ function requirerIssues(
 }
 
 function undeclaredIssues(model: MapModel): string[] {
-  const interfaces = new Set(model.interfaces.map((i) => i.id));
-  const components = new Set(model.components.map((c) => c.id));
+  const interfaces = new Map(model.interfaces.map((i) => [i.id, i]));
+  const components = new Map(model.components.map((c) => [c.id, c]));
   return model.undeclared.flatMap((u) => {
-    if (!interfaces.has(u.interface)) return [`undeclared use names unknown interface '${u.interface}'`];
+    const iface = interfaces.get(u.interface);
+    if (!iface) return [`undeclared use names unknown interface '${u.interface}'`];
     if (!components.has(u.requirer))
       return [`undeclared use of '${u.interface}' names unknown component '${u.requirer}'`];
     if (!u.reason.trim()) return [`undeclared use of '${u.interface}' by '${u.requirer}' needs a reason`];
-    return [];
+    return u.component === undefined ? [] : scopeIssues(u, iface, components);
   });
+}
+
+/** A scoped entry names a part strictly inside a requirer that the interface declares. */
+function scopeIssues(
+  u: MapModel["undeclared"][number],
+  iface: MapInterface,
+  components: Map<string, MapComponent>,
+): string[] {
+  const at = `undeclared use of '${u.interface}' by '${u.requirer}'`;
+  if (!components.has(u.component!)) return [`${at} names unknown part '${u.component}'`];
+  if (
+    u.component === u.requirer ||
+    cycleFrom(u.component!, components) ||
+    !isInside(u.component!, u.requirer, components)
+  )
+    return [`${at} names '${u.component}', which is not a part inside '${u.requirer}'`];
+  if (!iface.requirers.includes(u.requirer))
+    return [`${at} is scoped to '${u.component}', but '${u.requirer}' is not a declared requirer; drop the scope`];
+  return [];
+}
+
+function isInside(id: string, root: string, components: Map<string, MapComponent>): boolean {
+  for (let at = components.get(id)?.parent ?? null; at !== null; at = components.get(at)?.parent ?? null)
+    if (at === root) return true;
+  return false;
 }

@@ -210,6 +210,52 @@ describe("parseMapModel structural rules for undeclared uses", () => {
   });
 });
 
+describe("parseMapModel structural rules for scoped undeclared uses", () => {
+  const withPart = (component: string) => (m: Example) => {
+    m.components.push({ id: "admin", name: "Admin", parent: "api", paths: ["src/api/admin/"], meaning: "Admin" });
+    Object.assign(m.undeclared[0]!, { component });
+  };
+
+  it("accepts a part inside a declared requirer", () => {
+    expect(issuesOf(withPart("admin"))).toEqual([]);
+  });
+
+  it.each<[string, (m: Example) => void, string]>([
+    ["unknown part", withPart("nope"), "undeclared use of 'read-models' by 'api' names unknown part 'nope'"],
+    [
+      "the requirer itself",
+      withPart("api"),
+      "undeclared use of 'read-models' by 'api' names 'api', which is not a part inside 'api'",
+    ],
+    [
+      "a part outside the requirer",
+      withPart("store"),
+      "undeclared use of 'read-models' by 'api' names 'store', which is not a part inside 'api'",
+    ],
+    [
+      "a requirer that is not declared",
+      (m) => {
+        withPart("admin")(m);
+        m.interfaces[0]!.requirers = [];
+      },
+      "undeclared use of 'read-models' by 'api' is scoped to 'admin', but 'api' is not a declared requirer; drop the scope",
+    ],
+  ])("%s", (_name, mutate, message) => {
+    expect(issuesOf(mutate)).toContain(message);
+  });
+
+  it("stops at a parent cycle instead of looping", () => {
+    const issues = issuesOf((m) => {
+      withPart("admin")(m);
+      m.components.push({ id: "loop", name: "Loop", parent: "admin", paths: ["src/loop/"], meaning: "" });
+      m.components.find((c) => c.id === "admin")!.parent = "loop";
+    });
+    expect(issues).toContain(
+      "undeclared use of 'read-models' by 'api' names 'admin', which is not a part inside 'api'",
+    );
+  });
+});
+
 describe("parseMapModel unknown keys", () => {
   it("reports a misspelled key", () => {
     const m = example();

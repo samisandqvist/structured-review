@@ -455,6 +455,65 @@ describe("checkMap type wildcards", () => {
   });
 });
 
+describe("checkMap scoped undeclared uses", () => {
+  // core reads jobs from support (allowed) and from engine (the design keeps engine off the store).
+  const idx = index([...REFS, ["src/core/support.ts", GET_JOB, "helper", 2]]);
+  const scoped = { interface: "reads", requirer: "core", component: "engine", reason: "engine reads through support" };
+  const scopedRun = (mutate: (m: Model) => void = () => {}) =>
+    run((m) => {
+      (m.undeclared as unknown[]).push({ ...scoped });
+      mutate(m);
+    }, idx);
+  const readsSites = (map: ReturnType<typeof run>) =>
+    map.interfaces
+      .find((i) => i.id === "reads")!
+      .sites.filter((s) => s.requirer === "core")
+      .map((s) => [s.component, s.undeclared]);
+
+  it("marks only the scoped part's call sites undeclared and keeps the requirer declared", () => {
+    const map = scopedRun();
+    expect(map.report.issues).toEqual([]);
+    expect(readsSites(map)).toEqual([
+      ["engine", true],
+      ["support", false],
+    ]);
+    expect(map.interfaces.find((i) => i.id === "reads")!.reasons).toEqual([
+      { requirer: "core", component: "engine", reason: "engine reads through support" },
+    ]);
+    expect(map.report.coverage.undeclared).toBe(2);
+  });
+
+  it("follows the named part and leaves sites alone without a scoped entry", () => {
+    expect(readsSites(run(() => {}, idx))).toEqual([
+      ["engine", false],
+      ["support", false],
+    ]);
+    const other = scopedRun((m) => ((m.undeclared[1] as { component: string }).component = "support"));
+    expect(other.report.issues).toEqual([]);
+    expect(readsSites(other)).toEqual([
+      ["engine", false],
+      ["support", true],
+    ]);
+  });
+
+  it("reports a stale scoped entry whose part makes no calls", () => {
+    const issues = messages((m) => {
+      m.components.push({ id: "idle", name: "Idle", parent: "core", paths: ["src/core/idle/"], meaning: "" });
+      (m.undeclared as unknown[]).push({ ...scoped, component: "idle" });
+    }, idx);
+    expect(issues).toEqual([
+      "undeclared: undeclared entry for 'reads' by 'core' in 'idle' has no undeclared call sites",
+    ]);
+  });
+
+  it("refuses a declared requirer whose every call site is scoped out", () => {
+    const issues = messages((m) => (m.undeclared as unknown[]).push({ ...scoped }));
+    expect(issues).toEqual([
+      "requirer: declared requirer 'core' of interface 'reads' has only undeclared call sites; remove it from requirers and drop the scope of its undeclared entries",
+    ]);
+  });
+});
+
 describe("checkMap paths", () => {
   it("rejects evidence paths outside the repository", () => {
     expect(messages((m) => (m.interfaces[3]!.evidence = ["../secrets.ts", "/etc/hosts"]))).toEqual(

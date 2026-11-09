@@ -73,19 +73,24 @@ function Findings({ map, onOpen }: Pick<PanelProps, "map" | "onOpen">) {
       {findings.map((f) => (
         <button
           type="button"
-          key={`${f.iface.id}:${f.requirer}`}
+          key={`${f.iface.id}:${f.requirer}:${f.part ?? ""}`}
           className="finding"
           onClick={() => onOpen(parentOf(f.iface.provider), { type: "iface", id: f.iface.id })}
         >
-          <b>{name(f.requirer)}</b> uses <b>{f.iface.name}</b> of {name(f.iface.provider)}
-          {f.iface.requirers.length ? `, which the model reserves for ${f.iface.requirers.map(name).join(", ")}` : ""}.
-          {f.iface.reasons
-            .filter((r) => r.requirer === f.requirer)
-            .map((r) => (
-              <span key={r.requirer} className="reason">
-                {r.reason}
-              </span>
-            ))}
+          {f.part ? (
+            <>
+              <b>{name(f.part)}</b> (in {name(f.requirer)})
+            </>
+          ) : (
+            <b>{name(f.requirer)}</b>
+          )}{" "}
+          uses <b>{f.iface.name}</b> of {name(f.iface.provider)}
+          {f.part
+            ? `. ${name(f.requirer)} may use it, but the model keeps this part out of it`
+            : f.iface.requirers.length
+              ? `, which the model reserves for ${f.iface.requirers.map(name).join(", ")}`
+              : ""}
+          .{f.reason && <span className="reason">{f.reason}</span>}
           {f.sites.map((s) => (
             <code key={`${s.file}:${s.line}`}>
               {s.file}:{s.line} {s.symbol}
@@ -472,9 +477,15 @@ function InterfacePanel({
       {[...requirers.values()].some(Boolean) && (
         <p className="muted">Red: uses this interface, but the model does not list it as a requirer.</p>
       )}
+      {iface.sites.some((s) => s.undeclared && requirers.get(s.requirer) === false) && (
+        <p className="muted">
+          Red call sites: a part the model keeps out of this interface, inside a declared requirer.
+        </p>
+      )}
       {iface.reasons.map((r) => (
-        <p key={r.requirer} className="reason">
-          {nameOf(map, r.requirer)}: {r.reason}
+        <p key={`${r.requirer}:${r.component ?? ""}`} className="reason">
+          {nameOf(map, r.requirer)}
+          {r.component ? ` › ${nameOf(map, r.component)}` : ""}: {r.reason}
         </p>
       ))}
       {change && <InterfaceChange iface={iface} change={change} />}

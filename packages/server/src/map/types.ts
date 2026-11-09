@@ -29,6 +29,15 @@ export interface MapInterface {
 interface UndeclaredUse {
   interface: string;
   requirer: string;
+  /** A part inside a declared requirer that should not use the interface; omitted, the whole requirer is undeclared. */
+  component?: string;
+  reason: string;
+}
+
+/** Why a requirer, or one part inside it, uses an interface it should not. */
+export interface UndeclaredReason {
+  requirer: string;
+  component?: string;
   reason: string;
 }
 
@@ -77,7 +86,7 @@ export interface ResolvedInterface extends MapInterface {
   bindings: Binding[];
   sites: CallSite[];
   evidenceFiles: { file: string; component: string }[];
-  reasons: { requirer: string; reason: string }[];
+  reasons: UndeclaredReason[];
 }
 
 interface ResolvedComponent extends MapComponent {

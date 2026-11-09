@@ -7,6 +7,9 @@ import type { ResolvedBindings } from "./bindings.js";
 import type { ComponentTree } from "./ownership.js";
 import type { CallSite, CheckIssue, CheckReport } from "./types.js";
 
+/** Whether a call site from `component`, attributed to `requirer`, is an undeclared use of `iface`. */
+export type UndeclaredRule = (iface: string, requirer: string, component: string) => boolean;
+
 const MAX_SAMPLES = 5;
 const MAX_TYPE_SYMBOLS = 8;
 
@@ -47,7 +50,7 @@ class Resolver {
   constructor(
     private tree: ComponentTree,
     private bound: ResolvedBindings,
-    private declared: Map<string, Set<string>>,
+    private isUndeclared: UndeclaredRule,
   ) {}
 
   add(ref: SymbolRef, def: SymbolDef): void {
@@ -106,7 +109,7 @@ class Resolver {
       symbol: def.name,
       component,
       requirer,
-      undeclared: iface ? !this.declared.get(iface)!.has(requirer) : false,
+      undeclared: iface ? this.isUndeclared(iface, requirer, component) : false,
     };
     if (!iface) return this.uncoveredRef(provider, site, ref, def);
     const list = this.out.sites.get(iface) ?? [];
@@ -155,9 +158,9 @@ export function resolveReferences(
   index: ReferenceIndex,
   tree: ComponentTree,
   bound: ResolvedBindings,
-  declared: Map<string, Set<string>>,
+  isUndeclared: UndeclaredRule,
 ): ReferenceResolution {
-  const resolver = new Resolver(tree, bound, declared);
+  const resolver = new Resolver(tree, bound, isUndeclared);
   for (const ref of index.references) resolver.add(ref, index.definitions.get(ref.symbol)!);
   return resolver.finish();
 }
