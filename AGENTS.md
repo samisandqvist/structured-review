@@ -63,6 +63,7 @@ srev map evidence --session <id> [--within <path>] [--full]  # evidence for writ
 srev map check --session <id> --model <f>          # fidelity check (exit 1 until it passes)
 srev map submit --session <id> --model <f> [--open]  # store the map (refused unless the check passes)
 srev map get --session <id>                        # stored model, URL, staleness, report
+srev map export --session <id> [--out <f.html>]    # the stored map as one self-contained HTML page
 ```
 
 ## Plugin packages

@@ -441,7 +441,8 @@ function prettyShape(shape) {
 }
 
 // packages/skill/src/map.ts
-import { readFileSync as readFileSync2 } from "node:fs";
+import { readFileSync as readFileSync2, writeFileSync as writeFileSync2 } from "node:fs";
+import { resolve } from "node:path";
 function mapUrl(base, sessionId, level) {
   return `${base}/?session=${encodeURIComponent(sessionId)}&view=map${level ? `&level=${encodeURIComponent(level)}` : ""}`;
 }
@@ -469,6 +470,11 @@ async function submitMap(base, sessionId, model) {
 }
 async function getMap(base, sessionId) {
   return (await request(mapPath(base, sessionId))).body;
+}
+async function getMapPage(base, sessionId) {
+  const res = await fetch(`${mapPath(base, sessionId)}/export`);
+  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  return res.text();
 }
 var plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 function prettyReport(report) {
@@ -606,11 +612,20 @@ async function getCommand(base, flags) {
     ].join("\n")
   };
 }
+async function exportCommand(base, flags) {
+  const sessionId = flag(flags, "session");
+  const file = resolve(typeof flags.out === "string" && flags.out !== "" ? flags.out : "component-map.html");
+  const page = await getMapPage(base, sessionId);
+  writeFileSync2(file, page);
+  const bytes = Buffer.byteLength(page);
+  return { json: { file, bytes }, pretty: `map exported: ${file} (${Math.ceil(bytes / 1024)} KB)` };
+}
 var MAP_COMMANDS = {
   "map evidence": evidenceCommand,
   "map check": checkCommand,
   "map submit": submitCommand,
-  "map get": getCommand
+  "map get": getCommand,
+  "map export": exportCommand
 };
 
 // packages/skill/src/cli.ts
@@ -630,6 +645,7 @@ var USAGE = `usage:
   srev map check --session <id> --model <file.json>
   srev map submit --session <id> --model <file.json> [--open]
   srev map get --session <id>
+  srev map export --session <id> [--out <file.html>]
   srev gc [--repo <path>] [--all]
   srev shutdown
 global flags: --port N (hub port), --pretty (human-readable output)`;

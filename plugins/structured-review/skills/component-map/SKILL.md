@@ -19,6 +19,7 @@ refuses it until it matches how the code actually calls itself.
 4. Write the model and check it until it passes (`srev map check`)
 5. Review the model's abstraction level, then store it and give the user the link (`srev map submit`)
 6. Revise it when the user says something is wrong (`srev map get`, check, submit)
+7. Export it as one HTML file when the user wants to share it (`srev map export`)
 
 The map has to be true and it has to be logical. True: it matches how the code
 calls itself, so never weaken the model to make the check pass. Logical: each
@@ -55,6 +56,7 @@ srev map evidence --session <id> [--within <path>] [--full]
 srev map check --session <id> --model <file.json>   # exit code 1 until the model passes
 srev map submit --session <id> --model <file.json> [--open]
 srev map get --session <id>                         # stored model, URL, staleness, report
+srev map export --session <id> [--out <file.html>]  # the stored map as one self-contained HTML page
 ```
 
 ## Steps
@@ -111,6 +113,13 @@ srev map get --session <id>                         # stored model, URL, stalene
 6. Corrections: when the user says a concept is wrong ("these two are one
    thing", "the API should not write state"), run `srev map get`, edit the
    model, check and resubmit. A resubmission replaces the session's map.
+7. Sharing: when the user wants the map outside the hub (a page for the team,
+   an attachment, a published artifact), run `srev map export --session <id>
+   --out <file.html>` and share that file. It draws the stored map without a
+   hub and carries exactly what the check accepted, findings and reasons
+   included. Never build a map page by hand or edit the exported file: a
+   finding the model cannot express belongs in the model (see undeclared
+   uses below), and a hand-made page loses the check.
 
 ## Mapping a review
 
@@ -243,6 +252,15 @@ and show it as an undeclared use where it is a call the design does not allow.
   an `undeclared` entry whose `reason` quotes or cites that evidence. These
   are drawn in red and are often the most useful finding on the map. Do not
   use undeclared entries to silence coverage you could model.
+- **Scoped undeclared uses**: when a requirer legitimately uses an interface
+  but one part inside it should not (the design keeps `identity/tokens` free
+  of directory lookups, while the token hook beside it needs them), keep the
+  requirer on `requirers` and give the entry a `component`: the part inside
+  the requirer that should stay out. Only that part's call sites turn
+  undeclared; the requirer's other call sites stay declared. Never take a
+  requirer off `requirers` to flag one of its parts: that marks its legitimate
+  calls as faults too.
+  `{ "interface": "access-decisions", "requirer": "identity", "component": "token-verification", "reason": "docs/specs/module-structure.md: identity/tokens stays domain-free" }`
 - **Utilities** (`"utility": true`) are only for configuration, helpers and
   shared types. A utility is a leaf, provides no interfaces, and may not call
   visible components (a configuration module that validates against other
@@ -337,9 +355,12 @@ Before you submit, go through every level of the model:
   binds. Bind the symbol in an interface of that provider (new or existing).
 - `[binding]`: a bind entry that matches nothing, matches several files (use
   the `file:name` form) or a symbol bound twice.
-- `[requirer]`: a declared requirer with no call sites. Remove it.
+- `[requirer]`: a declared requirer with no call sites, or whose every call
+  site is covered by scoped undeclared entries. Remove it (and drop the scope
+  of its entries).
 - `[undeclared]`: a requirer using an interface without being declared.
-  Declare it, or keep it undeclared with a reason. A stale entry must go.
+  Declare it, or keep it undeclared with a reason. A stale entry, scoped or
+  not, must go.
 - `[evidence]`: a cross-process interface without evidence files, or with
   files outside the components it connects.
 - `[utility]`: a utility calling a visible component. Make it a visible

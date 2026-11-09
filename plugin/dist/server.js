@@ -15922,9 +15922,9 @@ __export(flows_exports, {
   readFlows: () => readFlows
 });
 import { DatabaseSync as DatabaseSync2 } from "node:sqlite";
-import { join as join12 } from "node:path";
+import { join as join13 } from "node:path";
 function readFlows(root = repoRoot(), changedStableIds) {
-  const dbPath = process.env.CRG_GRAPH_DB || join12(root, ".code-review-graph", "graph.db");
+  const dbPath = process.env.CRG_GRAPH_DB || join13(root, ".code-review-graph", "graph.db");
   let db2;
   try {
     db2 = new DatabaseSync2(dbPath, { readOnly: true });
@@ -15980,9 +15980,9 @@ var init_flows = __esm({
 });
 
 // packages/server/src/index.ts
-import { existsSync as existsSync7 } from "node:fs";
+import { existsSync as existsSync8 } from "node:fs";
 import { homedir } from "node:os";
-import { dirname as dirname2, join as join13 } from "node:path";
+import { dirname as dirname2, join as join14 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // node_modules/.pnpm/@hono+node-server@2.1.5_hono@4.13.13/node_modules/@hono/node-server/dist/constants-BLSFu_RU.mjs
@@ -17319,8 +17319,8 @@ var serve = (options, listeningListener) => {
 };
 
 // packages/server/src/app.ts
-import { existsSync as existsSync6 } from "node:fs";
-import { join as join11 } from "node:path";
+import { existsSync as existsSync7 } from "node:fs";
+import { join as join12 } from "node:path";
 
 // node_modules/.pnpm/hono@4.13.13/node_modules/hono/dist/request/constants.js
 var GET_MATCH_RESULT = /* @__PURE__ */ Symbol();
@@ -41746,8 +41746,8 @@ function createShapeRoute(ctx) {
 }
 
 // packages/server/src/routes/map.ts
-import { existsSync as existsSync5 } from "node:fs";
-import { join as join10 } from "node:path";
+import { existsSync as existsSync6 } from "node:fs";
+import { join as join11 } from "node:path";
 
 // packages/server/src/repo/maps.ts
 function saveMap(db2, sessionId, record2) {
@@ -42143,7 +42143,9 @@ var modelSchema = external_exports.object({
   title: external_exports.string(),
   components: external_exports.array(componentSchema2),
   interfaces: external_exports.array(interfaceSchema).default([]),
-  undeclared: external_exports.array(external_exports.object({ interface: external_exports.string(), requirer: external_exports.string(), reason: external_exports.string() })).default([])
+  undeclared: external_exports.array(
+    external_exports.object({ interface: external_exports.string(), requirer: external_exports.string(), component: external_exports.string().optional(), reason: external_exports.string() }).strict()
+  ).default([])
 });
 var EMPTY_MODEL = { title: "", components: [], interfaces: [], undeclared: [] };
 function parseMapModel(json3) {
@@ -42260,15 +42262,30 @@ function requirerIssues(i, provider, requirer, id) {
   return [];
 }
 function undeclaredIssues(model) {
-  const interfaces = new Set(model.interfaces.map((i) => i.id));
-  const components = new Set(model.components.map((c) => c.id));
+  const interfaces = new Map(model.interfaces.map((i) => [i.id, i]));
+  const components = new Map(model.components.map((c) => [c.id, c]));
   return model.undeclared.flatMap((u) => {
-    if (!interfaces.has(u.interface)) return [`undeclared use names unknown interface '${u.interface}'`];
+    const iface = interfaces.get(u.interface);
+    if (!iface) return [`undeclared use names unknown interface '${u.interface}'`];
     if (!components.has(u.requirer))
       return [`undeclared use of '${u.interface}' names unknown component '${u.requirer}'`];
     if (!u.reason.trim()) return [`undeclared use of '${u.interface}' by '${u.requirer}' needs a reason`];
-    return [];
+    return u.component === void 0 ? [] : scopeIssues(u, iface, components);
   });
+}
+function scopeIssues(u, iface, components) {
+  const at2 = `undeclared use of '${u.interface}' by '${u.requirer}'`;
+  if (!components.has(u.component)) return [`${at2} names unknown part '${u.component}'`];
+  if (u.component === u.requirer || cycleFrom(u.component, components) || !isInside2(u.component, u.requirer, components))
+    return [`${at2} names '${u.component}', which is not a part inside '${u.requirer}'`];
+  if (!iface.requirers.includes(u.requirer))
+    return [`${at2} is scoped to '${u.component}', but '${u.requirer}' is not a declared requirer; drop the scope`];
+  return [];
+}
+function isInside2(id, root, components) {
+  for (let at2 = components.get(id)?.parent ?? null; at2 !== null; at2 = components.get(at2)?.parent ?? null)
+    if (at2 === root) return true;
+  return false;
 }
 
 // packages/server/src/map/ownership.ts
@@ -42347,14 +42364,14 @@ var MAX_SAMPLES = 5;
 var MAX_TYPE_SYMBOLS = 8;
 var at = (r) => `${r.file}:${r.line} (${r.caller})`;
 var Resolver = class {
-  constructor(tree, bound, declared) {
+  constructor(tree, bound, isUndeclared) {
     this.tree = tree;
     this.bound = bound;
-    this.declared = declared;
+    this.isUndeclared = isUndeclared;
   }
   tree;
   bound;
-  declared;
+  isUndeclared;
   out = {
     sites: /* @__PURE__ */ new Map(),
     references: 0,
@@ -42418,7 +42435,7 @@ var Resolver = class {
       symbol: def.name,
       component,
       requirer,
-      undeclared: iface ? !this.declared.get(iface).has(requirer) : false
+      undeclared: iface ? this.isUndeclared(iface, requirer, component) : false
     };
     if (!iface) return this.uncoveredRef(provider, site, ref, def);
     const list = this.out.sites.get(iface) ?? [];
@@ -42459,8 +42476,8 @@ var Resolver = class {
     this.types.set(key, entry);
   }
 };
-function resolveReferences(index, tree, bound, declared) {
-  const resolver = new Resolver(tree, bound, declared);
+function resolveReferences(index, tree, bound, isUndeclared) {
+  const resolver = new Resolver(tree, bound, isUndeclared);
   for (const ref of index.references) resolver.add(ref, index.definitions.get(ref.symbol));
   return resolver.finish();
 }
@@ -42480,25 +42497,35 @@ function referenceIssues(res) {
 
 // packages/server/src/map/rules.ts
 var plural2 = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+function undeclaredRule(model, tree) {
+  const declared = new Map(model.interfaces.map((i) => [i.id, new Set(i.requirers)]));
+  const scoped = model.undeclared.filter((u) => u.component !== void 0);
+  return (iface, requirer, component) => !declared.get(iface).has(requirer) || scoped.some((u) => u.interface === iface && u.requirer === requirer && tree.within(component, u.component));
+}
+function reasonFor(reasons, site, tree) {
+  const own2 = reasons.filter((r) => r.requirer === site.requirer);
+  return own2.find((r) => r.component !== void 0 && tree.within(site.component, r.component)) ?? own2.find((r) => r.component === void 0);
+}
 function requirerIssues2(interfaces) {
   return interfaces.filter((i) => i.kind === void 0).flatMap(
-    (i) => i.requirers.filter((r) => !i.sites.some((s) => s.requirer === r)).map((r) => ({
-      rule: "requirer",
-      message: `declared requirer '${r}' of interface '${i.id}' has no call sites`
-    }))
+    (i) => i.requirers.flatMap((r) => {
+      const sites = i.sites.filter((s) => s.requirer === r);
+      if (sites.some((s) => !s.undeclared)) return [];
+      const message = sites.length === 0 ? `declared requirer '${r}' of interface '${i.id}' has no call sites` : `declared requirer '${r}' of interface '${i.id}' has only undeclared call sites; remove it from requirers and drop the scope of its undeclared entries`;
+      return [{ rule: "requirer", message }];
+    })
   );
 }
-function undeclaredIssues2(model, interfaces) {
+function undeclaredIssues2(model, interfaces, tree) {
   const issues = [];
   for (const i of interfaces) {
     const byRequirer = /* @__PURE__ */ new Map();
-    for (const s of i.sites.filter((x) => x.undeclared)) {
+    for (const s of i.sites.filter((x) => x.undeclared && !reasonFor(i.reasons, x, tree))) {
       const where = byRequirer.get(s.requirer) ?? [];
       where.push(`${s.file}:${s.line} (${s.caller})`);
       byRequirer.set(s.requirer, where);
     }
     for (const [requirer, where] of byRequirer) {
-      if (i.reasons.some((r) => r.requirer === requirer)) continue;
       issues.push({
         rule: "undeclared",
         message: `interface '${i.id}' of '${i.provider}' is used by undeclared requirer '${requirer}' (${plural2(where.length, "call site")}); declare the requirer or add an undeclared entry with a reason`,
@@ -42508,13 +42535,17 @@ function undeclaredIssues2(model, interfaces) {
   }
   for (const u of model.undeclared) {
     const i = interfaces.find((x) => x.id === u.interface);
-    if (i.sites.some((s) => s.undeclared && s.requirer === u.requirer)) continue;
+    if (i.sites.some((s) => s.undeclared && reasonFor(i.reasons, s, tree) === entryReason(i, u))) continue;
+    const scope = u.component === void 0 ? "" : ` in '${u.component}'`;
     issues.push({
       rule: "undeclared",
-      message: `undeclared entry for '${u.interface}' by '${u.requirer}' has no undeclared call sites`
+      message: `undeclared entry for '${u.interface}' by '${u.requirer}'${scope} has no undeclared call sites`
     });
   }
   return issues;
+}
+function entryReason(i, u) {
+  return i.reasons.find((r) => r.requirer === u.requirer && r.component === u.component);
 }
 function resolveEvidence(i, tree, fileExists) {
   if (i.kind === void 0) return { files: [], issues: [] };
@@ -42601,8 +42632,7 @@ function checkMap(json3, index, fileExists) {
   if (issues.length > 0) return { model, map: unresolvedMap(model, issues, index.gaps) };
   const tree = new ComponentTree(model.components);
   const bound = resolveBindings(model, tree, index);
-  const declared = new Map(model.interfaces.map((i) => [i.id, new Set(i.requirers)]));
-  const refs = resolveReferences(index, tree, bound, declared);
+  const refs = resolveReferences(index, tree, bound, undeclaredRule(model, tree));
   const evidenceIssues = [];
   const interfaces = model.interfaces.map((i) => {
     const resolved = {
@@ -42610,7 +42640,7 @@ function checkMap(json3, index, fileExists) {
       bindings: bound.bindings.get(i.id) ?? [],
       sites: sortSites(refs.sites.get(i.id) ?? []),
       evidenceFiles: [],
-      reasons: model.undeclared.filter((u) => u.interface === i.id).map((u) => ({ requirer: u.requirer, reason: u.reason }))
+      reasons: model.undeclared.filter((u) => u.interface === i.id).map((u) => ({ requirer: u.requirer, ...u.component ? { component: u.component } : {}, reason: u.reason }))
     };
     const evidence = resolveEvidence(resolved, tree, fileExists);
     evidenceIssues.push(...evidence.issues);
@@ -42620,7 +42650,7 @@ function checkMap(json3, index, fileExists) {
     ...bound.issues,
     ...referenceIssues(refs),
     ...requirerIssues2(interfaces),
-    ...undeclaredIssues2(model, interfaces),
+    ...undeclaredIssues2(model, interfaces, tree),
     ...evidenceIssues
   ];
   const counts = fileCounts(index.files, tree);
@@ -42765,8 +42795,7 @@ var MAX_SAMPLES2 = 5;
 function compareVersions(input2, baseSha) {
   const tree = new ComponentTree(input2.model.components);
   const bound = resolveBindings(input2.model, tree, input2.head);
-  const declared = new Map(input2.model.interfaces.map((i) => [i.id, new Set(i.requirers)]));
-  const refs = resolveReferences(input2.head, tree, bound, declared);
+  const refs = resolveReferences(input2.head, tree, bound, undeclaredRule(input2.model, tree));
   const changedPaths = new Set(input2.files.flatMap((f) => [f.path, ...f.oldPath ? [f.oldPath] : []]));
   const keep = siteGuard(input2.base, bound, changedPaths);
   const headSites = input2.model.interfaces.map((i) => ({ id: i.id, sites: refs.sites.get(i.id) ?? [] }));
@@ -42920,11 +42949,59 @@ function placement(tree, changed, files) {
   };
 }
 
+// packages/server/src/map/export.ts
+import { existsSync as existsSync5, readFileSync as readFileSync7 } from "node:fs";
+import { join as join10 } from "node:path";
+function loadExportAssets(webDistPath2) {
+  const dir = join10(webDistPath2, "export");
+  const script = join10(dir, "map.js");
+  const style = join10(dir, "map.css");
+  if (!existsSync5(script) || !existsSync5(style)) return void 0;
+  const noticesFile = join10(webDistPath2, "THIRD-PARTY-NOTICES.txt");
+  return {
+    script: readFileSync7(script, "utf8"),
+    style: readFileSync7(style, "utf8"),
+    notices: existsSync5(noticesFile) ? readFileSync7(noticesFile, "utf8") : ""
+  };
+}
+var FONTS = "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;700&display=swap";
+var escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+var inScript = (s) => s.replace(/<\/(script)/gi, "<\\/$1");
+var inStyle = (s) => s.replace(/<\/(style)/gi, "<\\/$1");
+var inComment = (s) => s.replace(/--/g, "- -");
+function exportPage(stored, assets) {
+  const data = JSON.stringify(stored).replace(/</g, "\\u003c");
+  return [
+    "<!doctype html>",
+    '<html lang="en">',
+    "<head>",
+    '<meta charset="utf-8">',
+    '<meta name="viewport" content="width=device-width, initial-scale=1">',
+    '<meta name="color-scheme" content="dark">',
+    `<title>${escapeHtml(stored.map.title || "Component map")} \xB7 component map</title>`,
+    '<link rel="preconnect" href="https://fonts.googleapis.com">',
+    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
+    `<link rel="stylesheet" href="${escapeHtml(FONTS)}">`,
+    ...assets.notices ? [`<!--
+${inComment(assets.notices.trim())}
+-->`] : [],
+    `<style>${inStyle(assets.style)}</style>`,
+    "</head>",
+    "<body>",
+    '<div id="root"></div>',
+    `<script type="application/json" id="srev-map">${data}</script>`,
+    `<script type="module">${inScript(assets.script)}</script>`,
+    "</body>",
+    "</html>",
+    ""
+  ].join("\n");
+}
+
 // packages/server/src/routes/map.ts
 function createMapRoute(ctx) {
   const router = new Hono3();
   const root = ctx.repoRoot;
-  const fileExistsIn = (dir) => (file2) => existsSync5(join10(dir, file2));
+  const fileExistsIn = (dir) => (file2) => existsSync6(join11(dir, file2));
   const withSource = (handler) => async (c) => {
     const session = getSession(ctx.db, c.req.param("id"));
     if (!session) return c.json({ error: "not found" }, 404);
@@ -42982,19 +43059,41 @@ function createMapRoute(ctx) {
       return c.json({ report: map2.report, ...stored.change ? { change: stored.change } : {} });
     })
   );
-  router.get("/:id/map", (c) => {
-    if (!getSession(ctx.db, c.req.param("id"))) return c.json({ error: "not found" }, 404);
-    const stored = getMap(ctx.db, c.req.param("id"));
-    if (!stored) return c.json({ error: "no component map for this session" }, 404);
-    return c.json({
+  addStoredMapRoutes(router, ctx);
+  return router;
+}
+function addStoredMapRoutes(router, ctx) {
+  const storedMap = (id) => {
+    const stored = getMap(ctx.db, id);
+    if (!stored) return void 0;
+    return {
       model: stored.model,
       map: stored.map,
       headSha: stored.headSha,
       createdAt: stored.createdAt,
-      ...staleness(root, stored.headSha, stored.repoFingerprint)
-    });
-  });
-  return router;
+      ...staleness(ctx.repoRoot, stored.headSha, stored.repoFingerprint)
+    };
+  };
+  const withStored = (handler) => {
+    return (c) => {
+      if (!getSession(ctx.db, c.req.param("id"))) return c.json({ error: "not found" }, 404);
+      const stored = storedMap(c.req.param("id"));
+      if (!stored) return c.json({ error: "no component map for this session" }, 404);
+      return handler(c, stored);
+    };
+  };
+  router.get(
+    "/:id/map",
+    withStored((c, stored) => c.json(stored))
+  );
+  router.get(
+    "/:id/map/export",
+    withStored((c, stored) => {
+      const assets = ctx.webDistPath ? loadExportAssets(ctx.webDistPath) : void 0;
+      if (!assets) return c.json({ error: "the hub's web UI has no export bundle; rebuild it with `pnpm build`" }, 503);
+      return c.html(exportPage(stored, assets));
+    })
+  );
 }
 var headIndex = (ctx) => ctx.graphProvider.getReferenceIndex();
 async function mapSource(ctx, session) {
@@ -43089,7 +43188,7 @@ function createApp(ctx) {
   app2.route("/api/sessions", createChangesRoute(resolved));
   app2.route("/api/sessions", createShapeRoute(resolved));
   app2.route("/api/sessions", createMapRoute(resolved));
-  if (resolved.webDistPath && existsSync6(join11(resolved.webDistPath, "index.html"))) {
+  if (resolved.webDistPath && existsSync7(join12(resolved.webDistPath, "index.html"))) {
     app2.route("/", createStaticRoute(resolved.webDistPath));
   }
   return app2;
@@ -47076,11 +47175,11 @@ switch (which) {
 }
 function baseDir() {
   if (process.env.SREV_BASE_DIR) return process.env.SREV_BASE_DIR;
-  return join13(process.env.XDG_CACHE_HOME || join13(homedir(), ".cache"), "structured-review", "bases");
+  return join14(process.env.XDG_CACHE_HOME || join14(homedir(), ".cache"), "structured-review", "bases");
 }
 var here = dirname2(fileURLToPath2(import.meta.url));
-var webDistPath = [process.env.SREV_WEB_DIST, join13(here, "..", "..", "web", "dist"), join13(here, "..", "web")].find(
-  (p) => p && existsSync7(join13(p, "index.html"))
+var webDistPath = [process.env.SREV_WEB_DIST, join14(here, "..", "..", "web", "dist"), join14(here, "..", "web")].find(
+  (p) => p && existsSync8(join14(p, "index.html"))
 );
 var webBuilt = webDistPath !== void 0;
 var hostname3 = process.env.SREV_HOST || "127.0.0.1";
