@@ -34,11 +34,14 @@ const ROOT_OPTIONS = {
   "elk.padding": "[top=30,left=30,bottom=30,right=30]",
 };
 
-/** The sub-title under a box name: "N parts · open" or "external". */
+/** The sub-title under a box name: "N parts · open", "external" or "planned", joined when several apply. */
 export function subtitle(map: ResolvedMap, id: string): string {
+  const component = map.components.find((c) => c.id === id);
   const parts = visibleChildren(map, id).length;
-  if (parts) return `${parts} parts · open`;
-  return map.components.find((c) => c.id === id)?.external ? "external" : "";
+  return [
+    ...(component?.planned ? ["planned"] : []),
+    ...(parts ? [`${parts} parts · open`] : component?.external ? ["external"] : []),
+  ].join(" · ");
 }
 
 function leaf(

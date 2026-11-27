@@ -10,6 +10,8 @@ interface MapComponent {
   paths: string[];
   external: boolean;
   utility: boolean;
+  /** Designed and not in the code; inherited from a planned ancestor. Absent on maps stored before planned elements. */
+  planned?: boolean;
 }
 
 interface MapInterface {
@@ -24,6 +26,12 @@ interface MapInterface {
   kind?: string;
   /** Cross-process: files that realize or use the interface. */
   evidence: string[];
+  /** Designed and not in the code: no bindings, evidence or call sites. */
+  planned?: boolean;
+  /** Planned interface: the parts inside the provider that will handle it. */
+  handledBy?: string[];
+  /** Parts inside a requirer that will use the interface. */
+  usedBy?: string[];
 }
 
 interface UndeclaredUse {
@@ -39,7 +47,7 @@ interface MapModel {
   undeclared: UndeclaredUse[];
 }
 
-type CheckRule = "model" | "coverage" | "binding" | "requirer" | "undeclared" | "evidence" | "utility";
+type CheckRule = "model" | "coverage" | "binding" | "requirer" | "undeclared" | "evidence" | "utility" | "planned";
 
 interface CheckIssue {
   rule: CheckRule;
@@ -95,6 +103,8 @@ export interface CheckReport {
   utilities: { id: string; references: number }[];
   typeDependencies: { from: string; to: string; count: number; symbols: string[] }[];
   gaps: string[];
+  /** Planned components and interfaces: drawn from the design, not checked against code. */
+  planned?: { components: number; interfaces: number };
 }
 
 export type ChangeStatus = "new" | "removed" | "changed";

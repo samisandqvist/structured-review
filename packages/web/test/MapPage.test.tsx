@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MapPage, levelFromUrl } from "../src/map/MapPage.js";
 import { navigateToSession } from "../src/navigation.js";
 import { useUIStore } from "../src/store/ui.js";
-import { fixtureChange, fixtureMap, fixtureReview } from "./map-fixture.js";
+import { fixtureChange, fixtureMap, fixtureReview, plannedMap } from "./map-fixture.js";
 import type { MapChange } from "../src/map/types.js";
 
 vi.mock("../src/navigation.js", async (importOriginal) => ({
@@ -434,5 +434,89 @@ describe("MapPage levels in a review", () => {
     await waitFor(() => expect(panel().textContent).toContain("Changed files no part claims"));
     expect(within(panel()).getByText("package.json")).toBeTruthy();
     expect(within(panel()).queryByText("src/main.ts")).toBeNull();
+  });
+});
+
+describe("MapPage with planned elements", () => {
+  const classes = (container: HTMLElement, selector: string) => [...container.querySelector(selector)!.classList];
+
+  it("marks planned parts, interfaces and connectors and explains them in the legend and the panel", async () => {
+    stubMap(200, { map: plannedMap() });
+    const { container } = renderPage();
+    await node(container, "billing");
+    expect(classes(container, '[data-node="billing"]')).toContain("planned");
+    expect(classes(container, '[data-node="store"]')).not.toContain("planned");
+    expect(container.querySelector('[data-node="billing"] text.sub')!.textContent).toBe("planned · 2 parts · open");
+    expect(classes(container, '[data-port="billing|invoices|provide"]')).toContain("planned");
+    expect(classes(container, '[data-port="store|reads|provide"]')).not.toContain("planned");
+    expect(classes(container, '[data-edge="billing|reads|require>store|reads|provide"]')).toContain("planned");
+    expect(classes(container, '[data-edge="core|reads|require>store|reads|provide"]')).not.toContain("planned");
+    expect(
+      container.querySelector('[data-edge="api|invoices|require>billing|invoices|provide"] title')!.textContent,
+    ).toBe("Invoices (assembly, planned)");
+    expect(screen.getByLabelText("Legend").textContent).toContain("planned, not in the code");
+    expect(screen.getByTestId("map-planned").textContent).toContain(
+      "3 planned components and 1 planned interface come from the design.",
+    );
+  });
+
+  it("describes a planned component and the delegation its interface declares", async () => {
+    stubMap(200, { map: plannedMap() });
+    const { container } = renderPage();
+    fireEvent.click(await node(container, "billing"));
+    expect(panel().textContent).toContain("Planned · Component");
+    expect(panel().textContent).toContain("Planned: part of the design, not in the code.");
+    expect(panel().textContent).not.toContain("Files (");
+    fireEvent.click(within(panel()).getByRole("button", { name: "Invoices" }));
+    expect(panel().textContent).toContain("Planned · Interface");
+    expect(panel().textContent).toContain("Handled by");
+    expect(panel().textContent).not.toContain("Used by");
+    expect(panel().textContent).not.toContain("Call sites");
+    fireEvent.click(within(panel()).getByRole("button", { name: "Invoicing" }));
+    expect(panel().textContent).toContain("Invoicing meaning");
+  });
+
+  it("shows where a planned part will live and its planned use of an implemented interface", async () => {
+    window.history.replaceState(null, "", "/?session=s1&view=map&level=billing");
+    stubMap(200, { map: plannedMap() });
+    const { container } = renderPage();
+    const ledger = await node(container, "ledger");
+    expect(classes(container, ".d-frame")).toContain("planned");
+    fireEvent.click(ledger);
+    expect(panel().textContent).toContain("Planned location");
+    expect(panel().textContent).toContain("src/billing/ledger/");
+    fireEvent.click(container.querySelector('[data-port="ledger|reads|require"]')!);
+    expect(panel().textContent).toContain(
+      "Planned use by Billing: part of the design, with no call sites in the code.",
+    );
+    expect(panel().textContent).toContain("Bound to 1 symbol");
+  });
+
+  it("lists the parts a planned interface is used by", async () => {
+    const map = plannedMap();
+    Object.assign(
+      map.interfaces.find((i) => i.id === "invoices")!,
+      { handledBy: undefined, usedBy: ["api"] },
+    );
+    stubMap(200, { map });
+    const { container } = renderPage();
+    await node(container, "billing");
+    fireEvent.click(container.querySelector('[data-port="billing|invoices|provide"]')!);
+    expect(panel().textContent).toContain("Used by");
+    expect(panel().textContent).not.toContain("Handled by");
+  });
+
+  it("says nothing about planned elements on a map without them", async () => {
+    stubMap(200);
+    const { container } = renderPage();
+    await node(container, "core");
+    expect(screen.queryByTestId("map-planned")).toBeNull();
+    expect(screen.getByLabelText("Legend").textContent).not.toContain("planned");
+    const empty = plannedMap();
+    empty.report = { ...empty.report, planned: { components: 0, interfaces: 0 } };
+    stubMap(200, { map: empty });
+    renderPage();
+    await waitFor(() => expect(screen.getAllByTestId("map-panel")).toHaveLength(2));
+    expect(screen.queryByTestId("map-planned")).toBeNull();
   });
 });

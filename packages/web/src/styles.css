@@ -1243,6 +1243,8 @@ textarea:focus {
   --cm-bad-soft: rgba(255, 125, 110, 0.13);
   --cm-new: #6fdca4;
   --cm-new-soft: rgba(111, 220, 164, 0.14);
+  --cm-plan: #e3b45c;
+  --cm-plan-soft: rgba(227, 180, 92, 0.1);
   --cm-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
   --cm-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   color-scheme: dark;
@@ -1271,6 +1273,8 @@ textarea:focus {
     --cm-bad-soft: rgba(184, 53, 42, 0.1);
     --cm-new: #18804c;
     --cm-new-soft: rgba(24, 128, 76, 0.1);
+    --cm-plan: #8a5a06;
+    --cm-plan-soft: rgba(138, 90, 6, 0.08);
     color-scheme: light;
   }
 }
@@ -1416,6 +1420,16 @@ textarea:focus {
 .cmap-legend .part-new rect {
   fill: var(--cm-new-soft);
   stroke: var(--cm-new);
+}
+.cmap-legend .plan {
+  color: var(--cm-plan);
+}
+.cmap-legend .plan rect {
+  fill: var(--cm-plan-soft);
+  stroke: var(--cm-plan);
+}
+.cmap-panel .planned-note {
+  color: var(--cm-plan);
 }
 .cmap-panel .items {
   list-style: none;
@@ -1726,6 +1740,28 @@ textarea:focus {
   stroke: var(--cm-bad);
   stroke-dasharray: 7 3;
   stroke-width: 1.8;
+}
+/* Planned elements come from the design: their own hue, and a dashed outline on boxes. */
+.cmap .d-node.planned rect.body,
+.cmap .d-frame.planned rect.body {
+  fill: var(--cm-plan-soft);
+  stroke: var(--cm-plan);
+  stroke-dasharray: 6 4;
+}
+.cmap .d-node.planned text.sub {
+  fill: var(--cm-plan);
+}
+.cmap .d-edge.planned path.vis {
+  stroke: var(--cm-plan);
+}
+.cmap .d-port.planned .ball,
+.cmap .d-port.planned .box,
+.cmap .d-port.planned .stem,
+.cmap .d-port.planned .cup {
+  stroke: var(--cm-plan);
+}
+.cmap .d-port.planned text {
+  fill: var(--cm-plan);
 }
 .cmap .d-edge.hl path.vis {
   stroke: var(--cm-accent);

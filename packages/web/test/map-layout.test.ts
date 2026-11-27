@@ -2,9 +2,9 @@
 import { describe, it, expect, vi } from "vitest";
 import ELK from "elkjs/lib/elk.bundled.js";
 import { buildLevel } from "../src/map/levels.js";
-import { elkGraph, layoutLevel, PORT_PITCH, PORT_TOP } from "../src/map/layout.js";
+import { elkGraph, layoutLevel, PORT_PITCH, PORT_TOP, subtitle } from "../src/map/layout.js";
 import { measureText } from "../src/map/measure.js";
-import { fixtureMap } from "./map-fixture.js";
+import { fixtureMap, plannedMap } from "./map-fixture.js";
 
 const map = fixtureMap();
 const measure = (text: string) => text.length * 7;
@@ -105,5 +105,17 @@ describe("measureText with a canvas", () => {
     const { measureText: measured } = await import("../src/map/measure.js");
     expect(measured("ab", "10px X")).toBe(12);
     create.mockRestore();
+  });
+});
+
+describe("subtitle", () => {
+  it("names parts, external systems and planned components", () => {
+    const design = plannedMap();
+    expect(subtitle(design, "core")).toBe("2 parts · open");
+    expect(subtitle(design, "feeds")).toBe("external");
+    expect(subtitle(design, "store")).toBe("");
+    expect(subtitle(design, "billing")).toBe("planned · 2 parts · open");
+    expect(subtitle(design, "ledger")).toBe("planned");
+    expect(subtitle(design, "nope")).toBe("");
   });
 });

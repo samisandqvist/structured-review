@@ -9,7 +9,7 @@ import {
   visibleChildren,
   levelTrail,
 } from "../src/map/levels.js";
-import { fixtureMap } from "./map-fixture.js";
+import { fixtureMap, plannedMap } from "./map-fixture.js";
 
 const map = fixtureMap();
 const edges = (level: ReturnType<typeof buildLevel>) =>
@@ -133,5 +133,39 @@ describe("highlighted", () => {
 
   it("highlights nothing without a selection", () => {
     expect(highlighted(level, null).hl.size).toBe(0);
+  });
+});
+
+describe("buildLevel with planned elements", () => {
+  const design = plannedMap();
+  const plannedEdges = (id: string | null) =>
+    [...buildLevel(design, id).edges.values()]
+      .filter((e) => e.planned)
+      .map((e) => e.id)
+      .sort();
+
+  it("marks the connectors of a planned interface and of a planned requirer", () => {
+    expect(plannedEdges("orchestrator")).toEqual([
+      "api|invoices|require>billing|invoices|provide",
+      "billing|reads|require>store|reads|provide",
+    ]);
+  });
+
+  it("leaves connectors between implemented parts unmarked", () => {
+    const level = buildLevel(design, "orchestrator");
+    expect(level.edges.get("core|reads|require>store|reads|provide")!.planned).toBe(false);
+    expect([...buildLevel(fixtureMap(), "orchestrator").edges.values()].some((e) => e.planned)).toBe(false);
+  });
+
+  it("draws the declared delegation inside a planned component", () => {
+    const level = buildLevel(design, "billing");
+    expect(level.children).toEqual(["invoicing", "ledger"]);
+    expect(edges(level)).toEqual([
+      "api|invoices|require > billing|invoices|provide assembly",
+      "billing|invoices|provide > invoicing|invoices|provide delegate in",
+      "billing|reads|require > store|reads|provide assembly",
+      "ledger|reads|require > billing|reads|require delegate in",
+    ]);
+    expect([...level.edges.values()].every((e) => e.planned)).toBe(true);
   });
 });

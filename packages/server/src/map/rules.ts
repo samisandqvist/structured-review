@@ -30,11 +30,13 @@ function reasonFor(
   );
 }
 
-export function requirerIssues(interfaces: ResolvedInterface[]): CheckIssue[] {
+/** Declared requirers need call sites, except where the interface or the requirer is planned. */
+export function requirerIssues(interfaces: ResolvedInterface[], planned: Set<string>): CheckIssue[] {
   return interfaces
-    .filter((i) => i.kind === undefined)
+    .filter((i) => i.kind === undefined && !i.planned)
     .flatMap((i) =>
       i.requirers.flatMap((r) => {
+        if (planned.has(r)) return [];
         const sites = i.sites.filter((s) => s.requirer === r);
         if (sites.some((s) => !s.undeclared)) return [];
         const message =
@@ -91,7 +93,7 @@ export function resolveEvidence(
   tree: ComponentTree,
   fileExists: (file: string) => boolean,
 ): { files: { file: string; component: string }[]; issues: CheckIssue[] } {
-  if (i.kind === undefined) return { files: [], issues: [] };
+  if (i.kind === undefined || i.planned) return { files: [], issues: [] };
   if (i.evidence.length === 0) {
     return {
       files: [],
@@ -125,7 +127,8 @@ export function resolveEvidence(
 type DelegationSource = Pick<
   ResolvedInterface,
   "id" | "provider" | "requirers" | "bindings" | "sites" | "evidenceFiles"
->;
+> &
+  Partial<Pick<ResolvedInterface, "handledBy" | "usedBy">>;
 
 export function deriveDelegations(interfaces: DelegationSource[], tree: ComponentTree): Delegation[] {
   const seen = new Set<string>();
@@ -145,8 +148,30 @@ export function deriveDelegations(interfaces: DelegationSource[], tree: Componen
       const end = [i.provider, ...i.requirers].find((c) => tree.within(e.component, c))!;
       add(i.id, end === i.provider ? "provided" : "required", e.component, end);
     }
+    // Declared by the design: a planned interface or planned parts have no code to derive from.
+    for (const part of i.handledBy ?? []) add(i.id, "provided", part, i.provider);
+    for (const part of i.usedBy ?? []) {
+      add(
+        i.id,
+        "required",
+        part,
+        i.requirers.find((r) => tree.within(part, r))!,
+      );
+    }
   }
   return out;
+}
+
+/** A planned component has no code: one that owns indexed files is modelled against them. */
+export function plannedIssues(components: MapModel["components"], counts: Map<string, number>): CheckIssue[] {
+  return components
+    .filter((c) => c.planned && (counts.get(c.id) ?? 0) > 0)
+    .map((c) => ({
+      rule: "planned" as const,
+      message:
+        `planned component '${c.id}' owns ${plural(counts.get(c.id)!, "indexed file")}; ` +
+        `remove planned and model it against the code`,
+    }));
 }
 
 /** The top-level directories the model's paths reach; files elsewhere are outside the map. */

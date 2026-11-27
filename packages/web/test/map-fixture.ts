@@ -230,3 +230,25 @@ const FLOWS = [
 export function fixtureReview(): { nodes: Node[]; units: Unit[]; flows: Flow[] } {
   return { nodes: NODES, units: UNITS, flows: FLOWS };
 }
+
+/** The fixture map with a design on top: a planned Billing component with two parts, a planned
+ *  interface it provides to the API, and its planned use of the store's read models. */
+export function plannedMap(): ResolvedMap {
+  const map = fixtureMap();
+  const planned = { planned: true, paths: [], fileCount: 0 };
+  map.components.push(
+    component("billing", "Billing", "orchestrator", planned),
+    component("invoicing", "Invoicing", "billing", planned),
+    component("ledger", "Ledger", "billing", { ...planned, paths: ["src/billing/ledger/"] }),
+  );
+  map.interfaces.push(iface("invoices", "Invoices", "billing", ["api"], { planned: true, handledBy: ["invoicing"] }));
+  const reads = map.interfaces.find((i) => i.id === "reads")!;
+  reads.requirers.push("billing");
+  reads.usedBy = ["ledger"];
+  map.delegations.push(
+    { interface: "invoices", side: "provided", outer: "billing", inner: "invoicing" },
+    { interface: "reads", side: "required", outer: "billing", inner: "ledger" },
+  );
+  map.report = { ...map.report, planned: { components: 3, interfaces: 1 } };
+  return map;
+}

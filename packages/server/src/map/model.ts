@@ -17,6 +17,7 @@ const componentSchema = z
     paths: z.array(z.string()).default([]),
     external: z.boolean().default(false),
     utility: z.boolean().default(false),
+    planned: z.boolean().default(false),
   })
   .strict();
 const interfaceSchema = z
@@ -29,6 +30,9 @@ const interfaceSchema = z
     bind: z.array(z.string().min(1)).default([]),
     kind: z.string().min(1).optional(),
     evidence: z.array(z.string().min(1)).default([]),
+    planned: z.boolean().default(false),
+    handledBy: z.array(z.string()).default([]),
+    usedBy: z.array(z.string()).default([]),
   })
   .strict();
 const modelSchema = z.object({
@@ -120,15 +124,34 @@ function cycleFrom(id: string, byId: Map<string, MapComponent>): string[] | unde
   return undefined;
 }
 
+/** Components that are planned themselves or lie inside a planned component. */
+export function plannedComponents(components: MapComponent[]): Set<string> {
+  const byId = new Map(components.map((c) => [c.id, c]));
+  const planned = new Set<string>();
+  for (const c of components) {
+    const chain = cycleFrom(c.id, byId) ? [c.id] : ancestorsOf(c.id, byId);
+    if (chain.some((id) => byId.get(id)?.planned)) planned.add(c.id);
+  }
+  return planned;
+}
+
+/** The component and its known ancestors, self first; the caller rules out parent cycles. */
+function ancestorsOf(id: string, byId: Map<string, MapComponent>): string[] {
+  const out: string[] = [];
+  for (let at: string | null | undefined = id; at != null; at = byId.get(at)?.parent) out.push(at);
+  return out;
+}
+
 function componentIssues(components: MapComponent[]): string[] {
   const hasParts = new Set(components.map((c) => c.parent).filter((p): p is string => p !== null));
+  const planned = plannedComponents(components);
   return components.flatMap((c) => {
     const out: string[] = [];
     if (c.external) {
       if (c.paths.length > 0) out.push(`external component '${c.id}' has paths`);
       if (c.utility) out.push(`external component '${c.id}' is a utility`);
       if (hasParts.has(c.id)) out.push(`external component '${c.id}' has parts`);
-    } else if (c.paths.length === 0) {
+    } else if (c.paths.length === 0 && !planned.has(c.id)) {
       out.push(`component '${c.id}' needs paths`);
     }
     if (c.utility && hasParts.has(c.id)) out.push(`utility '${c.id}' has parts`);
@@ -140,24 +163,69 @@ function interfaceIssues(i: MapInterface, components: MapComponent[]): string[] 
   const byId = new Map(components.map((c) => [c.id, c]));
   const provider = byId.get(i.provider);
   if (!provider) return [`interface '${i.id}' has unknown provider '${i.provider}'`];
-  const out = [...shapeIssues(i, provider), ...i.requirers.flatMap((r) => requirerIssues(i, provider, byId.get(r), r))];
+  const out = [
+    ...shapeIssues(i, provider),
+    ...i.requirers.flatMap((r) => requirerIssues(i, provider, byId.get(r), r)),
+    ...plannedIssues(i, byId),
+  ];
   if (provider.utility) out.push(`utility '${provider.id}' cannot provide interface '${i.id}'`);
   return out;
 }
 
 function shapeIssues(i: MapInterface, provider: MapComponent): string[] {
-  const out: string[] = [];
-  if (i.kind === undefined) {
-    if (i.bind.length === 0) out.push(`interface '${i.id}' needs bind entries`);
-    if (i.evidence.length > 0) {
-      out.push(`in-process interface '${i.id}' cannot have evidence; set kind for a cross-process interface`);
-    }
-    if (provider.external) out.push(`external '${provider.id}' can only provide cross-process interfaces ('${i.id}')`);
-  } else if (i.bind.length > 0) {
-    out.push(`cross-process interface '${i.id}' cannot have bind entries`);
+  if (i.kind !== undefined && !i.planned) {
+    return i.bind.length > 0 ? [`cross-process interface '${i.id}' cannot have bind entries`] : [];
+  }
+  const out = i.planned ? plannedShapeIssues(i) : inProcessShapeIssues(i);
+  if (i.kind === undefined && provider.external) {
+    out.push(`external '${provider.id}' can only provide cross-process interfaces ('${i.id}')`);
   }
   return out;
 }
+
+function inProcessShapeIssues(i: MapInterface): string[] {
+  const out: string[] = [];
+  if (i.bind.length === 0) out.push(`interface '${i.id}' needs bind entries`);
+  if (i.evidence.length > 0) {
+    out.push(`in-process interface '${i.id}' cannot have evidence; set kind for a cross-process interface`);
+  }
+  return out;
+}
+
+function plannedShapeIssues(i: MapInterface): string[] {
+  if (i.bind.length === 0 && i.evidence.length === 0) return [];
+  return [`planned interface '${i.id}' cannot have bind entries or evidence; remove planned once the code exists`];
+}
+
+/** The rules of planned elements: what must be planned, and the delegation a design declares. */
+function plannedIssues(i: MapInterface, byId: Map<string, MapComponent>): string[] {
+  const planned = plannedComponents([...byId.values()]);
+  const out: string[] = [];
+  if (!i.planned && planned.has(i.provider)) {
+    out.push(`interface '${i.id}' of planned component '${i.provider}' must be planned`);
+  }
+  if (!i.planned && i.handledBy.length > 0) {
+    out.push(`interface '${i.id}' is not planned, so it cannot declare handledBy; its delegation comes from the code`);
+  }
+  for (const part of i.handledBy) {
+    if (!byId.has(part)) out.push(`handledBy of interface '${i.id}' names unknown part '${part}'`);
+    else if (!strictlyInside(part, i.provider, byId)) {
+      out.push(`handledBy part '${part}' of interface '${i.id}' is not inside its provider '${i.provider}'`);
+    }
+  }
+  for (const part of i.usedBy) {
+    if (!byId.has(part)) out.push(`usedBy of interface '${i.id}' names unknown part '${part}'`);
+    else if (!i.requirers.some((r) => strictlyInside(part, r, byId))) {
+      out.push(`usedBy part '${part}' of interface '${i.id}' is not inside one of its requirers`);
+    } else if (!i.planned && !planned.has(part)) {
+      out.push(`usedBy part '${part}' of interface '${i.id}' is not planned; its use comes from the code`);
+    }
+  }
+  return out;
+}
+
+const strictlyInside = (id: string, root: string, byId: Map<string, MapComponent>) =>
+  !cycleFrom(id, byId) && isInside(id, root, byId);
 
 function requirerIssues(
   i: MapInterface,

@@ -539,3 +539,117 @@ describe("checkMap paths", () => {
     );
   });
 });
+
+/** Adds a planned Billing component with two parts, a planned interface it provides to the
+ *  core, and its planned use of the store's reads. */
+function plan(m: Model): void {
+  (m.components as unknown[]).push(
+    { id: "billing", name: "Billing", parent: "app", planned: true, meaning: "invoices" },
+    { id: "invoicing", name: "Invoicing", parent: "billing", meaning: "builds invoices" },
+    { id: "ledger", name: "Ledger", parent: "billing", paths: ["src/billing/ledger/"], meaning: "balances" },
+  );
+  (m.interfaces as unknown[]).push({
+    id: "invoices",
+    name: "Invoices",
+    provider: "billing",
+    requirers: ["core"],
+    meaning: "invoices of a customer",
+    planned: true,
+    handledBy: ["invoicing"],
+    usedBy: ["engine"],
+  });
+  Object.assign(m.interfaces[0]!, { requirers: ["api", "core", "billing"], usedBy: ["ledger"] });
+}
+
+describe("checkMap with planned elements", () => {
+  it("accepts a design beside the code and counts what it could not compare", () => {
+    const map = run(plan);
+    expect(map.report.issues).toEqual([]);
+    expect(map.report.planned).toEqual({ components: 3, interfaces: 1 });
+    expect(run().report.planned).toEqual({ components: 0, interfaces: 0 });
+  });
+
+  it("resolves planned onto the parts of a planned component", () => {
+    const planned = run(plan)
+      .components.filter((c) => c.planned)
+      .map((c) => c.id);
+    expect(planned).toEqual(["billing", "invoicing", "ledger"]);
+  });
+
+  it("draws the delegation the design declares", () => {
+    const { delegations } = run(plan);
+    expect(delegations.filter((d) => d.interface === "invoices")).toEqual([
+      { interface: "invoices", side: "provided", outer: "billing", inner: "invoicing" },
+      { interface: "invoices", side: "required", outer: "core", inner: "engine" },
+    ]);
+    expect(delegations.filter((d) => d.outer === "billing" && d.side === "required")).toEqual([
+      { interface: "reads", side: "required", outer: "billing", inner: "ledger" },
+    ]);
+  });
+
+  it("gives a planned interface no bindings, call sites or evidence files", () => {
+    const invoices = run((m) => {
+      plan(m);
+      Object.assign(m.interfaces.at(-1)!, { kind: "http" });
+    }).interfaces.find((i) => i.id === "invoices")!;
+    expect(invoices).toMatchObject({ planned: true, bindings: [], sites: [], evidenceFiles: [] });
+  });
+
+  it("asks call sites of a requirer with code, and none of a planned one", () => {
+    const issues = messages((m) => {
+      plan(m);
+      m.interfaces[1]!.requirers = ["core", "billing"];
+    });
+    expect(issues).toEqual([]);
+    expect(
+      messages((m) => {
+        m.components.push({ id: "idle", name: "Idle", parent: "app", paths: ["src/idle/"], meaning: "" });
+        m.interfaces[1]!.requirers = ["core", "idle"];
+      }),
+    ).toContain("requirer: declared requirer 'idle' of interface 'writes' has no call sites");
+  });
+
+  it("refuses a planned component that owns indexed files", () => {
+    const issues = messages((m) => {
+      plan(m);
+      (m.components.find((c) => c.id === "ledger") as { paths: string[] }).paths = ["src/store/legacy.ts"];
+    });
+    expect(issues).toEqual([
+      "planned: planned component 'billing' owns 1 indexed file; remove planned and model it against the code",
+    ]);
+  });
+});
+
+describe("checkMap on a design without code", () => {
+  it("accepts a design with no code at all", () => {
+    const empty = index([], []);
+    const map = checkMap(
+      {
+        title: "Greenfield",
+        components: [
+          { id: "billing", name: "Billing", parent: null, planned: true, meaning: "invoices" },
+          { id: "invoicing", name: "Invoicing", parent: "billing", meaning: "builds invoices" },
+          { id: "bank", name: "Bank", parent: null, external: true, meaning: "moves money" },
+        ],
+        interfaces: [
+          {
+            id: "payments",
+            name: "Payments",
+            provider: "bank",
+            requirers: ["billing"],
+            meaning: "pay an invoice",
+            kind: "http",
+            planned: true,
+            usedBy: ["invoicing"],
+          },
+        ],
+      },
+      empty,
+      exists,
+    ).map;
+    expect(map.report).toMatchObject({ ok: true, issues: [], planned: { components: 2, interfaces: 1 } });
+    expect(map.delegations).toEqual([
+      { interface: "payments", side: "required", outer: "billing", inner: "invoicing" },
+    ]);
+  });
+});

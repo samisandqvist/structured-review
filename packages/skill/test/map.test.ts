@@ -111,6 +111,14 @@ describe("pretty output", () => {
     ).toContain("fidelity check: passed");
   });
 
+  it("says how many planned elements the check could not compare", () => {
+    expect(prettyReport(REPORT)).not.toContain("planned");
+    expect(prettyReport({ ...REPORT, planned: { components: 0, interfaces: 0 } })).not.toContain("planned");
+    expect(prettyReport({ ...REPORT, planned: { components: 3, interfaces: 1 } })).toContain(
+      "planned (from the design, not checked against code): 3 components, 1 interface",
+    );
+  });
+
   it("summarizes evidence", () => {
     const text = prettyEvidence(EVIDENCE);
     expect(text).toContain("scope: src (brief)");

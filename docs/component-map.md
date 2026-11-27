@@ -8,7 +8,9 @@ the functions that implement them, and every connector is backed by call sites.
 
 The map is built per session by the `component-map` skill. An LLM writes the
 model from index evidence; the hub checks it against the code's references and
-stores it only when it matches. The hub never calls a model.
+stores it only when it matches. The hub never calls a model. Parts of a design
+that are not built yet can be drawn as
+[planned](#planned-components-and-interfaces).
 
 The skill builds the model top-down. It first lists what the system does, from
 the repository's design when there is one (OpenSpec specs and change designs,
@@ -137,6 +139,52 @@ without the review's items.
   stay ordinary. The requirer must be declared, and `component` must lie
   strictly inside it.
 
+## Planned components and interfaces
+
+A map can hold parts of a design that the code does not hold yet: a new
+component with its OpenSpec proposal, drawn alone or beside the existing
+system. The page draws planned parts in their own colour with a dashed
+outline.
+
+```json
+{ "id": "billing", "name": "Billing", "parent": "orchestrator", "planned": true, "meaning": "Invoices customers" },
+{ "id": "invoicing", "name": "Invoicing", "parent": "billing", "meaning": "Builds invoices" }
+```
+
+```json
+{
+  "id": "invoices",
+  "name": "Invoices",
+  "provider": "billing",
+  "requirers": ["api"],
+  "planned": true,
+  "meaning": "A customer's invoices",
+  "handledBy": ["invoicing"]
+}
+```
+
+- **Planned components** set `planned`. Their parts are planned with them.
+  `paths` are optional and say where the code will live.
+- **Planned interfaces** set `planned` and have no `bind` or `evidence`; their
+  requirers need no call sites. Every interface of a planned component is
+  planned.
+- **Declared delegation.** `handledBy` lists the parts inside the provider that
+  will handle a planned interface. `usedBy` lists the parts inside a requirer
+  that will use an interface; it is allowed on a planned interface, and on an
+  implemented one for parts that are planned.
+- **Planned requirers.** A planned component can be a declared requirer of an
+  implemented interface without call sites.
+
+The check has no code to compare planned elements with. It verifies their
+structure, refuses a planned component that owns indexed files, and reports
+how many components and interfaces are planned. Everything that is not planned
+is checked as usual. When the code exists, remove `planned` and add the
+bindings; the model then checks the implementation.
+
+A repository that holds only a design needs one commit for a session. Roots
+without sources of their language are not indexed, so the index is empty and
+the map consists of planned parts.
+
 ## The check
 
 A reference is a use of a function, method or value defined in another file,
@@ -158,6 +206,7 @@ The hub stores a map only when the check finds no issue:
 | undeclared | A requirer using an interface without being declared or listed as undeclared with a reason, or an undeclared entry with no such use |
 | evidence   | A cross-process interface without evidence files, or with files that do not exist or lie outside the components it connects         |
 | utility    | A utility calling a visible component                                                                                               |
+| planned    | A planned component that owns indexed files                                                                                         |
 
 The report also lists, without blocking: unclaimed files (files under the
 mapped directories that no component claims, or that fall through to a

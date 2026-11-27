@@ -395,3 +395,46 @@ describe("resolveIndexerBin", () => {
     );
   });
 });
+
+describe("roots without sources", () => {
+  class PlanProbe extends ScipGraphProvider {
+    ran: string[] = [];
+    plan(): IndexerJob[] {
+      return this.planJobs().jobs;
+    }
+    protected override runIndexer(job: IndexerJob): Promise<ScipDocument[]> {
+      this.ran.push(`${job.language}:${job.root}`);
+      return Promise.resolve([]);
+    }
+  }
+  const repo = (files: Record<string, string>) => {
+    const dir = mkdtempSync(join(tmpdir(), "srev-design-"));
+    for (const [file, text] of Object.entries(files)) {
+      mkdirSync(join(dir, file, ".."), { recursive: true });
+      writeFileSync(join(dir, file), text);
+    }
+    return dir;
+  };
+
+  it("plans no job for a repository that holds only a design", async () => {
+    const dir = repo({ "openspec/changes/add-billing/proposal.md": "# Add billing\n" });
+    try {
+      const p = new PlanProbe({ repoRoot: dir });
+      expect(p.plan()).toEqual([]);
+      expect(await p.getIndexWarnings()).toEqual([]);
+      expect((await p.getReferenceIndex()).files).toEqual([]);
+      expect(p.ran).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("skips a project file that is ahead of its code and indexes the roots with sources", () => {
+    const dir = repo({ "package.json": "{}", "svc/pyproject.toml": "", "svc/app.py": "x = 1\n" });
+    try {
+      expect(new PlanProbe({ repoRoot: dir }).plan()).toEqual([{ language: "py", root: "svc", hasSources: true }]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

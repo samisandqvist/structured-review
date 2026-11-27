@@ -168,6 +168,11 @@ undeclared use. Ask your agent "Use component-map to map this codebase and
 open the map." See the [component map](docs/component-map.md) for the model,
 the checks and the limits.
 
+A component that exists only as a design can be mapped too: the skill draws
+it from its OpenSpec proposal or architecture document as planned parts,
+alone or beside the existing code. Ask "Use component-map to draw the design
+in openspec/changes/add-billing."
+
 ## What the review includes
 
 - The current **tracked working tree** against the supplied base ref, including

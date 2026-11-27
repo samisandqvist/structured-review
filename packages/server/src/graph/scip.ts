@@ -344,7 +344,9 @@ export class ScipGraphProvider implements GraphProvider {
    * IndexError loudly for that.
    */
   protected planJobs(): { jobs: IndexerJob[]; warnings: string[] } {
-    let jobs = this.discoverJobs();
+    // A root without sources of its language has nothing to index (a repository that
+    // holds only a design, or a project file ahead of its code); its indexer would fail.
+    let jobs = this.discoverJobs().filter((j) => j.hasSources);
     const warnings: string[] = [];
     for (const tool of this.externalToolchains()) {
       const affected = jobs.filter((j) => j.language === tool.language);

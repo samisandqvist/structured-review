@@ -22,6 +22,8 @@ interface LevelEdge {
   kind: EdgeKind;
   crossProcess: boolean;
   inside: boolean;
+  /** The interface or one of the connected components is planned: the connector is not in the code. */
+  planned: boolean;
 }
 export interface Level {
   id: string | null;
@@ -103,6 +105,7 @@ export function undeclaredFindings(map: ResolvedMap): UndeclaredFinding[] {
 class LevelBuilder {
   readonly level: Level;
   private parentOf: Map<string, string | null>;
+  private planned: Set<string>;
   private inLevel: Set<string>;
   private within: (id: string, root: string) => boolean;
 
@@ -113,6 +116,7 @@ class LevelBuilder {
     const children = visibleChildren(map, id).map((c) => c.id);
     this.level = { id, children, neighbors: [], ports: new Map(), portsOf: new Map(), edges: new Map() };
     this.parentOf = new Map(map.components.map((c) => [c.id, c.parent]));
+    this.planned = new Set(map.components.filter((c) => c.planned).map((c) => c.id));
     this.inLevel = new Set(children);
     this.within = withinOf(map);
   }
@@ -141,7 +145,9 @@ class LevelBuilder {
 
   private edge(from: string, to: string, i: ResolvedInterface, kind: EdgeKind, inside: boolean): void {
     const id = `${from}>${to}`;
-    this.level.edges.set(id, { id, from, to, iface: i.id, kind, crossProcess: i.kind !== undefined, inside });
+    const ends = [from, to].map((port) => this.level.ports.get(port)!.node);
+    const planned = !!i.planned || ends.some((node) => this.planned.has(node));
+    this.level.edges.set(id, { id, from, to, iface: i.id, kind, crossProcess: i.kind !== undefined, inside, planned });
   }
 
   private neighbor(id: string): void {

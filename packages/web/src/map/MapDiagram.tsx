@@ -106,6 +106,7 @@ function PortShape({
 
 function Ports({ node, ox, oy, props }: { node: ElkNode; ox: number; oy: number; props: DiagramProps }) {
   const names = new Map(props.map.interfaces.map((i) => [i.id, i.name]));
+  const planned = new Set(props.map.interfaces.filter((i) => i.planned).map((i) => i.id));
   return (
     <>
       {node.ports!.map((port) => {
@@ -115,6 +116,7 @@ function Ports({ node, ox, oy, props }: { node: ElkNode; ox: number; oy: number;
             key={port.id}
             className={cls(
               "d-port",
+              planned.has(meta.iface) && "planned",
               props.hl.has(port.id) && "hl",
               props.marks?.touched.has(meta.iface) && "touched",
               props.marks?.surfaces.has(meta.iface) && "surface",
@@ -159,6 +161,7 @@ function Leaf({
         "d-node",
         role,
         component.external && "external",
+        component.planned && "planned",
         count && "changed",
         props.marks?.parts.get(node.id),
         props.hl.has(node.id) && "hl",
@@ -214,6 +217,7 @@ function Edges({ edges, ox, oy, props }: { edges: ElkExtendedEdge[]; ox: number;
               "d-edge",
               meta.kind,
               meta.crossProcess && "cross",
+              meta.planned && "planned",
               change && `chg-${change}`,
               props.hl.has(e.id) && "hl",
             )}
@@ -224,7 +228,7 @@ function Edges({ edges, ox, oy, props }: { edges: ElkExtendedEdge[]; ox: number;
               props.onSelectIface(meta.iface);
             }}
           >
-            <title>{`${names.get(meta.iface)} (${meta.kind}${meta.crossProcess ? ", cross-process" : ""}${change ? `, ${change} in this change` : ""})`}</title>
+            <title>{`${names.get(meta.iface)} (${meta.kind}${meta.crossProcess ? ", cross-process" : ""}${meta.planned ? ", planned" : ""}${change ? `, ${change} in this change` : ""})`}</title>
             {paths.map((d, i) => (
               <g key={i}>
                 <path className="vis" d={d} />
@@ -242,7 +246,7 @@ function Frame({ node, props }: { node: ElkNode; props: DiagramProps }) {
   const component = props.map.components.find((c) => c.id === node.id)!;
   return (
     <>
-      <g className="d-frame">
+      <g className={cls("d-frame", component.planned && "planned")}>
         <rect className="body" x={node.x} y={node.y} width={node.width} height={node.height} rx={6} />
         <text className="title" x={node.x! + 16} y={node.y! + 26}>
           {component.name}
@@ -277,7 +281,7 @@ export function MapDiagram(props: DiagramProps) {
   );
 }
 
-export function Legend({ review = false }: { review?: boolean }) {
+export function Legend({ review = false, planned = false }: { review?: boolean; planned?: boolean }) {
   return (
     <div className="cmap-legend" aria-label="Legend">
       {review && (
@@ -333,6 +337,14 @@ export function Legend({ review = false }: { review?: boolean }) {
         </svg>
         undeclared use
       </span>
+      {planned && (
+        <span className="plan">
+          <svg viewBox="0 0 34 14" aria-hidden>
+            <rect x={6} y={1} width={22} height={12} rx={2} strokeWidth={1.4} strokeDasharray="5 3" />
+          </svg>
+          planned, not in the code
+        </span>
+      )}
     </div>
   );
 }

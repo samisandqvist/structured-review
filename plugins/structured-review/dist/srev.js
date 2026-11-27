@@ -486,10 +486,17 @@ function prettyReport(report) {
       (u) => `unclaimed files ${u.component ? `under ${u.component}` : "in no component"}: ${u.files.join(", ")}`
     ),
     `unattributed references: ${report.unattributedReferences}`,
+    ...plannedLine(report.planned),
     ...report.utilities.map((u) => `utility ${u.id} hides ${plural(u.references, "reference")}`),
     ...report.typeDependencies.map((t) => `type-only: ${t.from} -> ${t.to} (${t.count}: ${t.symbols.join(", ")})`),
     ...report.gaps.length ? report.gaps.map((g) => `! ${g}`) : ["gaps: none"]
   ].join("\n");
+}
+function plannedLine(planned) {
+  if (!planned || planned.components + planned.interfaces === 0) return [];
+  return [
+    `planned (from the design, not checked against code): ${plural(planned.components, "component")}, ${plural(planned.interfaces, "interface")}`
+  ];
 }
 var short = (sha) => sha.slice(0, 7);
 function prettyChange(change) {

@@ -20286,7 +20286,7 @@ var ScipGraphProvider = class {
    * IndexError loudly for that.
    */
   planJobs() {
-    let jobs = this.discoverJobs();
+    let jobs = this.discoverJobs().filter((j) => j.hasSources);
     const warnings = [];
     for (const tool of this.externalToolchains()) {
       const affected = jobs.filter((j) => j.language === tool.language);
@@ -42127,7 +42127,8 @@ var componentSchema2 = external_exports.object({
   meaning: external_exports.string(),
   paths: external_exports.array(external_exports.string()).default([]),
   external: external_exports.boolean().default(false),
-  utility: external_exports.boolean().default(false)
+  utility: external_exports.boolean().default(false),
+  planned: external_exports.boolean().default(false)
 }).strict();
 var interfaceSchema = external_exports.object({
   id: external_exports.string(),
@@ -42137,7 +42138,10 @@ var interfaceSchema = external_exports.object({
   meaning: external_exports.string(),
   bind: external_exports.array(external_exports.string().min(1)).default([]),
   kind: external_exports.string().min(1).optional(),
-  evidence: external_exports.array(external_exports.string().min(1)).default([])
+  evidence: external_exports.array(external_exports.string().min(1)).default([]),
+  planned: external_exports.boolean().default(false),
+  handledBy: external_exports.array(external_exports.string()).default([]),
+  usedBy: external_exports.array(external_exports.string()).default([])
 }).strict();
 var modelSchema = external_exports.object({
   title: external_exports.string(),
@@ -42216,15 +42220,30 @@ function cycleFrom(id, byId) {
   }
   return void 0;
 }
+function plannedComponents(components) {
+  const byId = new Map(components.map((c) => [c.id, c]));
+  const planned = /* @__PURE__ */ new Set();
+  for (const c of components) {
+    const chain = cycleFrom(c.id, byId) ? [c.id] : ancestorsOf(c.id, byId);
+    if (chain.some((id) => byId.get(id)?.planned)) planned.add(c.id);
+  }
+  return planned;
+}
+function ancestorsOf(id, byId) {
+  const out = [];
+  for (let at2 = id; at2 != null; at2 = byId.get(at2)?.parent) out.push(at2);
+  return out;
+}
 function componentIssues(components) {
   const hasParts = new Set(components.map((c) => c.parent).filter((p) => p !== null));
+  const planned = plannedComponents(components);
   return components.flatMap((c) => {
     const out = [];
     if (c.external) {
       if (c.paths.length > 0) out.push(`external component '${c.id}' has paths`);
       if (c.utility) out.push(`external component '${c.id}' is a utility`);
       if (hasParts.has(c.id)) out.push(`external component '${c.id}' has parts`);
-    } else if (c.paths.length === 0) {
+    } else if (c.paths.length === 0 && !planned.has(c.id)) {
       out.push(`component '${c.id}' needs paths`);
     }
     if (c.utility && hasParts.has(c.id)) out.push(`utility '${c.id}' has parts`);
@@ -42235,23 +42254,62 @@ function interfaceIssues(i, components) {
   const byId = new Map(components.map((c) => [c.id, c]));
   const provider = byId.get(i.provider);
   if (!provider) return [`interface '${i.id}' has unknown provider '${i.provider}'`];
-  const out = [...shapeIssues(i, provider), ...i.requirers.flatMap((r) => requirerIssues(i, provider, byId.get(r), r))];
+  const out = [
+    ...shapeIssues(i, provider),
+    ...i.requirers.flatMap((r) => requirerIssues(i, provider, byId.get(r), r)),
+    ...plannedIssues(i, byId)
+  ];
   if (provider.utility) out.push(`utility '${provider.id}' cannot provide interface '${i.id}'`);
   return out;
 }
 function shapeIssues(i, provider) {
-  const out = [];
-  if (i.kind === void 0) {
-    if (i.bind.length === 0) out.push(`interface '${i.id}' needs bind entries`);
-    if (i.evidence.length > 0) {
-      out.push(`in-process interface '${i.id}' cannot have evidence; set kind for a cross-process interface`);
-    }
-    if (provider.external) out.push(`external '${provider.id}' can only provide cross-process interfaces ('${i.id}')`);
-  } else if (i.bind.length > 0) {
-    out.push(`cross-process interface '${i.id}' cannot have bind entries`);
+  if (i.kind !== void 0 && !i.planned) {
+    return i.bind.length > 0 ? [`cross-process interface '${i.id}' cannot have bind entries`] : [];
+  }
+  const out = i.planned ? plannedShapeIssues(i) : inProcessShapeIssues(i);
+  if (i.kind === void 0 && provider.external) {
+    out.push(`external '${provider.id}' can only provide cross-process interfaces ('${i.id}')`);
   }
   return out;
 }
+function inProcessShapeIssues(i) {
+  const out = [];
+  if (i.bind.length === 0) out.push(`interface '${i.id}' needs bind entries`);
+  if (i.evidence.length > 0) {
+    out.push(`in-process interface '${i.id}' cannot have evidence; set kind for a cross-process interface`);
+  }
+  return out;
+}
+function plannedShapeIssues(i) {
+  if (i.bind.length === 0 && i.evidence.length === 0) return [];
+  return [`planned interface '${i.id}' cannot have bind entries or evidence; remove planned once the code exists`];
+}
+function plannedIssues(i, byId) {
+  const planned = plannedComponents([...byId.values()]);
+  const out = [];
+  if (!i.planned && planned.has(i.provider)) {
+    out.push(`interface '${i.id}' of planned component '${i.provider}' must be planned`);
+  }
+  if (!i.planned && i.handledBy.length > 0) {
+    out.push(`interface '${i.id}' is not planned, so it cannot declare handledBy; its delegation comes from the code`);
+  }
+  for (const part of i.handledBy) {
+    if (!byId.has(part)) out.push(`handledBy of interface '${i.id}' names unknown part '${part}'`);
+    else if (!strictlyInside(part, i.provider, byId)) {
+      out.push(`handledBy part '${part}' of interface '${i.id}' is not inside its provider '${i.provider}'`);
+    }
+  }
+  for (const part of i.usedBy) {
+    if (!byId.has(part)) out.push(`usedBy of interface '${i.id}' names unknown part '${part}'`);
+    else if (!i.requirers.some((r) => strictlyInside(part, r, byId))) {
+      out.push(`usedBy part '${part}' of interface '${i.id}' is not inside one of its requirers`);
+    } else if (!i.planned && !planned.has(part)) {
+      out.push(`usedBy part '${part}' of interface '${i.id}' is not planned; its use comes from the code`);
+    }
+  }
+  return out;
+}
+var strictlyInside = (id, root, byId) => !cycleFrom(id, byId) && isInside2(id, root, byId);
 function requirerIssues(i, provider, requirer, id) {
   if (!requirer) return [`interface '${i.id}' has unknown requirer '${id}'`];
   if (requirer.id === provider.id) return [`interface '${i.id}' lists its provider '${id}' as a requirer`];
@@ -42506,9 +42564,10 @@ function reasonFor(reasons, site, tree) {
   const own2 = reasons.filter((r) => r.requirer === site.requirer);
   return own2.find((r) => r.component !== void 0 && tree.within(site.component, r.component)) ?? own2.find((r) => r.component === void 0);
 }
-function requirerIssues2(interfaces) {
-  return interfaces.filter((i) => i.kind === void 0).flatMap(
+function requirerIssues2(interfaces, planned) {
+  return interfaces.filter((i) => i.kind === void 0 && !i.planned).flatMap(
     (i) => i.requirers.flatMap((r) => {
+      if (planned.has(r)) return [];
       const sites = i.sites.filter((s) => s.requirer === r);
       if (sites.some((s) => !s.undeclared)) return [];
       const message = sites.length === 0 ? `declared requirer '${r}' of interface '${i.id}' has no call sites` : `declared requirer '${r}' of interface '${i.id}' has only undeclared call sites; remove it from requirers and drop the scope of its undeclared entries`;
@@ -42548,7 +42607,7 @@ function entryReason(i, u) {
   return i.reasons.find((r) => r.requirer === u.requirer && r.component === u.component);
 }
 function resolveEvidence(i, tree, fileExists) {
-  if (i.kind === void 0) return { files: [], issues: [] };
+  if (i.kind === void 0 || i.planned) return { files: [], issues: [] };
   if (i.evidence.length === 0) {
     return {
       files: [],
@@ -42596,8 +42655,23 @@ function deriveDelegations(interfaces, tree) {
       const end = [i.provider, ...i.requirers].find((c) => tree.within(e.component, c));
       add(i.id, end === i.provider ? "provided" : "required", e.component, end);
     }
+    for (const part of i.handledBy ?? []) add(i.id, "provided", part, i.provider);
+    for (const part of i.usedBy ?? []) {
+      add(
+        i.id,
+        "required",
+        part,
+        i.requirers.find((r) => tree.within(part, r))
+      );
+    }
   }
   return out;
+}
+function plannedIssues2(components, counts) {
+  return components.filter((c) => c.planned && (counts.get(c.id) ?? 0) > 0).map((c) => ({
+    rule: "planned",
+    message: `planned component '${c.id}' owns ${plural2(counts.get(c.id), "indexed file")}; remove planned and model it against the code`
+  }));
 }
 function mappedTopLevels(components) {
   const tops = components.flatMap((c) => c.paths).map((p) => p.split(/[*?[]/)[0].split("/")[0]);
@@ -42631,6 +42705,7 @@ function checkMap(json3, index, fileExists) {
   const { model, issues } = parseMapModel(json3);
   if (issues.length > 0) return { model, map: unresolvedMap(model, issues, index.gaps) };
   const tree = new ComponentTree(model.components);
+  const planned = plannedComponents(model.components);
   const bound = resolveBindings(model, tree, index);
   const refs = resolveReferences(index, tree, bound, undeclaredRule(model, tree));
   const evidenceIssues = [];
@@ -42646,22 +42721,30 @@ function checkMap(json3, index, fileExists) {
     evidenceIssues.push(...evidence.issues);
     return { ...resolved, evidenceFiles: evidence.files };
   });
+  const counts = fileCounts(index.files, tree);
   const allIssues = [
     ...bound.issues,
     ...referenceIssues(refs),
-    ...requirerIssues2(interfaces),
+    ...requirerIssues2(interfaces, planned),
     ...undeclaredIssues2(model, interfaces, tree),
-    ...evidenceIssues
+    ...evidenceIssues,
+    ...plannedIssues2(model.components, counts)
   ];
-  const counts = fileCounts(index.files, tree);
   return {
     model,
     map: {
       title: model.title,
-      components: model.components.map((c) => ({ ...c, fileCount: counts.get(c.id) ?? 0 })),
+      components: model.components.map((c) => ({
+        ...c,
+        planned: planned.has(c.id),
+        fileCount: counts.get(c.id) ?? 0
+      })),
       interfaces,
       delegations: deriveDelegations(interfaces, tree),
-      report: report(allIssues, refs, interfaces, unclaimedFiles(index.files, tree, model.components), index.gaps)
+      report: {
+        ...report(allIssues, refs, interfaces, unclaimedFiles(index.files, tree, model.components), index.gaps),
+        planned: { components: planned.size, interfaces: interfaces.filter((i) => i.planned).length }
+      }
     }
   };
 }
@@ -42699,7 +42782,8 @@ function unresolvedMap(model, issues, gaps) {
       unattributedReferences: 0,
       utilities: [],
       typeDependencies: [],
-      gaps
+      gaps,
+      planned: { components: 0, interfaces: 0 }
     }
   };
 }

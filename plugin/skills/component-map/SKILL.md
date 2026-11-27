@@ -1,6 +1,6 @@
 ---
 name: component-map
-description: Map a codebase's structure as a nested UML component diagram. Infers components and the interfaces they provide and require from index references, checks that every cross-component call is covered, and opens an interactive map with drill-down. Use when someone wants the structural overview of an unfamiliar codebase or subsystem.
+description: Map a codebase's structure as a nested UML component diagram. Infers components and the interfaces they provide and require from index references, checks that every cross-component call is covered, and opens an interactive map with drill-down. Also draws a component that exists only as a design (an OpenSpec proposal, an architecture document) as planned parts, alone or beside the existing code. Use when someone wants the structural overview of an unfamiliar codebase or subsystem, or wants to review the structure of a component before it is built.
 ---
 
 # Component map
@@ -20,6 +20,9 @@ refuses it until it matches how the code actually calls itself.
 5. Review the model's abstraction level, then store it and give the user the link (`srev map submit`)
 6. Revise it when the user says something is wrong (`srev map get`, check, submit)
 7. Export it as one HTML file when the user wants to share it (`srev map export`)
+
+When the user wants a map of something the code does not hold yet, follow
+[Mapping a design](#mapping-a-design).
 
 The map has to be true and it has to be logical. True: it matches how the code
 calls itself, so never weaken the model to make the check pass. Logical: each
@@ -141,6 +144,69 @@ and `srev map get` print it. Give the reviewer the link and point out the new
 dependencies and new surfaces; they are the structural questions of the
 review. The reviewer can open each changed part on the map and review its
 changed items from there.
+
+## Mapping a design
+
+A component can be mapped before it is built: from its OpenSpec proposal and
+design (`openspec/changes/<change>/proposal.md`, `design.md`, the spec deltas),
+an architecture document or an ADR. Planned parts are drawn in their own
+colour with a dashed outline. The hub cannot compare them with code, so the
+design is the only source and the user's review is the only check. Say so
+when you hand over the link.
+
+- **Planned components.** Set `"planned": true` on a component the code does
+  not hold. Its parts are planned with it and need no flag. `paths` are
+  optional; give them when the design says where the code will live.
+- **Planned interfaces.** Set `"planned": true` on an interface the code does
+  not hold. It has no `bind` and no `evidence`; a cross-process one keeps its
+  `kind`. Every interface a planned component provides is planned. An
+  implemented component can provide a planned interface.
+- **Declare the delegation.** The hub derives delegation from code, and a
+  design has none. On a planned interface, `handledBy` lists the parts inside
+  the provider that will handle it and `usedBy` the parts inside its requirers
+  that will use it. Without them, opening a component shows its parts with no
+  connection to its outer interfaces.
+- **A planned component that uses existing code.** Add it to `requirers` of
+  the existing interface. The interface stays implemented and checked; the
+  planned requirer needs no call sites, and `usedBy` names its parts that will
+  make the calls.
+- **Beside existing code.** Model the existing code as in the steps above, and
+  add the planned parts where the design puts them. The check covers
+  everything that is not planned.
+- **A repository with no code yet.** Create the session the same way
+  (`srev session create --branch HEAD --base empty`; the repository needs one
+  commit). Skip `srev map evidence`: it has nothing to show. Write the model
+  from the design, then check and submit.
+- **Apply the same design rules.** [Logical structure](#logical-structure) and
+  [Reviewing the abstraction](#reviewing-the-abstraction) hold for a design as
+  for code; a design map is where they are cheapest to apply.
+
+```json
+{ "id": "billing", "name": "Billing", "parent": "orchestrator", "planned": true,
+  "paths": ["src/billing/"], "meaning": "Invoices customers for finished jobs" },
+{ "id": "invoicing", "name": "Invoicing", "parent": "billing",
+  "meaning": "Builds an invoice from a customer's finished jobs" }
+```
+
+```json
+{ "id": "invoices", "name": "Invoices", "provider": "billing", "requirers": ["reporting"],
+  "planned": true, "meaning": "A customer's invoices and their state",
+  "handledBy": ["invoicing"] },
+{ "id": "job-status", "name": "Job status", "provider": "jobs",
+  "requirers": ["reporting", "billing"], "usedBy": ["invoicing"],
+  "meaning": "Paged and point reads of jobs", "bind": ["getJob", "listJobsPage"] }
+```
+
+The check report counts the planned components and interfaces. In the summary
+for the user, list them and name the design documents they come from.
+
+When the code arrives, remove `planned` and add `bind` or `evidence`: the same
+model then checks the implementation against the design. The check refuses a
+planned component that owns indexed files, so a map cannot keep calling built
+code planned.
+
+Limit: a new use of an existing interface by an existing component cannot be
+drawn as planned. Mention such uses in the summary.
 
 ## Logical structure
 
@@ -358,6 +424,9 @@ Before you submit, go through every level of the model:
   files outside the components it connects.
 - `[utility]`: a utility calling a visible component. Make it a visible
   component or move the code.
+- `[planned]`: a planned component that owns indexed files. Its code exists:
+  remove `planned` and model it against the code. Its interfaces may stay
+  planned until they are built.
 
 Coverage counts call sites (references), so one undeclared entry can stand
 for several undeclared call sites.

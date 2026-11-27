@@ -263,6 +263,17 @@ function ChangeSummary({
   );
 }
 
+function PlannedSummary({ report }: { report: ResolvedMap["report"] }) {
+  const planned = report.planned ?? { components: 0, interfaces: 0 };
+  if (planned.components + planned.interfaces === 0) return null;
+  return (
+    <p className="planned-note" data-testid="map-planned">
+      {plural(planned.components, "planned component")} and {plural(planned.interfaces, "planned interface")} come from
+      the design. They are not in the code, so the check has nothing to compare them with.
+    </p>
+  );
+}
+
 function LevelPanel({ map, level, connections, review, onSelect, onOpen }: PanelProps) {
   const component = level === null ? undefined : map.components.find((c) => c.id === level);
   const { report } = map;
@@ -281,6 +292,7 @@ function LevelPanel({ map, level, connections, review, onSelect, onOpen }: Panel
         {report.coverage.covered}/{report.coverage.references} cross-component references are call sites of an
         interface; {report.coverage.undeclared} undeclared.
       </p>
+      <PlannedSummary report={report} />
       {review && <ChangeSummary map={map} level={level} review={review} onSelect={onSelect} onOpen={onOpen} />}
       <Findings map={map} onOpen={onOpen} />
       {report.utilities.length > 0 && <h3>Hidden utilities</h3>}
@@ -305,8 +317,8 @@ function LevelPanel({ map, level, connections, review, onSelect, onOpen }: Panel
         </p>
       ))}
       <p className="note">
-        Parts, interfaces and their names were proposed by an LLM from index references; bindings and call sites come
-        from the index. Tell your agent what is wrong and it revises the model.
+        Parts, interfaces and their names were proposed by an LLM from index references and the design; bindings and
+        call sites come from the index. Tell your agent what is wrong and it revises the model.
       </p>
     </>
   );
@@ -325,9 +337,13 @@ function ComponentPanel({
   const types = map.report.typeDependencies.filter((t) => t.from === component.id || t.to === component.id);
   return (
     <>
-      <div className="kind">{component.external ? "External system" : "Component"}</div>
+      <div className="kind">
+        {component.planned ? "Planned · " : ""}
+        {component.external ? "External system" : "Component"}
+      </div>
       <h2>{component.name}</h2>
       <p>{component.meaning}</p>
+      {component.planned && <p className="planned-note">Planned: part of the design, not in the code.</p>}
       {parts.length > 0 && (
         <p>
           <button type="button" className="btn" onClick={() => onOpen(component.id)}>
@@ -343,7 +359,7 @@ function ComponentPanel({
       )}
       {component.paths.length > 0 && (
         <>
-          <h3>Files ({component.fileCount})</h3>
+          <h3>{component.planned ? "Planned location" : `Files (${component.fileCount})`}</h3>
           <ul className="list">
             {component.paths.map((p) => (
               <li key={p}>
@@ -454,6 +470,45 @@ function InterfaceChange({ iface, change }: { iface: ResolvedInterface; change: 
   );
 }
 
+/** A planned interface has no bindings or call sites: the panel shows the delegation its design declares. */
+function PlannedRealization({
+  map,
+  iface,
+  onSelect,
+}: { map: ResolvedMap; iface: ResolvedInterface } & Pick<PanelProps, "onSelect">) {
+  const groups = [
+    { title: "Handled by", parts: iface.handledBy ?? [] },
+    { title: "Used by", parts: iface.usedBy ?? [] },
+  ].filter((g) => g.parts.length > 0);
+  return (
+    <>
+      <p className="planned-note">Planned: part of the design, with no bindings or call sites in the code.</p>
+      {groups.map((g) => (
+        <div key={g.title}>
+          <h3>{g.title}</h3>
+          <div className="chips">
+            {g.parts.map((id) => (
+              <ComponentChip key={id} map={map} id={id} onSelect={onSelect} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** Planned requirers of an interface that is in the code: they have no call sites yet. */
+function PlannedRequirers({ map, iface }: { map: ResolvedMap; iface: ResolvedInterface }) {
+  const planned = iface.requirers.filter((r) => map.components.find((c) => c.id === r)?.planned);
+  if (planned.length === 0) return null;
+  return (
+    <p className="planned-note">
+      Planned use by {planned.map((r) => nameOf(map, r)).join(", ")}: part of the design, with no call sites in the
+      code.
+    </p>
+  );
+}
+
 function InterfacePanel({
   map,
   iface,
@@ -463,7 +518,10 @@ function InterfacePanel({
   const requirers = requirersOf(iface);
   return (
     <>
-      <div className="kind">{iface.kind ? `Cross-process interface · ${iface.kind}` : "Interface"}</div>
+      <div className="kind">
+        {iface.planned ? "Planned · " : ""}
+        {iface.kind ? `Cross-process interface · ${iface.kind}` : "Interface"}
+      </div>
       <h2>{iface.name}</h2>
       <p>{iface.meaning}</p>
       <h3>Provided by → required by</h3>
@@ -489,9 +547,16 @@ function InterfacePanel({
         </p>
       ))}
       {change && <InterfaceChange iface={iface} change={change} />}
-      <Realization iface={iface} />
-      <h3>Call sites</h3>
-      <Sites map={map} iface={iface} />
+      {iface.planned ? (
+        <PlannedRealization map={map} iface={iface} onSelect={onSelect} />
+      ) : (
+        <>
+          <PlannedRequirers map={map} iface={iface} />
+          <Realization iface={iface} />
+          <h3>Call sites</h3>
+          <Sites map={map} iface={iface} />
+        </>
+      )}
     </>
   );
 }

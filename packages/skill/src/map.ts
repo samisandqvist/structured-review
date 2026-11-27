@@ -18,6 +18,8 @@ export interface MapCheckReport {
   utilities: { id: string; references: number }[];
   typeDependencies: { from: string; to: string; count: number; symbols: string[] }[];
   gaps: string[];
+  /** Planned components and interfaces; absent on maps stored before planned elements. */
+  planned?: { components: number; interfaces: number };
 }
 /** The parts of a review map's change the CLI prints (see the hub's map/change.ts). */
 export interface MapChangeSummary {
@@ -124,10 +126,19 @@ export function prettyReport(report: MapCheckReport): string {
       (u) => `unclaimed files ${u.component ? `under ${u.component}` : "in no component"}: ${u.files.join(", ")}`,
     ),
     `unattributed references: ${report.unattributedReferences}`,
+    ...plannedLine(report.planned),
     ...report.utilities.map((u) => `utility ${u.id} hides ${plural(u.references, "reference")}`),
     ...report.typeDependencies.map((t) => `type-only: ${t.from} -> ${t.to} (${t.count}: ${t.symbols.join(", ")})`),
     ...(report.gaps.length ? report.gaps.map((g) => `! ${g}`) : ["gaps: none"]),
   ].join("\n");
+}
+
+/** Planned elements are drawn from the design, so the report says how many the check could not compare. */
+function plannedLine(planned: MapCheckReport["planned"]): string[] {
+  if (!planned || planned.components + planned.interfaces === 0) return [];
+  return [
+    `planned (from the design, not checked against code): ${plural(planned.components, "component")}, ${plural(planned.interfaces, "interface")}`,
+  ];
 }
 
 const short = (sha: string) => sha.slice(0, 7);

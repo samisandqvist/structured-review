@@ -251,7 +251,10 @@ export function MapView({
               )}
             </g>
           </svg>
-          <Legend review={map.change !== undefined} />
+          <Legend
+            review={map.change !== undefined}
+            planned={map.components.some((c) => c.planned) || map.interfaces.some((i) => i.planned)}
+          />
         </div>
         <MapPanel
           map={map}

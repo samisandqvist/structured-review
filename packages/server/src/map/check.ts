@@ -4,12 +4,13 @@
 // whether the hub may store it.
 import type { ReferenceIndex } from "../graph/references.js";
 import { resolveBindings } from "./bindings.js";
-import { parseMapModel } from "./model.js";
+import { parseMapModel, plannedComponents } from "./model.js";
 import { ComponentTree } from "./ownership.js";
 import { referenceIssues, resolveReferences, type ReferenceResolution } from "./resolve.js";
 import {
   deriveDelegations,
   fileCounts,
+  plannedIssues,
   requirerIssues,
   resolveEvidence,
   unclaimedFiles,
@@ -26,6 +27,7 @@ export function checkMap(
   const { model, issues } = parseMapModel(json);
   if (issues.length > 0) return { model, map: unresolvedMap(model, issues, index.gaps) };
   const tree = new ComponentTree(model.components);
+  const planned = plannedComponents(model.components);
   const bound = resolveBindings(model, tree, index);
   const refs = resolveReferences(index, tree, bound, undeclaredRule(model, tree));
   const evidenceIssues: CheckIssue[] = [];
@@ -43,22 +45,30 @@ export function checkMap(
     evidenceIssues.push(...evidence.issues);
     return { ...resolved, evidenceFiles: evidence.files };
   });
+  const counts = fileCounts(index.files, tree);
   const allIssues = [
     ...bound.issues,
     ...referenceIssues(refs),
-    ...requirerIssues(interfaces),
+    ...requirerIssues(interfaces, planned),
     ...undeclaredIssues(model, interfaces, tree),
     ...evidenceIssues,
+    ...plannedIssues(model.components, counts),
   ];
-  const counts = fileCounts(index.files, tree);
   return {
     model,
     map: {
       title: model.title,
-      components: model.components.map((c) => ({ ...c, fileCount: counts.get(c.id) ?? 0 })),
+      components: model.components.map((c) => ({
+        ...c,
+        planned: planned.has(c.id),
+        fileCount: counts.get(c.id) ?? 0,
+      })),
       interfaces,
       delegations: deriveDelegations(interfaces, tree),
-      report: report(allIssues, refs, interfaces, unclaimedFiles(index.files, tree, model.components), index.gaps),
+      report: {
+        ...report(allIssues, refs, interfaces, unclaimedFiles(index.files, tree, model.components), index.gaps),
+        planned: { components: planned.size, interfaces: interfaces.filter((i) => i.planned).length },
+      },
     },
   };
 }
@@ -73,7 +83,7 @@ function report(
   interfaces: ResolvedInterface[],
   unclaimed: CheckReport["unclaimedFiles"],
   gaps: string[],
-): CheckReport {
+): Omit<CheckReport, "planned"> {
   const sites = interfaces.flatMap((i) => i.sites);
   return {
     ok: issues.length === 0,
@@ -106,6 +116,7 @@ function unresolvedMap(model: MapModel, issues: CheckIssue[], gaps: string[]): R
       utilities: [],
       typeDependencies: [],
       gaps,
+      planned: { components: 0, interfaces: 0 },
     },
   };
 }

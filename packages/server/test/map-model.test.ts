@@ -1,7 +1,7 @@
 // Parsing a component model: shape, defaults and the structural rules that
 // must hold before a model can be resolved against the index.
 import { describe, it, expect } from "vitest";
-import { parseMapModel } from "../src/map/model.js";
+import { parseMapModel, plannedComponents } from "../src/map/model.js";
 
 function example() {
   return {
@@ -74,6 +74,7 @@ describe("parseMapModel", () => {
       meaning: "m",
       external: false,
       utility: false,
+      planned: false,
     });
     expect(model.undeclared).toEqual([]);
   });
@@ -262,5 +263,136 @@ describe("parseMapModel unknown keys", () => {
     (m.components[4] as Record<string, unknown>).utlity = true;
     const { issues } = parseMapModel(m);
     expect(issues[0]!.message).toContain("utlity");
+  });
+});
+
+/** The example with a planned Billing component (two parts), a planned interface it provides
+ *  to the API, and its planned use of the store's read models. */
+function design() {
+  const m = example() as unknown as {
+    components: Record<string, unknown>[];
+    interfaces: Record<string, unknown>[];
+    undeclared: unknown[];
+  };
+  m.undeclared = [];
+  m.components.push(
+    { id: "billing", name: "Billing", parent: "orchestrator", planned: true, meaning: "Invoices customers" },
+    { id: "invoicing", name: "Invoicing", parent: "billing", meaning: "Builds invoices" },
+    { id: "ledger", name: "Ledger", parent: "billing", paths: ["src/billing/ledger/"], meaning: "Keeps balances" },
+    { id: "admin", name: "Admin", parent: "api", paths: ["src/api/admin/"], meaning: "Admin routes" },
+  );
+  m.interfaces.push({
+    id: "invoices",
+    name: "Invoices",
+    provider: "billing",
+    requirers: ["api"],
+    meaning: "Invoices of a customer",
+    planned: true,
+    handledBy: ["invoicing"],
+    usedBy: ["admin"],
+  });
+  Object.assign(m.interfaces[0]!, { requirers: ["api", "billing"], usedBy: ["ledger"] });
+  return m;
+}
+type Design = ReturnType<typeof design>;
+const designIssues = (mutate: (m: Design) => void = () => {}) => {
+  const m = design();
+  mutate(m);
+  return parseMapModel(m).issues.map((i) => i.message);
+};
+const designIface = (m: Design, id: string) => m.interfaces.find((i) => i.id === id)!;
+
+describe("parseMapModel planned elements", () => {
+  it("accepts a planned component without paths, its parts, and a planned interface without bindings", () => {
+    expect(designIssues()).toEqual([]);
+  });
+
+  it("treats the parts of a planned component as planned", () => {
+    const { model } = parseMapModel(design());
+    expect([...plannedComponents(model.components)].sort()).toEqual(["billing", "invoicing", "ledger"]);
+  });
+
+  it("does not follow a parent cycle when it looks for a planned ancestor", () => {
+    const { model } = parseMapModel(design());
+    const cyclic = model.components.map((c) => (c.id === "billing" ? { ...c, parent: "ledger", planned: false } : c));
+    expect([...plannedComponents(cyclic)]).toEqual([]);
+  });
+});
+
+describe("parseMapModel planned element rules", () => {
+  it.each<[string, (m: Design) => void, string]>([
+    [
+      "an implemented component still needs paths",
+      (m) => delete m.components.find((c) => c.id === "admin")!.paths,
+      "component 'admin' needs paths",
+    ],
+    [
+      "an implemented interface of a planned component",
+      (m) =>
+        Object.assign(designIface(m, "invoices"), { planned: false, bind: ["invoice"], handledBy: [], usedBy: [] }),
+      "interface 'invoices' of planned component 'billing' must be planned",
+    ],
+    [
+      "bind entries on a planned interface",
+      (m) => (designIface(m, "invoices").bind = ["invoice"]),
+      "planned interface 'invoices' cannot have bind entries or evidence; remove planned once the code exists",
+    ],
+    [
+      "evidence on a planned interface",
+      (m) => Object.assign(designIface(m, "invoices"), { kind: "http", evidence: ["src/api/hooks.ts"] }),
+      "planned interface 'invoices' cannot have bind entries or evidence; remove planned once the code exists",
+    ],
+    [
+      "handledBy on an implemented interface",
+      (m) => {
+        m.components.push({ id: "rows", name: "Rows", parent: "store", paths: ["src/store/rows/"], meaning: "" });
+        designIface(m, "read-models").handledBy = ["rows"];
+      },
+      "interface 'read-models' is not planned, so it cannot declare handledBy; its delegation comes from the code",
+    ],
+    [
+      "an unknown handledBy part",
+      (m) => (designIface(m, "invoices").handledBy = ["nope"]),
+      "handledBy of interface 'invoices' names unknown part 'nope'",
+    ],
+    [
+      "a handledBy part outside the provider",
+      (m) => (designIface(m, "invoices").handledBy = ["admin"]),
+      "handledBy part 'admin' of interface 'invoices' is not inside its provider 'billing'",
+    ],
+    [
+      "the provider as its own handledBy part",
+      (m) => (designIface(m, "invoices").handledBy = ["billing"]),
+      "handledBy part 'billing' of interface 'invoices' is not inside its provider 'billing'",
+    ],
+    [
+      "an unknown usedBy part",
+      (m) => (designIface(m, "invoices").usedBy = ["nope"]),
+      "usedBy of interface 'invoices' names unknown part 'nope'",
+    ],
+    [
+      "a usedBy part outside the requirers",
+      (m) => (designIface(m, "invoices").usedBy = ["store"]),
+      "usedBy part 'store' of interface 'invoices' is not inside one of its requirers",
+    ],
+    [
+      "a usedBy part with code on an implemented interface",
+      (m) => (designIface(m, "read-models").usedBy = ["admin"]),
+      "usedBy part 'admin' of interface 'read-models' is not planned; its use comes from the code",
+    ],
+    [
+      "an in-process interface of a planned external system",
+      (m) => {
+        m.components.push({ id: "bank", name: "Bank", parent: null, external: true, planned: true, meaning: "" });
+        m.interfaces.push({ id: "pay", name: "Payments", provider: "bank", meaning: "", planned: true });
+      },
+      "external 'bank' can only provide cross-process interfaces ('pay')",
+    ],
+  ])("refuses %s", (_name, mutate, message) => {
+    expect(designIssues(mutate)).toEqual([message]);
+  });
+
+  it("accepts a planned cross-process interface without evidence", () => {
+    expect(designIssues((m) => (designIface(m, "invoices").kind = "http"))).toEqual([]);
   });
 });
