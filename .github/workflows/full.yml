@@ -31,7 +31,7 @@ jobs:
           cache: pnpm
 
       - name: Install Coursier
-        uses: coursier/setup-action@648df969f41ef15fda2baba8b37f9fa3d16390a3 # v3.0.4
+        uses: coursier/setup-action@6eefb29fad2c9de9f52a5f2cef1154195c9d4609 # v3.1.1
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
